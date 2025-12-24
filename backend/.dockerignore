@@ -1,0 +1,36 @@
+# Git
+.git
+.gitignore
+
+# IDE
+.vscode
+.idea
+
+# Build
+tmp/
+*.exe
+*.test
+*.out
+bin/
+api
+cmd/api/api
+
+# Vendor directory (use go mod instead)
+vendor/
+
+# Logs
+*.log
+build-errors.log
+
+# Environment
+.env
+.env.local
+
+# Documentation
+*.md
+!README.md
+
+# Test
+*_test.go
+testdata/
+
