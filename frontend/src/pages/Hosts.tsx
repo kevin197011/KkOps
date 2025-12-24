@@ -23,6 +23,7 @@ import { hostService, Host, CreateHostRequest } from '../services/host';
 import { projectService, Project } from '../services/project';
 import { hostGroupService, HostGroup } from '../services/hostGroup';
 import { hostTagService, HostTag } from '../services/hostTag';
+import { sshKeyService, SSHKey } from '../services/sshKey';
 
 const { Option } = Select;
 
@@ -31,6 +32,7 @@ const Hosts: React.FC = () => {
   const [projects, setProjects] = useState<Project[]>([]);
   const [hostGroups, setHostGroups] = useState<HostGroup[]>([]);
   const [hostTags, setHostTags] = useState<HostTag[]>([]);
+  const [sshKeys, setSshKeys] = useState<SSHKey[]>([]);
   const [loading, setLoading] = useState(false);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -46,6 +48,7 @@ const Hosts: React.FC = () => {
     loadProjects();
     loadHostGroups();
     loadHostTags();
+    loadSSHKeys();
   }, []);
 
   useEffect(() => {
@@ -75,6 +78,15 @@ const Hosts: React.FC = () => {
     try {
       const response = await hostTagService.list(1, 1000);
       setHostTags(response.tags);
+    } catch (error: any) {
+      // 静默失败，不影响主流程
+    }
+  };
+
+  const loadSSHKeys = async () => {
+    try {
+      const response = await sshKeyService.list(1, 100);
+      setSshKeys(response.ssh_keys);
     } catch (error: any) {
       // 静默失败，不影响主流程
     }
@@ -114,6 +126,7 @@ const Hosts: React.FC = () => {
         project_id: (fullHost as any).project_id,
         group_ids: fullHost.groups?.map((g) => g.id) || [],
         tag_ids: fullHost.tags?.map((t) => t.id) || [],
+        ssh_key_id: fullHost.ssh_key_id || undefined,
       });
       setModalVisible(true);
     } catch (error: any) {
@@ -212,6 +225,24 @@ const Hosts: React.FC = () => {
       width: 80,
     },
     {
+      title: '项目',
+      key: 'project',
+      width: 150,
+      render: (_: any, record: Host) => {
+        if (record.project) {
+          return <span>{record.project.name}</span>;
+        }
+        // 如果没有关联数据，尝试从 projects 列表查找
+        if (record.project_id) {
+          const project = projects.find((p) => p.id === record.project_id);
+          if (project) {
+            return <span>{project.name}</span>;
+          }
+        }
+        return <span style={{ color: '#999' }}>-</span>;
+      },
+    },
+    {
       title: '主机名',
       dataIndex: 'hostname',
       key: 'hostname',
@@ -242,6 +273,25 @@ const Hosts: React.FC = () => {
       dataIndex: 'status',
       key: 'status',
       render: (status: string) => getStatusTag(status),
+    },
+    {
+      title: '环境',
+      dataIndex: 'environment',
+      key: 'environment',
+      width: 100,
+      render: (env: string) => {
+        if (!env) {
+          return <span style={{ color: '#999' }}>-</span>;
+        }
+        const envColors: Record<string, string> = {
+          dev: 'blue',
+          uat: 'orange',
+          staging: 'purple',
+          prod: 'red',
+          test: 'green',
+        };
+        return <Tag color={envColors[env] || 'default'}>{env.toUpperCase()}</Tag>;
+      },
     },
     {
       title: '组',
@@ -291,6 +341,7 @@ const Hosts: React.FC = () => {
         <Space>
           <Button
             type="link"
+            size="small"
             icon={<EditOutlined />}
             onClick={() => handleEdit(record)}
           >
@@ -305,6 +356,7 @@ const Hosts: React.FC = () => {
             <Button
               type="link"
               danger
+              size="small"
               icon={<DeleteOutlined />}
             >
               删除
@@ -421,6 +473,19 @@ const Hosts: React.FC = () => {
             </Select>
           </Form.Item>
           <Form.Item
+            name="environment"
+            label="环境"
+            tooltip="选择主机所属环境（可选）"
+          >
+            <Select placeholder="请选择环境（可选）" allowClear>
+              <Option value="dev">DEV - 开发环境</Option>
+              <Option value="test">TEST - 测试环境</Option>
+              <Option value="uat">UAT - 用户验收测试环境</Option>
+              <Option value="staging">STAGING - 预发布环境</Option>
+              <Option value="prod">PROD - 生产环境</Option>
+            </Select>
+          </Form.Item>
+          <Form.Item
             name="hostname"
             label="主机名"
             rules={[{ required: true, message: '请输入主机名' }]}
@@ -450,6 +515,19 @@ const Hosts: React.FC = () => {
             ]}
           >
             <InputNumber min={1} max={65535} placeholder="SSH端口（默认: 22）" style={{ width: '100%' }} />
+          </Form.Item>
+          <Form.Item
+            name="ssh_key_id"
+            label="默认SSH密钥"
+            tooltip="选择默认使用的SSH密钥（可选，打开终端时会自动选择）"
+          >
+            <Select placeholder="选择SSH密钥（可选）" allowClear>
+              {sshKeys.map((key) => (
+                <Option key={key.id} value={key.id}>
+                  {key.name} ({key.key_type.toUpperCase()})
+                </Option>
+              ))}
+            </Select>
           </Form.Item>
           <Form.Item
             name="salt_minion_id"

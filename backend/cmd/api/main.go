@@ -53,10 +53,8 @@ func main() {
 	deploymentConfigRepo := repository.NewDeploymentConfigRepository(models.DB)
 	deploymentRepo := repository.NewDeploymentRepository(models.DB)
 	deploymentVersionRepo := repository.NewDeploymentVersionRepository(models.DB)
-	sshConnRepo := repository.NewSSHConnectionRepository(models.DB)
-	sshKeyRepo := repository.NewSSHKeyRepository(models.DB)
-	sshSessionRepo := repository.NewSSHSessionRepository(models.DB)
 	auditRepo := repository.NewAuditRepository(models.DB)
+	sshKeyRepo := repository.NewSSHKeyRepository(models.DB)
 
 	// 初始化Service
 	authService := service.NewAuthService(userRepo)
@@ -70,10 +68,8 @@ func main() {
 	deploymentConfigService := service.NewDeploymentConfigService(deploymentConfigRepo)
 	deploymentService := service.NewDeploymentService(deploymentRepo, deploymentConfigRepo, hostRepo, saltClient)
 	deploymentVersionService := service.NewDeploymentVersionService(deploymentVersionRepo)
-	sshConnService := service.NewSSHConnectionService(sshConnRepo)
-	sshKeyService := service.NewSSHKeyService(sshKeyRepo)
-	sshSessionService := service.NewSSHSessionService(sshSessionRepo)
 	auditService := service.NewAuditService(auditRepo)
+	sshKeyService := service.NewSSHKeyService(sshKeyRepo)
 
 	// 初始化Handler
 	authHandler := handler.NewAuthHandler(authService, auditService)
@@ -87,7 +83,8 @@ func main() {
 	deploymentConfigHandler := handler.NewDeploymentConfigHandler(deploymentConfigService)
 	deploymentHandler := handler.NewDeploymentHandler(deploymentService)
 	deploymentVersionHandler := handler.NewDeploymentVersionHandler(deploymentVersionService)
-	sshHandler := handler.NewSSHHandler(sshConnService, sshKeyService, sshSessionService)
+	websshHandler := handler.NewWebSSHHandler(hostRepo, sshKeyService)
+	sshKeyHandler := handler.NewSSHKeyHandler(sshKeyService)
 	saltHandler := handler.NewSaltHandler(saltClient)
 	auditHandler := handler.NewAuditHandler(auditService)
 
@@ -218,28 +215,21 @@ func main() {
 			hostTags.DELETE("/:id", hostTagHandler.DeleteTag)
 		}
 
-		// SSH管理
-		ssh := auth.Group("/ssh")
+		// WebSSH管理
+		webssh := auth.Group("/webssh")
 		{
-			// SSH连接
-			ssh.POST("/connections", sshHandler.CreateConnection)
-			ssh.GET("/connections", sshHandler.ListConnections)
-			ssh.GET("/connections/:id", sshHandler.GetConnection)
-			ssh.PUT("/connections/:id", sshHandler.UpdateConnection)
-			ssh.DELETE("/connections/:id", sshHandler.DeleteConnection)
+			// WebSSH终端 WebSocket
+			webssh.GET("/terminal/:host_id", websshHandler.HandleTerminal)
+		}
 
-			// SSH密钥
-			ssh.POST("/keys", sshHandler.CreateKey)
-			ssh.GET("/keys", sshHandler.ListKeys)
-			ssh.GET("/keys/:id", sshHandler.GetKey)
-			ssh.PUT("/keys/:id", sshHandler.UpdateKey)
-			ssh.DELETE("/keys/:id", sshHandler.DeleteKey)
-
-			// SSH会话
-			ssh.POST("/sessions", sshHandler.CreateSession)
-			ssh.GET("/sessions", sshHandler.ListSessions)
-			ssh.GET("/sessions/:id", sshHandler.GetSession)
-			ssh.POST("/sessions/:id/close", sshHandler.CloseSession)
+		// SSH密钥管理
+		sshKeys := auth.Group("/ssh-keys")
+		{
+			sshKeys.POST("", sshKeyHandler.CreateSSHKey)
+			sshKeys.GET("", sshKeyHandler.ListSSHKeys)
+			sshKeys.GET("/:id", sshKeyHandler.GetSSHKey)
+			sshKeys.PUT("/:id", sshKeyHandler.UpdateSSHKey)
+			sshKeys.DELETE("/:id", sshKeyHandler.DeleteSSHKey)
 		}
 
 		// 部署管理

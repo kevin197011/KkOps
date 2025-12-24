@@ -9,7 +9,6 @@ import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Projects from './pages/Projects';
 import Hosts from './pages/Hosts';
-import SSH from './pages/SSH';
 import Users from './pages/Users';
 import Roles from './pages/Roles';
 import Permissions from './pages/Permissions';
@@ -17,6 +16,7 @@ import HostGroups from './pages/HostGroups';
 import HostTags from './pages/HostTags';
 import Deployments from './pages/Deployments';
 import Audit from './pages/Audit';
+import WebSSH from './pages/WebSSH';
 import './App.css';
 
 const App: React.FC = () => {
@@ -57,11 +57,11 @@ const App: React.FC = () => {
               }
             />
             <Route
-              path="/ssh"
+              path="/webssh"
               element={
                 <PrivateRoute>
                   <MainLayout>
-                    <SSH />
+                    <WebSSH />
                   </MainLayout>
                 </PrivateRoute>
               }

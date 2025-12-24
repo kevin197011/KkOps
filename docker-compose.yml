@@ -56,6 +56,12 @@ services:
       DB_SSLMODE: disable
       # JWT 配置
       JWT_SECRET: your-secret-key-change-in-production-please-use-strong-secret
+      # Salt 配置
+      SALT_API_URL: http://192.168.56.10:8000
+      SALT_USERNAME: salt
+      SALT_PASSWORD: salt123
+      SALT_EAUTH: pam
+      SALT_VERIFY_SSL: "false"
     ports:
       - "8080:8080"
     depends_on:

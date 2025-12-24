@@ -1,6 +1,7 @@
 package models
 
 import (
+	"errors"
 	"log"
 
 	"github.com/kronos/backend/internal/config"
@@ -52,10 +53,8 @@ func AutoMigrate() error {
 		&HostTag{},
 		&HostGroupMember{},
 		&HostTagAssignment{},
-		// SSH管理
-		&SSHConnection{},
+		// SSH密钥管理
 		&SSHKey{},
-		&SSHSession{},
 		// 发布管理
 		&DeploymentConfig{},
 		&Deployment{},
@@ -113,9 +112,7 @@ func initDefaultData() error {
 			{Code: "project:create", Name: "创建项目", ResourceType: "project", Action: "create", Description: "创建新项目"},
 			{Code: "project:update", Name: "更新项目", ResourceType: "project", Action: "update", Description: "更新项目信息"},
 			{Code: "project:delete", Name: "删除项目", ResourceType: "project", Action: "delete", Description: "删除项目"},
-			{Code: "ssh:read", Name: "查看SSH", ResourceType: "ssh", Action: "read", Description: "查看SSH连接"},
-			{Code: "ssh:create", Name: "创建SSH", ResourceType: "ssh", Action: "create", Description: "创建SSH连接"},
-			{Code: "ssh:execute", Name: "执行SSH", ResourceType: "ssh", Action: "execute", Description: "执行SSH命令"},
+			{Code: "webssh:execute", Name: "执行WebSSH", ResourceType: "webssh", Action: "execute", Description: "执行WebSSH终端连接"},
 		}
 
 		for _, perm := range defaultPermissions {
@@ -159,7 +156,7 @@ func initDefaultData() error {
 			} else if role.Name == "operator" {
 				// 运维人员拥有运维相关权限
 				var opsPerms []Permission
-				DB.Where("resource_type IN (?)", []string{"host", "deployment", "task", "log", "monitoring", "ssh"}).Find(&opsPerms)
+				DB.Where("resource_type IN (?)", []string{"host", "deployment", "task", "log", "monitoring", "webssh"}).Find(&opsPerms)
 				for _, perm := range opsPerms {
 					DB.Create(&RolePermission{
 						RoleID:       role.ID,
@@ -184,7 +181,7 @@ func initDefaultData() error {
 	// 创建默认管理员账号（如果不存在）
 	var adminUser User
 	err := DB.Where("username = ?", "admin").First(&adminUser).Error
-	if err != nil {
+	if errors.Is(err, gorm.ErrRecordNotFound) {
 		// 管理员账号不存在，创建默认管理员
 		hashedPassword, err := hashPassword("admin123")
 		if err != nil {
@@ -209,10 +206,16 @@ func initDefaultData() error {
 					})
 					log.Println("Default admin user created: username=admin, password=admin123")
 					log.Println("⚠️  WARNING: Please change the default admin password after first login!")
+				} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+					log.Printf("Failed to find admin role: %v", err)
 				}
 			}
 		}
+	} else if err != nil {
+		// 其他数据库错误
+		log.Printf("Error checking admin user: %v", err)
 	} else {
+		// 管理员账号已存在
 		log.Println("Admin user already exists, skipping creation")
 	}
 

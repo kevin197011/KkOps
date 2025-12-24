@@ -67,6 +67,9 @@ func (h *HostHandler) ListHosts(c *gin.Context) {
 	if status := c.Query("status"); status != "" {
 		filters["status"] = status
 	}
+	if environment := c.Query("environment"); environment != "" {
+		filters["environment"] = environment
+	}
 	if groupID := c.Query("group_id"); groupID != "" {
 		if id, err := strconv.ParseUint(groupID, 10, 64); err == nil {
 			filters["group_id"] = id

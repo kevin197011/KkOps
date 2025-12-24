@@ -19,7 +19,9 @@ type Host struct {
 	MemoryGB     *float64       `gorm:"type:decimal(10,2)" json:"memory_gb"`
 	DiskGB       *float64       `gorm:"type:decimal(10,2)" json:"disk_gb"`
 	Status       string         `gorm:"size:20;not null;default:'unknown';index" json:"status"`
+	Environment  string         `gorm:"size:20;index" json:"environment"`
 	SSHPort      int            `gorm:"not null;default:22" json:"ssh_port"`
+	SSHKeyID     *uint64        `gorm:"index" json:"ssh_key_id"` // 可选的默认SSH密钥ID
 	LastSeenAt   *time.Time     `json:"last_seen_at"`
 	SaltVersion  string         `gorm:"size:50" json:"salt_version"`
 	Metadata     string         `gorm:"type:jsonb" json:"metadata"`
@@ -30,6 +32,7 @@ type Host struct {
 
 	// 关联
 	Project *Project    `gorm:"foreignKey:ProjectID" json:"project,omitempty"`
+	SSHKey  *SSHKey     `gorm:"foreignKey:SSHKeyID" json:"ssh_key,omitempty"`
 	Groups  []HostGroup `gorm:"many2many:host_group_members;" json:"groups,omitempty"`
 	Tags    []HostTag   `gorm:"many2many:host_tag_assignments;" json:"tags,omitempty"`
 }

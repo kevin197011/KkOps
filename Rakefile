@@ -258,8 +258,15 @@ end
 
 task :run do
   system 'docker compose down -v'
-  system 'docker compose up -d --build --remove-orphans'
+  system 'docker compose build backend frontend'
+  system 'docker compose up -d --remove-orphans'
   system 'docker compose logs -f'
+end
+
+desc '同步 Salt 主机数据'
+task :sync_salt_hosts do
+  puts '正在同步 Salt 主机数据...'
+  sh 'ruby scripts/sync-salt-hosts-data.rb'
 end
 
 # task :push do

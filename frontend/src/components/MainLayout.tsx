@@ -5,7 +5,6 @@ import {
   DashboardOutlined,
   ProjectOutlined,
   LaptopOutlined,
-  KeyOutlined,
   RocketOutlined,
   UserOutlined,
   LogoutOutlined,
@@ -15,6 +14,7 @@ import {
   FileTextOutlined,
   SafetyOutlined,
   LockOutlined,
+  ConsoleSqlOutlined,
 } from '@ant-design/icons';
 import { useAuth } from '../contexts/AuthContext';
 import type { MenuProps } from 'antd';
@@ -49,9 +49,9 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
       label: '主机管理',
     },
     {
-      key: '/ssh',
-      icon: <KeyOutlined />,
-      label: 'SSH管理',
+      key: '/webssh',
+      icon: <ConsoleSqlOutlined />,
+      label: 'WebSSH管理',
     },
     {
       key: '/deployments',

@@ -1,10 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Card, Row, Col, Statistic, Spin } from 'antd';
-import { UserOutlined, CloudServerOutlined, KeyOutlined, ProjectOutlined } from '@ant-design/icons';
+import { UserOutlined, CloudServerOutlined, ProjectOutlined } from '@ant-design/icons';
 import { useAuth } from '../contexts/AuthContext';
 import { userService } from '../services/user';
 import { hostService } from '../services/host';
-import { sshService } from '../services/ssh';
 import { projectService } from '../services/project';
 
 const Dashboard: React.FC = () => {
@@ -13,7 +12,6 @@ const Dashboard: React.FC = () => {
   const [stats, setStats] = useState({
     users: 0,
     hosts: 0,
-    sshConnections: 0,
     projects: 0,
   });
 
@@ -24,17 +22,15 @@ const Dashboard: React.FC = () => {
   const loadStats = async () => {
     setLoading(true);
     try {
-      const [usersRes, hostsRes, sshRes, projectsRes] = await Promise.all([
+      const [usersRes, hostsRes, projectsRes] = await Promise.all([
         userService.list(1, 1).catch(() => ({ total: 0 })),
         hostService.list(1, 1).catch(() => ({ total: 0 })),
-        sshService.listConnections(1, 1).catch(() => ({ total: 0 })),
         projectService.list(1, 1).catch(() => ({ total: 0 })),
       ]);
 
       setStats({
         users: usersRes.total || 0,
         hosts: hostsRes.total || 0,
-        sshConnections: sshRes.total || 0,
         projects: projectsRes.total || 0,
       });
     } catch (error) {
@@ -64,15 +60,6 @@ const Dashboard: React.FC = () => {
                 title="主机总数"
                 value={stats.hosts}
                 prefix={<CloudServerOutlined />}
-              />
-            </Card>
-          </Col>
-          <Col xs={24} sm={12} lg={6}>
-            <Card>
-              <Statistic
-                title="SSH连接"
-                value={stats.sshConnections}
-                prefix={<KeyOutlined />}
               />
             </Card>
           </Col>

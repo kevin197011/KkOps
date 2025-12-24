@@ -1,0 +1,10 @@
+# Vagrant 相关文件
+.vagrant/
+*.box
+ssh_key.pub
+
+# 虚拟机磁盘文件
+*.vdi
+*.vmdk
+*.vhd
+

@@ -2,6 +2,7 @@ import api from '../config/api';
 
 export interface Host {
   id: number;
+  project_id?: number;
   hostname: string;
   ip_address: string;
   salt_minion_id?: string;
@@ -11,10 +12,17 @@ export interface Host {
   memory_gb?: number;
   disk_gb?: number;
   status: 'online' | 'offline' | 'unknown';
+  environment?: string;
   ssh_port?: number;
+  ssh_username?: string;
+  ssh_key_id?: number;
   last_seen_at?: string;
   salt_version?: string;
   description?: string;
+  project?: {
+    id: number;
+    name: string;
+  };
   groups?: Array<{ id: number; name: string }>;
   tags?: Array<{ id: number; name: string; color?: string }>;
 }
@@ -30,7 +38,10 @@ export interface CreateHostRequest {
   memory_gb?: number;
   disk_gb?: number;
   status?: string;
+  environment?: string;
   ssh_port?: number;
+  ssh_username?: string;
+  ssh_key_id?: number;
   description?: string;
 }
 
@@ -46,6 +57,7 @@ export interface HostFilters {
   hostname?: string;
   ip_address?: string;
   status?: string;
+  environment?: string;
   group_id?: number;
   tag_id?: number;
 }

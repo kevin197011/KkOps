@@ -68,6 +68,9 @@ func (r *hostRepository) List(offset, limit int, filters map[string]interface{})
 	if status, ok := filters["status"].(string); ok && status != "" {
 		query = query.Where("status = ?", status)
 	}
+	if environment, ok := filters["environment"].(string); ok && environment != "" {
+		query = query.Where("environment = ?", environment)
+	}
 	if groupID, ok := filters["group_id"].(uint64); ok && groupID > 0 {
 		query = query.Joins("INNER JOIN host_group_members ON hosts.id = host_group_members.host_id").
 			Where("host_group_members.group_id = ?", groupID)
