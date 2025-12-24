@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/kronos/backend/internal/service"
+	"github.com/kkops/backend/internal/service"
 )
 
 type AuditHandler struct {

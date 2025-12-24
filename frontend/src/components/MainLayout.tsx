@@ -143,7 +143,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
             fontWeight: 'bold',
           }}
         >
-          {collapsed ? 'K' : 'Kronos'}
+          {collapsed ? 'K' : 'KkOps'}
         </div>
         <Menu
           theme="dark"

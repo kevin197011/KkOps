@@ -5,7 +5,7 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
-	"github.com/kronos/backend/internal/service"
+	"github.com/kkops/backend/internal/service"
 )
 
 type RoleHandler struct {

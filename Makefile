@@ -1,9 +1,9 @@
-# Kronos Makefile - Docker 管理命令
+# KkOps Makefile - Docker 管理命令
 
 .PHONY: help docker-up docker-down docker-build docker-logs docker-restart docker-clean
 
 help: ## 显示帮助信息
-	@echo "Kronos Docker 管理命令"
+	@echo "KkOps Docker 管理命令"
 	@echo ""
 	@echo "用法: make [target]"
 	@echo ""
@@ -53,7 +53,7 @@ docker-shell-backend: ## 进入后端容器
 	docker-compose exec backend sh
 
 docker-shell-db: ## 进入数据库容器
-	docker-compose exec postgres psql -U postgres -d kronos
+	docker-compose exec postgres psql -U postgres -d kkops
 
 docker-clean: ## 清理所有容器、镜像和数据卷
 	docker-compose down -v --rmi all

@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/kronos/backend/internal/config"
+	"github.com/kkops/backend/internal/config"
 )
 
 // Client Salt API 客户端

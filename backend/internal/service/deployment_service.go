@@ -5,9 +5,9 @@ import (
 	"errors"
 	"time"
 
-	"github.com/kronos/backend/internal/models"
-	"github.com/kronos/backend/internal/repository"
-	"github.com/kronos/backend/internal/salt"
+	"github.com/kkops/backend/internal/models"
+	"github.com/kkops/backend/internal/repository"
+	"github.com/kkops/backend/internal/salt"
 )
 
 type DeploymentConfigService interface {

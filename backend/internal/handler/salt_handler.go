@@ -4,7 +4,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/kronos/backend/internal/salt"
+	"github.com/kkops/backend/internal/salt"
 )
 
 type SaltHandler struct {

@@ -3,7 +3,7 @@ package repository
 import (
 	"time"
 
-	"github.com/kronos/backend/internal/models"
+	"github.com/kkops/backend/internal/models"
 	"gorm.io/gorm"
 )
 

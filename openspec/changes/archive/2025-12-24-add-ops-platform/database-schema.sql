@@ -1,4 +1,4 @@
--- Kronos Operations Platform Database Schema
+-- KkOps Operations Platform Database Schema
 -- PostgreSQL 12+
 -- 
 -- This file contains the complete database schema definition

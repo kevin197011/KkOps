@@ -1,8 +1,8 @@
 package service
 
 import (
-	"github.com/kronos/backend/internal/models"
-	"github.com/kronos/backend/internal/repository"
+	"github.com/kkops/backend/internal/models"
+	"github.com/kkops/backend/internal/repository"
 )
 
 type PermissionService interface {

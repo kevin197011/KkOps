@@ -1,4 +1,4 @@
-# Kronos Backend
+# KkOps Backend
 
 基于 Go 和 Gin 的运维中台管理系统后端。
 
@@ -29,13 +29,13 @@ cp .env.example .env
 ### 3. 创建数据库
 
 ```bash
-createdb kronos
+createdb kkops
 ```
 
 或使用 SQL 脚本：
 
 ```bash
-psql -U postgres -d kronos -f openspec/changes/add-ops-platform/database-schema.sql
+psql -U postgres -d kkops -f openspec/changes/add-ops-platform/database-schema.sql
 ```
 
 ### 4. 运行服务

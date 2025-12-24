@@ -3,8 +3,8 @@ package service
 import (
 	"errors"
 
-	"github.com/kronos/backend/internal/models"
-	"github.com/kronos/backend/internal/repository"
+	"github.com/kkops/backend/internal/models"
+	"github.com/kkops/backend/internal/repository"
 )
 
 type ProjectService interface {

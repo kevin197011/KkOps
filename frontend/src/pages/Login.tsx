@@ -26,7 +26,7 @@ const Login: React.FC = () => {
 
   return (
     <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh', background: '#f0f2f5' }}>
-      <Card title="Kronos 运维中台" style={{ width: 400 }}>
+      <Card title="KkOps 运维中台" style={{ width: 400 }}>
         <Form
           name="login"
           onFinish={onFinish}

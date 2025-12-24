@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/kronos/backend/internal/service"
+	"github.com/kkops/backend/internal/service"
 )
 
 // AuditMiddleware 审计日志中间件

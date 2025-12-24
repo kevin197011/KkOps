@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/kronos/backend/internal/utils"
+	"github.com/kkops/backend/internal/utils"
 )
 
 func AuthMiddleware() gin.HandlerFunc {

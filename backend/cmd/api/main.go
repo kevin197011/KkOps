@@ -4,13 +4,13 @@ import (
 	"log"
 
 	"github.com/gin-gonic/gin"
-	"github.com/kronos/backend/internal/config"
-	"github.com/kronos/backend/internal/handler"
-	"github.com/kronos/backend/internal/middleware"
-	"github.com/kronos/backend/internal/models"
-	"github.com/kronos/backend/internal/repository"
-	"github.com/kronos/backend/internal/salt"
-	"github.com/kronos/backend/internal/service"
+	"github.com/kkops/backend/internal/config"
+	"github.com/kkops/backend/internal/handler"
+	"github.com/kkops/backend/internal/middleware"
+	"github.com/kkops/backend/internal/models"
+	"github.com/kkops/backend/internal/repository"
+	"github.com/kkops/backend/internal/salt"
+	"github.com/kkops/backend/internal/service"
 )
 
 func main() {

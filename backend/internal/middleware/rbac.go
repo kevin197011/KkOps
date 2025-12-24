@@ -4,8 +4,8 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/kronos/backend/internal/models"
-	"github.com/kronos/backend/internal/repository"
+	"github.com/kkops/backend/internal/models"
+	"github.com/kkops/backend/internal/repository"
 )
 
 // RequirePermission 权限检查中间件

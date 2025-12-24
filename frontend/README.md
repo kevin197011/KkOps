@@ -1,4 +1,4 @@
-# Kronos Frontend
+# KkOps Frontend
 
 基于 React + TypeScript + Ant Design 的运维中台管理系统前端。
 

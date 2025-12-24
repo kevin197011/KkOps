@@ -4,7 +4,7 @@ import (
 	"errors"
 	"log"
 
-	"github.com/kronos/backend/internal/config"
+	"github.com/kkops/backend/internal/config"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -189,7 +189,7 @@ func initDefaultData() error {
 		} else {
 			adminUser = User{
 				Username:     "admin",
-				Email:        "admin@kronos.local",
+				Email:        "admin@kkops.local",
 				PasswordHash: hashedPassword,
 				DisplayName:  "系统管理员",
 				Status:       "active",

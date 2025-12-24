@@ -13,7 +13,7 @@ import (
 )
 
 // 使用环境变量或配置的密钥，这里使用固定密钥（生产环境应该从配置读取）
-var encryptionKey = []byte("kronos-encryption-key-32-bytes!!") // 32 bytes for AES-256
+var encryptionKey = []byte("kkops-encryption-key-32-bytes!!") // 32 bytes for AES-256
 
 // Encrypt 加密字符串
 func Encrypt(plaintext string) (string, error) {

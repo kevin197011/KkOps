@@ -9,9 +9,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/kronos/backend/internal/models"
-	"github.com/kronos/backend/internal/repository"
-	"github.com/kronos/backend/internal/utils"
+	"github.com/kkops/backend/internal/models"
+	"github.com/kkops/backend/internal/repository"
+	"github.com/kkops/backend/internal/utils"
 	"golang.org/x/crypto/ed25519"
 	"golang.org/x/crypto/ssh"
 )

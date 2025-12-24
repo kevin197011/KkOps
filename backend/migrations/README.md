@@ -2,7 +2,7 @@
 
 ## 自动迁移
 
-Kronos 使用 GORM 的 AutoMigrate 功能，在应用启动时自动执行数据库迁移。
+KkOps 使用 GORM 的 AutoMigrate 功能，在应用启动时自动执行数据库迁移。
 
 ### 迁移时机
 
@@ -84,7 +84,7 @@ Database migration completed
 如果需要手动执行 SQL 迁移脚本，可以使用：
 
 ```bash
-psql -U postgres -d kronos -f openspec/changes/add-ops-platform/database-schema.sql
+psql -U postgres -d kkops -f openspec/changes/add-ops-platform/database-schema.sql
 ```
 
 但通常不需要，因为 AutoMigrate 会自动处理。

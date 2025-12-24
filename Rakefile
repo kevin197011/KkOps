@@ -263,12 +263,6 @@ task :run do
   system 'docker compose logs -f'
 end
 
-desc '同步 Salt 主机数据'
-task :sync_salt_hosts do
-  puts '正在同步 Salt 主机数据...'
-  sh 'ruby scripts/sync-salt-hosts-data.rb'
-end
-
 # task :push do
 #   system 'git add .'
 #   system "git commit -m 'Update #{Time.now}'"

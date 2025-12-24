@@ -3,9 +3,9 @@ package service
 import (
 	"errors"
 
-	"github.com/kronos/backend/internal/models"
-	"github.com/kronos/backend/internal/repository"
-	"github.com/kronos/backend/internal/utils"
+	"github.com/kkops/backend/internal/models"
+	"github.com/kkops/backend/internal/repository"
+	"github.com/kkops/backend/internal/utils"
 )
 
 type UserService interface {

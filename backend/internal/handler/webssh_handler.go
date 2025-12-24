@@ -13,10 +13,10 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
-	"github.com/kronos/backend/internal/models"
-	"github.com/kronos/backend/internal/repository"
-	"github.com/kronos/backend/internal/service"
-	"github.com/kronos/backend/internal/utils"
+	"github.com/kkops/backend/internal/models"
+	"github.com/kkops/backend/internal/repository"
+	"github.com/kkops/backend/internal/service"
+	"github.com/kkops/backend/internal/utils"
 	"golang.org/x/crypto/ssh"
 )
 

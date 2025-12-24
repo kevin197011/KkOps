@@ -4,7 +4,7 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/kronos/backend/internal/config"
+	"github.com/kkops/backend/internal/config"
 )
 
 type Claims struct {
