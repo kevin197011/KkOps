@@ -28,6 +28,8 @@ func NewHostRepository(db *gorm.DB) HostRepository {
 }
 
 func (r *hostRepository) Create(host *models.Host) error {
+	// 清空 Tags，避免 GORM 自动处理 many2many 关联（标签通过单独的 API 端点管理）
+	host.Tags = nil
 	return r.db.Create(host).Error
 }
 
@@ -90,6 +92,8 @@ func (r *hostRepository) List(offset, limit int, filters map[string]interface{})
 }
 
 func (r *hostRepository) Update(host *models.Host) error {
+	// 清空 Tags，避免 GORM 自动处理 many2many 关联（标签通过单独的 API 端点管理）
+	host.Tags = nil
 	return r.db.Save(host).Error
 }
 
@@ -110,10 +114,28 @@ func (r *hostRepository) RemoveFromGroup(hostID, groupID uint64) error {
 }
 
 func (r *hostRepository) AddTag(hostID, tagID uint64) error {
-	return r.db.Create(&models.HostTagAssignment{
-		HostID: hostID,
-		TagID:  tagID,
-	}).Error
+	// 先检查记录是否已存在
+	var count int64
+	err := r.db.Raw(
+		"SELECT COUNT(*) FROM host_tag_assignments WHERE host_id = $1 AND tag_id = $2",
+		hostID, tagID,
+	).Scan(&count).Error
+	if err != nil {
+		return err
+	}
+	
+	// 如果记录已存在，直接返回（幂等操作）
+	if count > 0 {
+		return nil
+	}
+	
+	// 使用原生 SQL 插入，避免 GORM 字段映射问题
+	// 使用 $1, $2 占位符（PostgreSQL 格式）
+	result := r.db.Exec(
+		"INSERT INTO host_tag_assignments (host_id, tag_id) VALUES ($1, $2)",
+		hostID, tagID,
+	)
+	return result.Error
 }
 
 func (r *hostRepository) RemoveTag(hostID, tagID uint64) error {

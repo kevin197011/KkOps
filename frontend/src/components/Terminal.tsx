@@ -63,13 +63,15 @@ const Terminal: React.FC<TerminalProps> = ({ hostId, hostName, onClose }) => {
       fitAddon.fit();
     }
 
-    // 处理窗口大小变化
+    // 处理窗口大小变化和容器大小变化
     const handleResize = () => {
-      if (fitAddonRef.current) {
+      if (fitAddonRef.current && terminalInstanceRef.current) {
+        // 先适应容器大小
         fitAddonRef.current.fit();
-        // 发送终端大小到服务器
-        if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN && connected) {
-          const dims = terminalInstanceRef.current?.cols && terminalInstanceRef.current?.rows
+        
+        // 然后发送终端大小到服务器（不依赖 connected state，直接检查 WebSocket 状态）
+        if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+          const dims = terminalInstanceRef.current.cols && terminalInstanceRef.current.rows
             ? { rows: terminalInstanceRef.current.rows, cols: terminalInstanceRef.current.cols }
             : { rows: 24, cols: 80 };
           sendTerminalResize(wsRef.current, dims.rows, dims.cols);
@@ -78,10 +80,23 @@ const Terminal: React.FC<TerminalProps> = ({ hostId, hostName, onClose }) => {
     };
 
     window.addEventListener('resize', handleResize);
+    
+    // 使用 ResizeObserver 监听容器大小变化（更准确）
+    let resizeObserver: ResizeObserver | null = null;
+    if (terminalRef.current) {
+      resizeObserver = new ResizeObserver(() => {
+        handleResize();
+      });
+      resizeObserver.observe(terminalRef.current);
+    }
 
     // 清理函数
     return () => {
       window.removeEventListener('resize', handleResize);
+      if (resizeObserver && terminalRef.current) {
+        resizeObserver.unobserve(terminalRef.current);
+        resizeObserver.disconnect();
+      }
       if (wsRef.current) {
         wsRef.current.close();
       }
@@ -223,6 +238,26 @@ const Terminal: React.FC<TerminalProps> = ({ hostId, hostName, onClose }) => {
                 setAuthModalVisible(false);
                 return;
               }
+              if (msg.type === 'connected') {
+                // SSH 连接已建立
+                setConnected(true);
+                setConnecting(false);
+                setAuthModalVisible(false);
+                
+                // 连接建立后立即发送终端大小，确保前后端一致
+                if (terminalInstanceRef.current && wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+                  // 确保终端已适应容器大小
+                  if (fitAddonRef.current) {
+                    fitAddonRef.current.fit();
+                  }
+                  
+                  const dims = terminalInstanceRef.current.cols && terminalInstanceRef.current.rows
+                    ? { rows: terminalInstanceRef.current.rows, cols: terminalInstanceRef.current.cols }
+                    : { rows: 24, cols: 80 };
+                  sendTerminalResize(wsRef.current, dims.rows, dims.cols);
+                }
+                return;
+              }
             } catch (e) {
               // 不是 JSON，是终端输出
             }
@@ -259,24 +294,29 @@ const Terminal: React.FC<TerminalProps> = ({ hostId, hostName, onClose }) => {
         // 等待服务器请求用户名和密码
         terminal.writeln('\r\n\x1b[33m正在连接，请等待认证...\x1b[0m\r\n');
         
-        // 发送初始终端大小
+        // 确保终端已适应容器大小，然后发送实际的终端大小
+        if (fitAddonRef.current && terminalRef.current) {
+          fitAddonRef.current.fit();
+        }
+        
+        // 发送初始终端大小（使用实际大小而不是默认值）
         const dims = terminal.cols && terminal.rows
           ? { rows: terminal.rows, cols: terminal.cols }
           : { rows: 24, cols: 80 };
         sendTerminalResize(ws, dims.rows, dims.cols);
       };
 
-      // 处理终端输入
+      // 处理终端输入（使用 WebSocket 状态而不是 React state，避免闭包问题）
       terminal.onData((data) => {
-        if (ws.readyState === WebSocket.OPEN && connected) {
-          sendTerminalInput(ws, data);
+        if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+          sendTerminalInput(wsRef.current, data);
         }
       });
 
-      // 处理粘贴
+      // 处理粘贴（使用 WebSocket 状态而不是 React state，避免闭包问题）
       terminal.onBinary((data) => {
-        if (ws.readyState === WebSocket.OPEN && connected) {
-          ws.send(data);
+        if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+          wsRef.current.send(data);
         }
       });
 

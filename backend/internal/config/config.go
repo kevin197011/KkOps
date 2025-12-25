@@ -34,12 +34,12 @@ type JWTConfig struct {
 }
 
 type SaltConfig struct {
-	APIURL      string
-	Username    string
-	Password    string
-	EAuth       string // eauth type: pam, ldap, etc.
-	Timeout     int    // seconds
-	VerifySSL   bool
+	APIURL      string `json:"api_url"`
+	Username    string `json:"username"`
+	Password    string `json:"password"`
+	EAuth       string `json:"eauth"` // eauth type: pam, ldap, etc.
+	Timeout     int    `json:"timeout"` // seconds
+	VerifySSL   bool   `json:"verify_ssl"`
 }
 
 var AppConfig *Config

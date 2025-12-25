@@ -59,6 +59,10 @@ func (s *hostService) CreateHost(host *models.Host) error {
 	if host.Metadata == "" {
 		host.Metadata = "{}"
 	}
+	// 如果 SaltMinionID 是空字符串，设置为 nil（NULL），避免唯一约束冲突
+	if host.SaltMinionID != nil && *host.SaltMinionID == "" {
+		host.SaltMinionID = nil
+	}
 	return s.hostRepo.Create(host)
 }
 
@@ -88,8 +92,13 @@ func (s *hostService) UpdateHost(id uint64, host *models.Host) error {
 	if host.IPAddress != "" {
 		existingHost.IPAddress = host.IPAddress
 	}
-	if host.SaltMinionID != "" {
-		existingHost.SaltMinionID = host.SaltMinionID
+	if host.SaltMinionID != nil {
+		// 如果 SaltMinionID 是空字符串，设置为 nil（NULL），避免唯一约束冲突
+		if *host.SaltMinionID == "" {
+			existingHost.SaltMinionID = nil
+		} else {
+			existingHost.SaltMinionID = host.SaltMinionID
+		}
 	}
 	if host.OSType != "" {
 		existingHost.OSType = host.OSType
@@ -156,14 +165,14 @@ func (s *hostService) SyncHostStatus(hostID uint64) error {
 	}
 
 	// 如果没有 Salt Minion ID，无法查询状态
-	if host.SaltMinionID == "" {
+	if host.SaltMinionID == nil || *host.SaltMinionID == "" {
 		return nil
 	}
 
 	// 查询 Minion 状态
-	isOnline, err := s.saltClient.GetMinionStatus(host.SaltMinionID)
+	isOnline, err := s.saltClient.GetMinionStatus(*host.SaltMinionID)
 	if err != nil {
-		log.Printf("Failed to get minion status for %s: %v", host.SaltMinionID, err)
+		log.Printf("Failed to get minion status for %s: %v", *host.SaltMinionID, err)
 		// 查询失败时设置为 unknown，不返回错误
 		host.Status = "unknown"
 		host.LastSeenAt = nil
@@ -177,11 +186,11 @@ func (s *hostService) SyncHostStatus(hostID uint64) error {
 		host.LastSeenAt = &now
 
 		// 获取 Grains 信息来填充主机详细信息
-		grains, err := s.saltClient.GetGrains(host.SaltMinionID)
+		grains, err := s.saltClient.GetGrains(*host.SaltMinionID)
 		if err == nil {
 			s.fillHostFromGrains(host, grains)
 		} else {
-			log.Printf("Failed to get grains for %s: %v", host.SaltMinionID, err)
+			log.Printf("Failed to get grains for %s: %v", *host.SaltMinionID, err)
 		}
 	} else {
 		host.Status = "offline"
@@ -198,12 +207,12 @@ func (s *hostService) fillHostFromGrains(host *models.Host, grains map[string]in
 	var minionGrains map[string]interface{}
 	
 	// 尝试直接获取 minion ID 对应的数据
-	if mg, ok := grains[host.SaltMinionID].(map[string]interface{}); ok {
+	if mg, ok := grains[*host.SaltMinionID].(map[string]interface{}); ok {
 		minionGrains = mg
 	} else {
 		// 如果没有找到，尝试遍历所有 key
 		for key, value := range grains {
-			if key == host.SaltMinionID {
+			if key == *host.SaltMinionID {
 				if mg, ok := value.(map[string]interface{}); ok {
 					minionGrains = mg
 					break
@@ -213,7 +222,7 @@ func (s *hostService) fillHostFromGrains(host *models.Host, grains map[string]in
 	}
 	
 	if minionGrains == nil {
-		log.Printf("Failed to extract grains data for minion %s", host.SaltMinionID)
+		log.Printf("Failed to extract grains data for minion %s", *host.SaltMinionID)
 		return
 	}
 
@@ -287,7 +296,7 @@ func (s *hostService) SyncAllHostsStatus() error {
 	}
 
 	for _, host := range hosts {
-		if host.SaltMinionID != "" {
+		if host.SaltMinionID != nil && *host.SaltMinionID != "" {
 			if err := s.SyncHostStatus(host.ID); err != nil {
 				log.Printf("Failed to sync status for host %d: %v", host.ID, err)
 				// 继续处理其他主机，不中断

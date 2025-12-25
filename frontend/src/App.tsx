@@ -17,6 +17,8 @@ import HostTags from './pages/HostTags';
 import Deployments from './pages/Deployments';
 import Audit from './pages/Audit';
 import WebSSH from './pages/WebSSH';
+import SSHKeys from './pages/SSHKeys';
+import Settings from './pages/Settings';
 import './App.css';
 
 const App: React.FC = () => {
@@ -62,6 +64,16 @@ const App: React.FC = () => {
                 <PrivateRoute>
                   <MainLayout>
                     <WebSSH />
+                  </MainLayout>
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/ssh-keys"
+              element={
+                <PrivateRoute>
+                  <MainLayout>
+                    <SSHKeys />
                   </MainLayout>
                 </PrivateRoute>
               }
@@ -132,6 +144,16 @@ const App: React.FC = () => {
                 <PrivateRoute>
                   <MainLayout>
                     <Audit />
+                  </MainLayout>
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/settings"
+              element={
+                <PrivateRoute>
+                  <MainLayout>
+                    <Settings />
                   </MainLayout>
                 </PrivateRoute>
               }

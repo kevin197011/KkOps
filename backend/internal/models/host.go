@@ -12,7 +12,7 @@ type Host struct {
 	ProjectID    uint64         `gorm:"not null;index" json:"project_id"`
 	Hostname     string         `gorm:"size:255;not null;index" json:"hostname"`
 	IPAddress    string         `gorm:"size:45;not null;index" json:"ip_address"`
-	SaltMinionID string         `gorm:"uniqueIndex;size:255" json:"salt_minion_id"`
+	SaltMinionID *string        `gorm:"uniqueIndex;size:255" json:"salt_minion_id"`
 	OSType       string         `gorm:"size:50" json:"os_type"`
 	OSVersion    string         `gorm:"size:100" json:"os_version"`
 	CPUCores     *int           `json:"cpu_cores"`
@@ -95,8 +95,8 @@ func (HostGroupMember) TableName() string {
 // HostTagAssignment 主机标签关联模型
 type HostTagAssignment struct {
 	ID        uint64    `gorm:"primaryKey"`
-	HostID    uint64    `gorm:"not null;index"`
-	TagID     uint64    `gorm:"not null;index"`
+	HostID    uint64    `gorm:"column:host_id;not null;index"`
+	TagID     uint64    `gorm:"column:tag_id;not null;index"`
 	CreatedAt time.Time `gorm:"not null;default:now()"`
 }
 

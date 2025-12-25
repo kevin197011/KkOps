@@ -7,66 +7,49 @@ import {
   Tag,
   Card,
   Tabs,
-  Modal,
-  Form,
-  Input,
-  Popconfirm,
+  Select,
 } from 'antd';
 import {
   ConsoleSqlOutlined,
   ReloadOutlined,
-  PlusOutlined,
-  EditOutlined,
-  DeleteOutlined,
-  KeyOutlined,
 } from '@ant-design/icons';
 import { hostService, Host } from '../services/host';
 import { projectService, Project } from '../services/project';
-import { sshKeyService, SSHKey, CreateSSHKeyRequest } from '../services/sshKey';
+import { hostGroupService, HostGroup } from '../services/hostGroup';
+import { hostTagService, HostTag } from '../services/hostTag';
 import Terminal from '../components/Terminal';
+
+const { Option } = Select;
 
 const { TabPane } = Tabs;
 
 const WebSSH: React.FC = () => {
   const [hosts, setHosts] = useState<Host[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
+  const [hostGroups, setHostGroups] = useState<HostGroup[]>([]);
+  const [hostTags, setHostTags] = useState<HostTag[]>([]);
   const [loading, setLoading] = useState(false);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  const [selectedProjectId, setSelectedProjectId] = useState<number | undefined>(undefined);
+  const [selectedGroupId, setSelectedGroupId] = useState<number | undefined>(undefined);
+  const [selectedTagId, setSelectedTagId] = useState<number | undefined>(undefined);
   
   // 终端标签页管理
   const [activeTab, setActiveTab] = useState('hosts');
   const [terminalTabs, setTerminalTabs] = useState<Array<{ id: string; hostId: number; hostName: string }>>([]);
 
-  // SSH密钥管理
-  const [sshKeys, setSshKeys] = useState<SSHKey[]>([]);
-  const [sshKeysLoading, setSshKeysLoading] = useState(false);
-  const [sshKeysTotal, setSshKeysTotal] = useState(0);
-  const [sshKeysPage, setSshKeysPage] = useState(1);
-  const [sshKeysPageSize, setSshKeysPageSize] = useState(10);
-  const [sshKeyModalVisible, setSshKeyModalVisible] = useState(false);
-  const [editingSshKey, setEditingSshKey] = useState<SSHKey | null>(null);
-  const [sshKeyForm] = Form.useForm();
-
   useEffect(() => {
     loadProjects();
-    if (activeTab === 'ssh-keys') {
-      loadSSHKeys();
-    }
-  }, [activeTab]);
+    loadHostGroups();
+    loadHostTags();
+  }, []);
 
   useEffect(() => {
     loadHosts();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, pageSize]);
-
-  useEffect(() => {
-    if (activeTab === 'ssh-keys') {
-      loadSSHKeys();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sshKeysPage, sshKeysPageSize]);
+  }, [page, pageSize, selectedProjectId, selectedGroupId, selectedTagId]);
 
   const loadProjects = async () => {
     try {
@@ -77,10 +60,38 @@ const WebSSH: React.FC = () => {
     }
   };
 
+  const loadHostGroups = async () => {
+    try {
+      const response = await hostGroupService.list(1, 1000);
+      setHostGroups(response.groups);
+    } catch (error: any) {
+      // 静默失败，不影响主流程
+    }
+  };
+
+  const loadHostTags = async () => {
+    try {
+      const response = await hostTagService.list(1, 1000);
+      setHostTags(response.tags);
+    } catch (error: any) {
+      // 静默失败，不影响主流程
+    }
+  };
+
   const loadHosts = async () => {
     setLoading(true);
     try {
-      const response = await hostService.list(page, pageSize, {});
+      const filters: any = {};
+      if (selectedProjectId) {
+        filters.project_id = selectedProjectId;
+      }
+      if (selectedGroupId) {
+        filters.group_id = selectedGroupId;
+      }
+      if (selectedTagId) {
+        filters.tag_id = selectedTagId;
+      }
+      const response = await hostService.list(page, pageSize, filters);
       setHosts(response.hosts);
       setTotal(response.total);
     } catch (error: any) {
@@ -106,68 +117,6 @@ const WebSSH: React.FC = () => {
     setTerminalTabs(newTabs);
     if (activeTab === targetTabId) {
       setActiveTab(newTabs.length > 0 ? newTabs[newTabs.length - 1].id : 'hosts');
-    }
-  };
-
-  const loadSSHKeys = async () => {
-    setSshKeysLoading(true);
-    try {
-      const response = await sshKeyService.list(sshKeysPage, sshKeysPageSize);
-      setSshKeys(response.ssh_keys);
-      setSshKeysTotal(response.total);
-    } catch (error: any) {
-      message.error(error.response?.data?.error || '加载SSH密钥列表失败');
-    } finally {
-      setSshKeysLoading(false);
-    }
-  };
-
-  const handleCreateSSHKey = () => {
-    setEditingSshKey(null);
-    sshKeyForm.resetFields();
-    setSshKeyModalVisible(true);
-  };
-
-  const handleEditSSHKey = (key: SSHKey) => {
-    setEditingSshKey(key);
-    sshKeyForm.setFieldsValue({ name: key.name, username: key.username || '' });
-    setSshKeyModalVisible(true);
-  };
-
-  const handleDeleteSSHKey = async (id: number) => {
-    try {
-      await sshKeyService.delete(id);
-      message.success('删除成功');
-      loadSSHKeys();
-    } catch (error: any) {
-      message.error(error.response?.data?.error || '删除失败');
-    }
-  };
-
-  const handleSSHKeySubmit = async () => {
-    try {
-      const values = await sshKeyForm.validateFields();
-      if (editingSshKey) {
-        await sshKeyService.update(editingSshKey.id, { 
-          name: values.name,
-          username: values.username || undefined,
-        });
-        message.success('更新成功');
-      } else {
-        await sshKeyService.create({
-          name: values.name,
-          username: values.username || undefined,
-          private_key_content: values.private_key_content,
-        });
-        message.success('创建成功');
-      }
-      setSshKeyModalVisible(false);
-      loadSSHKeys();
-    } catch (error: any) {
-      if (error.errorFields) {
-        return; // 表单验证错误
-      }
-      message.error(error.response?.data?.error || '操作失败');
     }
   };
 
@@ -315,6 +264,54 @@ const WebSSH: React.FC = () => {
           <div style={{ marginBottom: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <h2 style={{ margin: 0 }}>WebSSH管理</h2>
             <Space wrap>
+              <Select
+                placeholder="选择项目"
+                allowClear
+                style={{ width: 150 }}
+                value={selectedProjectId}
+                onChange={(value) => {
+                  setSelectedProjectId(value);
+                  setPage(1);
+                }}
+              >
+                {projects.map((project) => (
+                  <Option key={project.id} value={project.id}>
+                    {project.name}
+                  </Option>
+                ))}
+              </Select>
+              <Select
+                placeholder="选择主机组"
+                allowClear
+                style={{ width: 150 }}
+                value={selectedGroupId}
+                onChange={(value) => {
+                  setSelectedGroupId(value);
+                  setPage(1);
+                }}
+              >
+                {hostGroups.map((group) => (
+                  <Option key={group.id} value={group.id}>
+                    {group.name}
+                  </Option>
+                ))}
+              </Select>
+              <Select
+                placeholder="选择标签"
+                allowClear
+                style={{ width: 150 }}
+                value={selectedTagId}
+                onChange={(value) => {
+                  setSelectedTagId(value);
+                  setPage(1);
+                }}
+              >
+                {hostTags.map((tag) => (
+                  <Option key={tag.id} value={tag.id}>
+                    {tag.name}
+                  </Option>
+                ))}
+              </Select>
               <Button icon={<ReloadOutlined />} onClick={loadHosts}>
                 刷新
               </Button>
@@ -339,109 +336,6 @@ const WebSSH: React.FC = () => {
             }}
           />
         </TabPane>
-        <TabPane tab="SSH密钥" key="ssh-keys" closable={false}>
-          <div style={{ marginBottom: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <h2 style={{ margin: 0 }}>SSH密钥管理</h2>
-            <Space wrap>
-              <Button icon={<ReloadOutlined />} onClick={loadSSHKeys}>
-                刷新
-              </Button>
-              <Button type="primary" icon={<PlusOutlined />} onClick={handleCreateSSHKey}>
-                上传密钥
-              </Button>
-            </Space>
-          </div>
-
-          <Table
-            columns={[
-              {
-                title: 'ID',
-                dataIndex: 'id',
-                key: 'id',
-                width: 80,
-              },
-              {
-                title: '名称',
-                dataIndex: 'name',
-                key: 'name',
-              },
-              {
-                title: '用户名',
-                dataIndex: 'username',
-                key: 'username',
-                width: 120,
-                render: (username: string) => username || <span style={{ color: '#999' }}>-</span>,
-              },
-              {
-                title: '类型',
-                dataIndex: 'key_type',
-                key: 'key_type',
-                width: 100,
-                render: (type: string) => <Tag>{type.toUpperCase()}</Tag>,
-              },
-              {
-                title: '指纹',
-                dataIndex: 'fingerprint',
-                key: 'fingerprint',
-                render: (fp: string) => (
-                  <span style={{ fontFamily: 'monospace', fontSize: '12px' }}>{fp || '-'}</span>
-                ),
-              },
-              {
-                title: '创建时间',
-                dataIndex: 'created_at',
-                key: 'created_at',
-                render: (text: string) => (text ? new Date(text).toLocaleString() : '-'),
-              },
-              {
-                title: '操作',
-                key: 'action',
-                width: 150,
-                render: (_: any, record: SSHKey) => (
-                  <Space>
-                    <Button
-                      type="link"
-                      size="small"
-                      icon={<EditOutlined />}
-                      onClick={() => handleEditSSHKey(record)}
-                    >
-                      编辑
-                    </Button>
-                    <Popconfirm
-                      title="确定要删除这个SSH密钥吗？"
-                      onConfirm={() => handleDeleteSSHKey(record.id)}
-                      okText="确定"
-                      cancelText="取消"
-                    >
-                      <Button
-                        type="link"
-                        danger
-                        size="small"
-                        icon={<DeleteOutlined />}
-                      >
-                        删除
-                      </Button>
-                    </Popconfirm>
-                  </Space>
-                ),
-              },
-            ]}
-            dataSource={sshKeys}
-            rowKey="id"
-            loading={sshKeysLoading}
-            pagination={{
-              current: sshKeysPage,
-              pageSize: sshKeysPageSize,
-              total: sshKeysTotal,
-              showSizeChanger: true,
-              showTotal: (total) => `共 ${total} 条`,
-              onChange: (page, pageSize) => {
-                setSshKeysPage(page);
-                setSshKeysPageSize(pageSize);
-              },
-            }}
-          />
-        </TabPane>
         {terminalTabs.map((tab) => (
           <TabPane
             tab={tab.hostName}
@@ -458,47 +352,6 @@ const WebSSH: React.FC = () => {
           </TabPane>
         ))}
       </Tabs>
-
-      {/* SSH密钥上传/编辑模态框 */}
-      <Modal
-        title={editingSshKey ? '编辑SSH密钥' : '上传SSH密钥'}
-        open={sshKeyModalVisible}
-        onOk={handleSSHKeySubmit}
-        onCancel={() => setSshKeyModalVisible(false)}
-        okText="确定"
-        cancelText="取消"
-        width={600}
-      >
-        <Form form={sshKeyForm} layout="vertical">
-          <Form.Item
-            name="name"
-            label="密钥名称"
-            rules={[{ required: true, message: '请输入密钥名称' }]}
-          >
-            <Input placeholder="例如: 我的SSH密钥" />
-          </Form.Item>
-          <Form.Item
-            name="username"
-            label="SSH用户名"
-            tooltip="可选：设置默认SSH用户名，连接时将自动使用此用户名"
-          >
-            <Input placeholder="例如: root, ubuntu, admin" />
-          </Form.Item>
-          {!editingSshKey && (
-            <Form.Item
-              name="private_key_content"
-              label="私钥内容"
-              rules={[{ required: true, message: '请输入SSH私钥内容' }]}
-            >
-              <Input.TextArea
-                rows={10}
-                placeholder="-----BEGIN OPENSSH PRIVATE KEY-----&#10;...&#10;-----END OPENSSH PRIVATE KEY-----"
-                style={{ fontFamily: 'monospace', fontSize: '12px' }}
-              />
-            </Form.Item>
-          )}
-        </Form>
-      </Modal>
     </Card>
   );
 };

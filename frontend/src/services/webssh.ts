@@ -5,7 +5,7 @@
 
 // WebSSH 终端消息类型
 export interface TerminalMessage {
-  type: 'input' | 'resize' | 'ping' | 'pong' | 'username' | 'password' | 'username_request' | 'password_request' | 'error' | 'auth_method' | 'auth_method_request' | 'key_id' | 'key_selection_request';
+  type: 'input' | 'resize' | 'ping' | 'pong' | 'username' | 'password' | 'username_request' | 'password_request' | 'error' | 'auth_method' | 'auth_method_request' | 'key_id' | 'key_selection_request' | 'connected';
   data?: string;
   rows?: number;
   columns?: number;

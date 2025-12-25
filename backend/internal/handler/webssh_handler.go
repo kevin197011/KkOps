@@ -177,6 +177,14 @@ func (h *WebSSHHandler) HandleTerminal(c *gin.Context) {
 		return
 	}
 
+	// 发送连接成功消息（包含初始终端大小信息，方便前端确认）
+	conn.WriteJSON(TerminalMessage{
+		Type:    "connected",
+		Data:    "SSH connection established",
+		Rows:    rows,
+		Columns: cols,
+	})
+
 	// 使用 WaitGroup 管理 goroutines
 	var wg sync.WaitGroup
 	wg.Add(3)

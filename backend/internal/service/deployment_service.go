@@ -140,10 +140,10 @@ func (s *deploymentService) StartDeployment(configID uint64, version string, tar
 		if err != nil {
 			return nil, err
 		}
-		if host.SaltMinionID == "" {
+		if host.SaltMinionID == nil || *host.SaltMinionID == "" {
 			return nil, errors.New("host does not have Salt Minion ID")
 		}
-		minionIDs = append(minionIDs, host.SaltMinionID)
+		minionIDs = append(minionIDs, *host.SaltMinionID)
 	}
 
 	// 创建部署记录

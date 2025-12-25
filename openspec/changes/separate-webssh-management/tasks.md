@@ -39,7 +39,7 @@
 - [x] 5.1 Code validation
   - Run `npm run build` to verify frontend compiles without errors
   - Fix any linting errors
-- [ ] 5.2 Functional validation
+- [x] 5.2 Functional validation
   - Verify "打开终端" button is removed from host management page
   - Verify WebSSH menu item appears in navigation
   - Verify WebSSH page displays host list correctly

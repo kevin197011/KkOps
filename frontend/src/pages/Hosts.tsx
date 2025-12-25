@@ -12,6 +12,7 @@ import {
   Popconfirm,
   Tag,
   Card,
+  ColorPicker,
 } from 'antd';
 import {
   PlusOutlined,
@@ -42,6 +43,8 @@ const Hosts: React.FC = () => {
   const [selectedProjectId, setSelectedProjectId] = useState<number | undefined>(undefined);
   const [selectedGroupId, setSelectedGroupId] = useState<number | undefined>(undefined);
   const [selectedTagId, setSelectedTagId] = useState<number | undefined>(undefined);
+  const [tagModalVisible, setTagModalVisible] = useState(false);
+  const [tagForm] = Form.useForm();
   const [form] = Form.useForm();
 
   useEffect(() => {
@@ -80,6 +83,35 @@ const Hosts: React.FC = () => {
       setHostTags(response.tags);
     } catch (error: any) {
       // 静默失败，不影响主流程
+    }
+  };
+
+  const handleCreateTag = async () => {
+    try {
+      const values = await tagForm.validateFields();
+      const color = typeof values.color === 'string' ? values.color : values.color?.toHexString();
+      const response = await hostTagService.create({
+        name: values.name,
+        color: color,
+        description: values.description,
+      });
+      message.success('标签创建成功');
+      setTagModalVisible(false);
+      tagForm.resetFields();
+      // 重新加载标签列表
+      await loadHostTags();
+      // 如果正在编辑主机，自动选中新创建的标签
+      if (editingHost) {
+        const currentTagIds = form.getFieldValue('tag_ids') || [];
+        form.setFieldsValue({
+          tag_ids: [...currentTagIds, response.tag.id],
+        });
+      }
+    } catch (error: any) {
+      if (error.errorFields) {
+        return;
+      }
+      message.error(error.response?.data?.error || '创建标签失败');
     }
   };
 
@@ -608,11 +640,27 @@ const Hosts: React.FC = () => {
           <Form.Item
             name="tag_ids"
             label="标签"
+            extra="可以在主机标签管理页面创建和管理标签"
           >
             <Select
               mode="multiple"
               placeholder="选择标签"
               allowClear
+              dropdownRender={(menu) => (
+                <>
+                  {menu}
+                  <div style={{ padding: '8px', borderTop: '1px solid #f0f0f0' }}>
+                    <Button
+                      type="link"
+                      icon={<PlusOutlined />}
+                      onClick={() => setTagModalVisible(true)}
+                      style={{ width: '100%' }}
+                    >
+                      创建新标签
+                    </Button>
+                  </div>
+                </>
+              )}
             >
               {hostTags.map((tag) => (
                 <Option key={tag.id} value={tag.id}>
@@ -620,6 +668,42 @@ const Hosts: React.FC = () => {
                 </Option>
               ))}
             </Select>
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      {/* 快速创建标签模态框 */}
+      <Modal
+        title="创建新标签"
+        open={tagModalVisible}
+        onOk={handleCreateTag}
+        onCancel={() => {
+          setTagModalVisible(false);
+          tagForm.resetFields();
+        }}
+        okText="确定"
+        cancelText="取消"
+      >
+        <Form form={tagForm} layout="vertical">
+          <Form.Item
+            name="name"
+            label="标签名称"
+            rules={[{ required: true, message: '请输入标签名称' }]}
+          >
+            <Input placeholder="请输入标签名称" />
+          </Form.Item>
+          <Form.Item
+            name="color"
+            label="颜色"
+            initialValue="#1890ff"
+          >
+            <ColorPicker showText />
+          </Form.Item>
+          <Form.Item name="description" label="描述">
+            <Input.TextArea
+              placeholder="请输入标签描述（可选）"
+              rows={3}
+            />
           </Form.Item>
         </Form>
       </Modal>

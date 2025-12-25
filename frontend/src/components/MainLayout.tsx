@@ -15,6 +15,8 @@ import {
   SafetyOutlined,
   LockOutlined,
   ConsoleSqlOutlined,
+  KeyOutlined,
+  SettingOutlined,
 } from '@ant-design/icons';
 import { useAuth } from '../contexts/AuthContext';
 import type { MenuProps } from 'antd';
@@ -30,6 +32,9 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
   const navigate = useNavigate();
   const location = useLocation();
   const { user, logout } = useAuth();
+
+  // 检查用户是否为管理员
+  const isAdmin = user?.roles?.some(role => role.name === 'admin') || false;
 
   // 菜单项配置
   const menuItems: MenuProps['items'] = [
@@ -52,6 +57,11 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
       key: '/webssh',
       icon: <ConsoleSqlOutlined />,
       label: 'WebSSH管理',
+    },
+    {
+      key: '/ssh-keys',
+      icon: <KeyOutlined />,
+      label: 'SSH密钥管理',
     },
     {
       key: '/deployments',
@@ -78,6 +88,12 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
       icon: <FileTextOutlined />,
       label: '审计管理',
     },
+    // 系统设置（仅管理员可见）
+    ...(isAdmin ? [{
+      key: '/settings',
+      icon: <SettingOutlined />,
+      label: '系统设置',
+    }] : []),
   ];
 
   // 处理菜单点击

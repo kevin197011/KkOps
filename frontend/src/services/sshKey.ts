@@ -21,6 +21,7 @@ export interface CreateSSHKeyRequest {
 export interface UpdateSSHKeyRequest {
   name: string;
   username?: string; // SSH用户名（可选）
+  private_key_content?: string; // 可选：私钥内容（如果提供，将更新私钥、公钥、指纹和密钥类型）
 }
 
 export interface ListSSHKeysResponse {
@@ -45,6 +46,11 @@ export const sshKeyService = {
 
   get: async (id: number): Promise<{ ssh_key: SSHKey }> => {
     const response = await api.get(`/ssh-keys/${id}`);
+    return response.data;
+  },
+
+  getPrivateKey: async (id: number): Promise<{ private_key: string }> => {
+    const response = await api.get(`/ssh-keys/${id}/private-key`);
     return response.data;
   },
 

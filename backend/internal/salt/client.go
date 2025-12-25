@@ -33,8 +33,14 @@ func NewClient(cfg config.SaltConfig) *Client {
 		},
 	}
 
+	// 规范化 API URL（移除尾部斜杠）
+	apiURL := cfg.APIURL
+	if len(apiURL) > 0 && apiURL[len(apiURL)-1] == '/' {
+		apiURL = apiURL[:len(apiURL)-1]
+	}
+
 	return &Client{
-		apiURL:    cfg.APIURL,
+		apiURL:    apiURL,
 		username:  cfg.Username,
 		password:  cfg.Password,
 		eauth:     cfg.EAuth,
@@ -58,8 +64,8 @@ type LoginRequest struct {
 type LoginResponse struct {
 	Return []struct {
 		Token  string   `json:"token"`
-		Expire int64    `json:"expire"`
-		Start  int64    `json:"start"`
+		Expire float64  `json:"expire"` // Salt API 返回的是浮点数（Unix 时间戳，可能包含毫秒）
+		Start  float64  `json:"start"`  // Salt API 返回的是浮点数（Unix 时间戳，可能包含毫秒）
 		User   string   `json:"user"`
 		EAuth  string   `json:"eauth"`
 		Perms  []string `json:"perms"`
@@ -123,8 +129,16 @@ func (c *Client) authenticate() error {
 	}
 
 	c.token = loginResp.Return[0].Token
-	// Token 有效期通常是 12 小时，我们设置 11 小时过期，提前刷新
-	c.tokenExp = time.Now().Add(11 * time.Hour)
+	// Token 有效期：使用 API 返回的 expire 时间，如果没有则使用 11 小时（提前刷新）
+	if loginResp.Return[0].Expire > 0 {
+		// expire 是 Unix 时间戳（秒），转换为 time.Time
+		expireTime := time.Unix(int64(loginResp.Return[0].Expire), 0)
+		// 提前 1 小时刷新 token
+		c.tokenExp = expireTime.Add(-1 * time.Hour)
+	} else {
+		// 如果没有返回过期时间，使用默认的 11 小时
+		c.tokenExp = time.Now().Add(11 * time.Hour)
+	}
 
 	return nil
 }
@@ -288,4 +302,10 @@ func (c *Client) GetJobStatus(jobID string) (map[string]interface{}, error) {
 	}
 
 	return jobResp.Return[0], nil
+}
+
+// TestConnection 测试Salt API连接
+// 尝试认证并返回连接状态
+func (c *Client) TestConnection() error {
+	return c.authenticate()
 }

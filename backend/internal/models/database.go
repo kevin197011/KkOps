@@ -2,9 +2,11 @@ package models
 
 import (
 	"errors"
+	"fmt"
 	"log"
 
 	"github.com/kkops/backend/internal/config"
+	"github.com/kkops/backend/internal/utils"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -61,6 +63,8 @@ func AutoMigrate() error {
 		&DeploymentVersion{},
 		// 审计管理
 		&AuditLog{},
+		// 系统设置
+		&SystemSettings{},
 	}
 
 	// 逐个迁移模型，以便更好地跟踪进度
@@ -219,7 +223,98 @@ func initDefaultData() error {
 		log.Println("Admin user already exists, skipping creation")
 	}
 
+	// 初始化系统设置（Salt配置）
+	if err := initSystemSettings(); err != nil {
+		log.Printf("Warning: Failed to initialize system settings: %v", err)
+		// 不返回错误，因为迁移已经成功
+	}
+
 	log.Println("Default data initialization completed")
+	return nil
+}
+
+// initSystemSettings 初始化系统设置
+func initSystemSettings() error {
+	log.Println("Initializing system settings...")
+
+	// 检查是否已有系统设置
+	var count int64
+	DB.Model(&SystemSettings{}).Count(&count)
+	if count > 0 {
+		log.Println("System settings already exist, skipping initialization...")
+		return nil
+	}
+
+	// 从环境变量中读取Salt配置并保存到数据库
+	saltConfig := config.AppConfig.Salt
+
+	settings := []SystemSettings{
+		{
+			Key:         "salt.api_url",
+			Value:       saltConfig.APIURL,
+			Category:    "salt",
+			Description: "Salt API URL",
+			UpdatedBy:   1, // 系统用户
+		},
+		{
+			Key:         "salt.username",
+			Value:       saltConfig.Username,
+			Category:    "salt",
+			Description: "Salt API username",
+			UpdatedBy:   1,
+		},
+		{
+			Key:         "salt.password",
+			Value:       saltConfig.Password, // 注意：这里存储的是明文，实际应该加密
+			Category:    "salt",
+			Description: "Salt API password (encrypted)",
+			UpdatedBy:   1,
+		},
+		{
+			Key:         "salt.eauth",
+			Value:       saltConfig.EAuth,
+			Category:    "salt",
+			Description: "Salt API eauth type",
+			UpdatedBy:   1,
+		},
+		{
+			Key:         "salt.timeout",
+			Value:       fmt.Sprintf("%d", saltConfig.Timeout),
+			Category:    "salt",
+			Description: "Salt API timeout in seconds",
+			UpdatedBy:   1,
+		},
+		{
+			Key:         "salt.verify_ssl",
+			Value:       fmt.Sprintf("%v", saltConfig.VerifySSL),
+			Category:    "salt",
+			Description: "Verify SSL certificates",
+			UpdatedBy:   1,
+		},
+	}
+
+	// 加密密码字段
+	for i := range settings {
+		if settings[i].Key == "salt.password" && settings[i].Value != "" {
+			// 使用utils.Encrypt加密密码
+			encrypted, err := utils.Encrypt(settings[i].Value)
+			if err != nil {
+				log.Printf("Warning: Failed to encrypt password: %v", err)
+			} else {
+				settings[i].Value = encrypted
+			}
+		}
+	}
+
+	// 批量创建设置
+	for _, setting := range settings {
+		if err := DB.Create(&setting).Error; err != nil {
+			log.Printf("Failed to create setting %s: %v", setting.Key, err)
+			// 继续创建其他设置，不中断
+		}
+	}
+
+	log.Printf("Initialized %d system settings", len(settings))
 	return nil
 }
 

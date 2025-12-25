@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"bytes"
+	"encoding/json"
 	"io"
 	"strconv"
 	"time"
@@ -66,7 +67,7 @@ func AuditMiddleware(auditService service.AuditService) gin.HandlerFunc {
 		action := getActionFromMethod(c.Request.Method)
 		resourceType := getResourceTypeFromPath(c.Request.URL.Path)
 		resourceID := extractResourceIDFromPath(c.Request.URL.Path)
-		resourceName := "" // 资源名称需要从响应中提取，这里先留空
+		resourceName := extractResourceNameFromResponse(blw.body.String(), resourceType, resourceID)
 
 		// 确定状态
 		status := "success"
@@ -149,18 +150,49 @@ func getActionFromMethod(method string) string {
 func getResourceTypeFromPath(path string) string {
 	// 从路径中提取资源类型，例如 /api/v1/hosts -> host
 	if len(path) > 10 && path[:10] == "/api/v1/" {
-		parts := []rune(path[10:])
+		pathSuffix := path[10:]
+		
+		// 特殊处理一些路径
+		specialPaths := map[string]string{
+			"settings":        "settings",
+			"settings/salt":   "salt_config",
+			"settings/salt/":  "salt_config",
+			"auth/login":      "auth",
+			"auth/logout":     "auth",
+			"auth/register":   "auth",
+			"deployment-configs": "deployment_config",
+			"deployment-versions": "deployment_version",
+			"host-groups":     "host_group",
+			"host-tags":       "host_tag",
+			"ssh-keys":        "ssh_key",
+		}
+		
+		// 检查是否是特殊路径
+		for specialPath, resourceType := range specialPaths {
+			if len(pathSuffix) >= len(specialPath) && pathSuffix[:len(specialPath)] == specialPath {
+				if len(pathSuffix) == len(specialPath) || pathSuffix[len(specialPath)] == '/' {
+					return resourceType
+				}
+			}
+		}
+		
+		// 普通路径处理：提取第一个路径段
 		var resourceType string
-		for _, char := range parts {
-			if char == '/' || char == '?' {
+		for i := 0; i < len(pathSuffix); i++ {
+			if pathSuffix[i] == '/' || pathSuffix[i] == '?' {
 				break
 			}
-			resourceType += string(char)
+			resourceType += string(pathSuffix[i])
 		}
-		// 移除复数形式
+		
+		// 移除复数形式（但保留特殊情况）
 		if len(resourceType) > 0 && resourceType[len(resourceType)-1] == 's' {
-			resourceType = resourceType[:len(resourceType)-1]
+			// 对于以 's' 结尾但不是特殊路径的，移除 's'
+			if _, isSpecial := specialPaths[resourceType]; !isSpecial {
+				resourceType = resourceType[:len(resourceType)-1]
+			}
 		}
+		
 		return resourceType
 	}
 	return ""
@@ -199,5 +231,50 @@ func extractResourceIDFromPath(path string) *uint64 {
 	}
 	
 	return nil
+}
+
+// extractResourceNameFromResponse 从响应中提取资源名称
+func extractResourceNameFromResponse(responseBody string, resourceType string, resourceID *uint64) string {
+	if responseBody == "" || resourceType == "" {
+		return ""
+	}
+
+	// 尝试从响应JSON中提取资源名称
+	// 根据不同的资源类型，名称字段可能不同
+	var responseMap map[string]interface{}
+	if err := json.Unmarshal([]byte(responseBody), &responseMap); err != nil {
+		return ""
+	}
+
+	// 尝试常见的名称字段
+	if name, ok := responseMap["name"].(string); ok && name != "" {
+		return name
+	}
+	if username, ok := responseMap["username"].(string); ok && username != "" && resourceType == "user" {
+		return username
+	}
+	if hostname, ok := responseMap["hostname"].(string); ok && hostname != "" && resourceType == "host" {
+		return hostname
+	}
+
+	// 如果响应中有对应的资源对象，尝试从中提取名称
+	if resource, ok := responseMap[resourceType].(map[string]interface{}); ok {
+		if name, ok := resource["name"].(string); ok && name != "" {
+			return name
+		}
+		if username, ok := resource["username"].(string); ok && username != "" {
+			return username
+		}
+		if hostname, ok := resource["hostname"].(string); ok && hostname != "" {
+			return hostname
+		}
+	}
+
+	// 如果响应是一个数组（列表查询），返回空字符串
+	if _, ok := responseMap[resourceType+"s"]; ok {
+		return ""
+	}
+
+	return ""
 }
 

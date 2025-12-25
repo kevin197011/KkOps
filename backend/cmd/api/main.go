@@ -2,6 +2,7 @@ package main
 
 import (
 	"log"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 	"github.com/kkops/backend/internal/config"
@@ -11,6 +12,7 @@ import (
 	"github.com/kkops/backend/internal/repository"
 	"github.com/kkops/backend/internal/salt"
 	"github.com/kkops/backend/internal/service"
+	"github.com/kkops/backend/internal/utils"
 )
 
 func main() {
@@ -33,11 +35,18 @@ func main() {
 	}
 	log.Println("Database migration completed")
 
-	// 初始化Salt客户端（可选，如果配置了Salt API）
-	var saltClient *salt.Client
+	// 从数据库加载配置（覆盖环境变量）
+	log.Println("Loading configuration from database...")
+	if err := loadConfigFromDatabase(); err != nil {
+		log.Printf("Warning: Failed to load configuration from database: %v. Using environment variables.", err)
+	} else {
+		log.Println("Configuration loaded from database successfully")
+	}
+
+	// 初始化Salt客户端管理器并创建客户端（可选，如果配置了Salt API）
+	saltManager := salt.GetManager()
 	if config.AppConfig.Salt.APIURL != "" && config.AppConfig.Salt.Username != "" {
-		saltClient = salt.NewClient(config.AppConfig.Salt)
-		log.Println("Salt API client initialized")
+		saltManager.InitializeClient(config.AppConfig.Salt)
 	} else {
 		log.Println("Salt API not configured, skipping Salt client initialization")
 	}
@@ -55,6 +64,7 @@ func main() {
 	deploymentVersionRepo := repository.NewDeploymentVersionRepository(models.DB)
 	auditRepo := repository.NewAuditRepository(models.DB)
 	sshKeyRepo := repository.NewSSHKeyRepository(models.DB)
+	settingsRepo := repository.NewSettingsRepository(models.DB)
 
 	// 初始化Service
 	authService := service.NewAuthService(userRepo)
@@ -62,14 +72,16 @@ func main() {
 	roleService := service.NewRoleService(roleRepo)
 	permissionService := service.NewPermissionService(permissionRepo)
 	projectService := service.NewProjectService(projectRepo)
-	hostService := service.NewHostService(hostRepo, saltClient)
+	// 使用Manager.GetClient()以支持热重载，但保持Service接口兼容
+	hostService := service.NewHostService(hostRepo, saltManager.GetClient())
 	hostGroupService := service.NewHostGroupService(hostGroupRepo)
 	hostTagService := service.NewHostTagService(hostTagRepo)
 	deploymentConfigService := service.NewDeploymentConfigService(deploymentConfigRepo)
-	deploymentService := service.NewDeploymentService(deploymentRepo, deploymentConfigRepo, hostRepo, saltClient)
+	deploymentService := service.NewDeploymentService(deploymentRepo, deploymentConfigRepo, hostRepo, saltManager.GetClient())
 	deploymentVersionService := service.NewDeploymentVersionService(deploymentVersionRepo)
 	auditService := service.NewAuditService(auditRepo)
 	sshKeyService := service.NewSSHKeyService(sshKeyRepo)
+	settingsService := service.NewSettingsService(settingsRepo)
 
 	// 初始化Handler
 	authHandler := handler.NewAuthHandler(authService, auditService)
@@ -85,8 +97,8 @@ func main() {
 	deploymentVersionHandler := handler.NewDeploymentVersionHandler(deploymentVersionService)
 	websshHandler := handler.NewWebSSHHandler(hostRepo, sshKeyService)
 	sshKeyHandler := handler.NewSSHKeyHandler(sshKeyService)
-	saltHandler := handler.NewSaltHandler(saltClient)
 	auditHandler := handler.NewAuditHandler(auditService)
+	settingsHandler := handler.NewSettingsHandler(settingsService, saltManager) // 传入Manager以支持热重载
 
 	// 初始化Gin路由
 	r := gin.Default()
@@ -228,6 +240,7 @@ func main() {
 			sshKeys.POST("", sshKeyHandler.CreateSSHKey)
 			sshKeys.GET("", sshKeyHandler.ListSSHKeys)
 			sshKeys.GET("/:id", sshKeyHandler.GetSSHKey)
+			sshKeys.GET("/:id/private-key", sshKeyHandler.GetSSHKeyPrivateKey)
 			sshKeys.PUT("/:id", sshKeyHandler.UpdateSSHKey)
 			sshKeys.DELETE("/:id", sshKeyHandler.DeleteSSHKey)
 		}
@@ -260,13 +273,13 @@ func main() {
 		}
 
 		// Salt管理（如果配置了Salt API）
-		if saltClient != nil {
-			salt := auth.Group("/salt")
-			{
-				salt.POST("/execute", saltHandler.ExecuteCommand)
-				salt.POST("/ping", saltHandler.TestPing)
-				salt.POST("/grains", saltHandler.GetGrains)
-			}
+		// 使用Manager获取客户端，支持动态配置更新
+		saltHandler := handler.NewSaltHandler(saltManager.GetClient())
+		salt := auth.Group("/salt")
+		{
+			salt.POST("/execute", saltHandler.ExecuteCommand)
+			salt.POST("/ping", saltHandler.TestPing)
+			salt.POST("/grains", saltHandler.GetGrains)
 		}
 
 		// 审计管理
@@ -277,6 +290,19 @@ func main() {
 			audit.GET("/logs/resource", auditHandler.GetLogsByResource)
 			audit.GET("/logs/user/:user_id", auditHandler.GetLogsByUser)
 		}
+
+		// 系统设置（仅管理员）
+		settings := auth.Group("/settings")
+		settings.Use(middleware.RequireRole("admin"))
+		{
+			settings.GET("", settingsHandler.GetAllSettings)
+			settings.GET("/:category", settingsHandler.GetSettingsByCategory)
+			settings.GET("/key/:key", settingsHandler.GetSetting)
+			settings.PUT("/key/:key", settingsHandler.UpdateSetting)
+			settings.GET("/salt", settingsHandler.GetSaltConfig)
+			settings.PUT("/salt", settingsHandler.UpdateSaltConfig)
+			settings.POST("/salt/test", settingsHandler.TestSaltConnection)
+		}
 	}
 
 	// 启动服务器
@@ -285,4 +311,49 @@ func main() {
 	if err := r.Run(addr); err != nil {
 		log.Fatal("Failed to start server:", err)
 	}
+}
+
+// loadConfigFromDatabase 从数据库加载配置并覆盖环境变量配置
+func loadConfigFromDatabase() error {
+	if models.DB == nil {
+		// 数据库未初始化，跳过数据库配置加载
+		return nil
+	}
+
+	settingsRepo := repository.NewSettingsRepository(models.DB)
+
+	// 加载Salt配置
+	saltSettings, err := settingsRepo.GetByCategory("salt")
+	if err != nil {
+		// 如果出错（比如表不存在），使用环境变量配置，不返回错误
+		return nil
+	}
+
+	// 如果有数据库设置，则覆盖环境变量配置
+	if len(saltSettings) > 0 {
+		for _, setting := range saltSettings {
+			switch setting.Key {
+			case "salt.api_url":
+				config.AppConfig.Salt.APIURL = setting.Value
+			case "salt.username":
+				config.AppConfig.Salt.Username = setting.Value
+			case "salt.password":
+				// 解密密码
+				decrypted, err := utils.Decrypt(setting.Value)
+				if err == nil {
+					config.AppConfig.Salt.Password = decrypted
+				}
+			case "salt.eauth":
+				config.AppConfig.Salt.EAuth = setting.Value
+			case "salt.timeout":
+				if timeout, err := strconv.Atoi(setting.Value); err == nil {
+					config.AppConfig.Salt.Timeout = timeout
+				}
+			case "salt.verify_ssl":
+				config.AppConfig.Salt.VerifySSL = setting.Value == "true"
+			}
+		}
+	}
+
+	return nil
 }

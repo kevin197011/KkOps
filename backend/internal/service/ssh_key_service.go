@@ -20,7 +20,7 @@ type SSHKeyService interface {
 	CreateKey(userID uint64, name, username, privateKeyContent string) (*models.SSHKey, error)
 	GetKey(id, userID uint64) (*models.SSHKey, error)
 	ListKeys(userID uint64, page, pageSize int) ([]models.SSHKey, int64, error)
-	UpdateKey(id, userID uint64, name, username string) (*models.SSHKey, error)
+	UpdateKey(id, userID uint64, name, username string, privateKeyContent string) (*models.SSHKey, error)
 	DeleteKey(id, userID uint64) error
 	GetDecryptedPrivateKey(id, userID uint64) (string, error) // 获取解密后的私钥（用于SSH连接）
 }
@@ -216,7 +216,7 @@ func (s *sshKeyService) ListKeys(userID uint64, page, pageSize int) ([]models.SS
 	return keys, total, err
 }
 
-func (s *sshKeyService) UpdateKey(id, userID uint64, name, username string) (*models.SSHKey, error) {
+func (s *sshKeyService) UpdateKey(id, userID uint64, name, username string, privateKeyContent string) (*models.SSHKey, error) {
 	key, err := s.keyRepo.GetByID(id)
 	if err != nil {
 		return nil, err
@@ -229,6 +229,28 @@ func (s *sshKeyService) UpdateKey(id, userID uint64, name, username string) (*mo
 
 	key.Name = name
 	key.Username = username
+
+	// 如果提供了私钥内容，更新私钥、公钥、指纹和密钥类型
+	if privateKeyContent != "" {
+		// 验证并解析新的私钥
+		keyType, publicKey, fingerprint, err := validateAndParseSSHKey(privateKeyContent)
+		if err != nil {
+			return nil, fmt.Errorf("invalid SSH key: %w", err)
+		}
+
+		// 加密私钥
+		encryptedPrivateKey, err := utils.Encrypt(privateKeyContent)
+		if err != nil {
+			return nil, fmt.Errorf("failed to encrypt private key: %w", err)
+		}
+
+		// 更新密钥信息
+		key.PrivateKey = encryptedPrivateKey
+		key.PublicKey = publicKey
+		key.Fingerprint = fingerprint
+		key.KeyType = keyType
+	}
+
 	if err := s.keyRepo.Update(key); err != nil {
 		return nil, err
 	}
