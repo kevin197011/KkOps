@@ -19,11 +19,45 @@ import {
   SearchOutlined,
 } from '@ant-design/icons';
 import { auditService, AuditLog, AuditLogFilters } from '../services/audit';
-import dayjs from 'dayjs';
-import 'dayjs/locale/zh-cn';
 
 const { Option } = Select;
 const { RangePicker } = DatePicker;
+
+// 安全解析 JSON 并格式化显示
+const formatJsonData = (data: string | null | undefined): string => {
+  if (!data || data === '{}' || data === '[]') {
+    return '';
+  }
+  try {
+    const parsed = JSON.parse(data);
+    // 如果解析后是空对象或空数组，返回空
+    if (typeof parsed === 'object' && parsed !== null) {
+      if (Array.isArray(parsed) && parsed.length === 0) return '';
+      if (Object.keys(parsed).length === 0) return '';
+    }
+    return JSON.stringify(parsed, null, 2);
+  } catch {
+    // 如果解析失败，返回原始数据
+    return data;
+  }
+};
+
+// 检查数据是否有有效内容
+const hasValidData = (data: string | null | undefined): boolean => {
+  if (!data || data === '{}' || data === '[]') {
+    return false;
+  }
+  try {
+    const parsed = JSON.parse(data);
+    if (typeof parsed === 'object' && parsed !== null) {
+      if (Array.isArray(parsed) && parsed.length === 0) return false;
+      if (Object.keys(parsed).length === 0) return false;
+    }
+    return true;
+  } catch {
+    return data.length > 0;
+  }
+};
 
 const Audit: React.FC = () => {
   const [logs, setLogs] = useState<AuditLog[]>([]);
@@ -100,10 +134,10 @@ const Audit: React.FC = () => {
 
   const columns = [
     {
-      title: 'ID',
-      dataIndex: 'id',
-      key: 'id',
+      title: '序号',
+      key: 'index',
       width: 80,
+      render: (_: any, __: any, index: number) => (page - 1) * pageSize + index + 1,
     },
     {
       title: '时间',
@@ -132,13 +166,6 @@ const Audit: React.FC = () => {
       key: 'resource_type',
       width: 120,
       render: (text: string) => text || '-',
-    },
-    {
-      title: '资源ID',
-      dataIndex: 'resource_id',
-      key: 'resource_id',
-      width: 100,
-      render: (id: number) => id || '-',
     },
     {
       title: '资源名称',
@@ -274,7 +301,9 @@ const Audit: React.FC = () => {
             pageSize: pageSize,
             total: total,
             showSizeChanger: true,
-            showTotal: (total) => `共 ${total} 条`,
+            showQuickJumper: true,
+            pageSizeOptions: ['10', '20', '50', '100'],
+            showTotal: (total, range) => `第 ${range[0]}-${range[1]} 条，共 ${total} 条`,
             onChange: (page, pageSize) => {
               setPage(page);
               setPageSize(pageSize);
@@ -292,18 +321,12 @@ const Audit: React.FC = () => {
         width={800}
       >
         {selectedLog && (
-          <Descriptions bordered column={2}>
-            <Descriptions.Item label="ID" span={1}>
-              {selectedLog.id}
-            </Descriptions.Item>
+          <Descriptions bordered column={2} size="small">
             <Descriptions.Item label="时间" span={1}>
               {new Date(selectedLog.created_at).toLocaleString()}
             </Descriptions.Item>
             <Descriptions.Item label="用户" span={1}>
               {selectedLog.username || '-'}
-            </Descriptions.Item>
-            <Descriptions.Item label="用户ID" span={1}>
-              {selectedLog.user_id || '-'}
             </Descriptions.Item>
             <Descriptions.Item label="操作" span={1}>
               {getActionTag(selectedLog.action)}
@@ -314,10 +337,7 @@ const Audit: React.FC = () => {
             <Descriptions.Item label="资源类型" span={1}>
               {selectedLog.resource_type || '-'}
             </Descriptions.Item>
-            <Descriptions.Item label="资源ID" span={1}>
-              {selectedLog.resource_id || '-'}
-            </Descriptions.Item>
-            <Descriptions.Item label="资源名称" span={2}>
+            <Descriptions.Item label="资源名称" span={1}>
               {selectedLog.resource_name || '-'}
             </Descriptions.Item>
             <Descriptions.Item label="IP地址" span={1}>
@@ -328,41 +348,81 @@ const Audit: React.FC = () => {
             </Descriptions.Item>
             <Descriptions.Item label="User Agent" span={2}>
               <Tooltip title={selectedLog.user_agent}>
-                <div style={{ maxWidth: 500, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                <div style={{ maxWidth: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {selectedLog.user_agent || '-'}
                 </div>
               </Tooltip>
             </Descriptions.Item>
             {selectedLog.error_message && (
               <Descriptions.Item label="错误信息" span={2}>
-                <div style={{ color: 'red' }}>{selectedLog.error_message}</div>
+                <div style={{ color: 'red', wordBreak: 'break-all' }}>{selectedLog.error_message}</div>
               </Descriptions.Item>
             )}
-            {selectedLog.request_data && (
+            {hasValidData(selectedLog.request_data) && (
               <Descriptions.Item label="请求数据" span={2}>
-                <pre style={{ maxHeight: 200, overflow: 'auto', background: '#f5f5f5', padding: 8, borderRadius: 4 }}>
-                  {JSON.stringify(JSON.parse(selectedLog.request_data), null, 2)}
+                <pre style={{ 
+                  maxHeight: 200, 
+                  overflow: 'auto', 
+                  background: '#f5f5f5', 
+                  padding: 8, 
+                  borderRadius: 4,
+                  margin: 0,
+                  fontSize: 12,
+                  whiteSpace: 'pre-wrap',
+                  wordBreak: 'break-all'
+                }}>
+                  {formatJsonData(selectedLog.request_data)}
                 </pre>
               </Descriptions.Item>
             )}
-            {selectedLog.response_data && (
+            {hasValidData(selectedLog.response_data) && (
               <Descriptions.Item label="响应数据" span={2}>
-                <pre style={{ maxHeight: 200, overflow: 'auto', background: '#f5f5f5', padding: 8, borderRadius: 4 }}>
-                  {JSON.stringify(JSON.parse(selectedLog.response_data), null, 2)}
+                <pre style={{ 
+                  maxHeight: 200, 
+                  overflow: 'auto', 
+                  background: '#f5f5f5', 
+                  padding: 8, 
+                  borderRadius: 4,
+                  margin: 0,
+                  fontSize: 12,
+                  whiteSpace: 'pre-wrap',
+                  wordBreak: 'break-all'
+                }}>
+                  {formatJsonData(selectedLog.response_data)}
                 </pre>
               </Descriptions.Item>
             )}
-            {selectedLog.before_data && (
+            {hasValidData(selectedLog.before_data) && (
               <Descriptions.Item label="变更前数据" span={2}>
-                <pre style={{ maxHeight: 200, overflow: 'auto', background: '#f5f5f5', padding: 8, borderRadius: 4 }}>
-                  {JSON.stringify(JSON.parse(selectedLog.before_data), null, 2)}
+                <pre style={{ 
+                  maxHeight: 200, 
+                  overflow: 'auto', 
+                  background: '#f5f5f5', 
+                  padding: 8, 
+                  borderRadius: 4,
+                  margin: 0,
+                  fontSize: 12,
+                  whiteSpace: 'pre-wrap',
+                  wordBreak: 'break-all'
+                }}>
+                  {formatJsonData(selectedLog.before_data)}
                 </pre>
               </Descriptions.Item>
             )}
-            {selectedLog.after_data && (
+            {hasValidData(selectedLog.after_data) && (
               <Descriptions.Item label="变更后数据" span={2}>
-                <pre style={{ maxHeight: 200, overflow: 'auto', background: '#f5f5f5', padding: 8, borderRadius: 4 }}>
-                  {JSON.stringify(JSON.parse(selectedLog.after_data), null, 2)}
+                <pre style={{ 
+                  maxHeight: 200, 
+                  overflow: 'auto', 
+                  background: '#f5f5f5', 
+                  padding: 8, 
+                  borderRadius: 4,
+                  margin: 0,
+                  fontSize: 12,
+                  whiteSpace: 'pre-wrap',
+                  wordBreak: 'break-all'
+                }}>
+                  {formatJsonData(selectedLog.after_data)}
                 </pre>
               </Descriptions.Item>
             )}

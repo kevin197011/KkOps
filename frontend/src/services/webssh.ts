@@ -35,12 +35,21 @@ export function createWebSSHConnection(
   // 构建 WebSocket URL
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   const host = window.location.host;
-  const apiBase = (window as any).API_BASE_URL || '';
-  const wsPath = apiBase ? `${apiBase}/api/v1/webssh/terminal/${hostId}` : `/api/v1/webssh/terminal/${hostId}`;
-  const wsUrl = `${protocol}//${host}${wsPath}`;
+  
+  // 修复 WebSocket URL 构建逻辑
+  let wsUrl: string;
+  if (window.location.port === '3000') {
+    // 开发环境：前端在 3000 端口，后端在 8080 端口
+    wsUrl = `${protocol}//${window.location.hostname}:8080/api/v1/webssh/terminal/${hostId}`;
+  } else {
+    // 生产环境：使用相同的 host
+    wsUrl = `${protocol}//${host}/api/v1/webssh/terminal/${hostId}`;
+  }
   
   // 添加认证 token 到查询参数
   const wsUrlWithAuth = `${wsUrl}?token=${encodeURIComponent(token)}`;
+  
+  console.log('WebSSH WebSocket URL:', wsUrlWithAuth);
 
   // 创建 WebSocket 连接
   const ws = new WebSocket(wsUrlWithAuth);
@@ -50,6 +59,8 @@ export function createWebSSHConnection(
   };
 
   ws.onmessage = (event) => {
+    console.log('WebSSH received message:', event.data);
+    
     // 检查是否是 JSON 消息（用于认证请求等）
     try {
       const msg: TerminalMessage = JSON.parse(event.data);
@@ -58,13 +69,21 @@ export function createWebSSHConnection(
       if (msg.type === 'username_request' || msg.type === 'password_request' || 
           msg.type === 'auth_method_request' || msg.type === 'key_selection_request') {
         // 这些消息会在 Terminal 组件中处理
+        console.log('Received auth request:', msg.type);
         onMessage(event.data);
         return;
       }
       
       if (msg.type === 'error') {
-        console.error('WebSSH error:', msg.data);
-        onError(new ErrorEvent('error', { message: msg.data || 'Unknown error' }));
+        console.error('WebSSH server error:', msg.data);
+        onError(new ErrorEvent('error', { message: msg.data || 'Unknown server error' }));
+        return;
+      }
+      
+      // 处理 connected 消息
+      if (msg.type === 'connected') {
+        console.log('SSH connection established');
+        onMessage(event.data);
         return;
       }
       

@@ -16,26 +16,60 @@ import {
 } from '../services/webssh';
 import { sshKeyService, SSHKey } from '../services/sshKey';
 
+// 认证信息类型
+export interface AuthInfo {
+  authMethod: 'key' | 'password';
+  username: string;
+  password?: string;
+  keyId?: number;
+}
+
 interface TerminalProps {
   hostId: number;
   hostName?: string;
+  authInfo?: AuthInfo; // 克隆时传入的认证信息
   onClose?: () => void;
+  onStatusChange?: (status: 'connecting' | 'connected' | 'disconnected') => void;
+  onAuthInfoUpdate?: (authInfo: AuthInfo) => void; // 认证成功后回调
 }
 
-const Terminal: React.FC<TerminalProps> = ({ hostId, hostName, onClose }) => {
+const Terminal: React.FC<TerminalProps> = ({ hostId, hostName, authInfo, onClose, onStatusChange, onAuthInfoUpdate }) => {
   const terminalRef = useRef<HTMLDivElement>(null);
   const terminalInstanceRef = useRef<XTerm | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
+  const connectedRef = useRef(false); // 用于在闭包中跟踪连接状态
   const [connected, setConnected] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const [authModalVisible, setAuthModalVisible] = useState(false);
   const [authType, setAuthType] = useState<'username' | 'password' | 'auth_method' | 'key_selection'>('auth_method');
   const [authValue, setAuthValue] = useState('');
-  const [authMethod, setAuthMethod] = useState<'key' | 'password'>('password');
-  const [selectedKeyId, setSelectedKeyId] = useState<number | undefined>(undefined);
+  const [authMethod, setAuthMethod] = useState<'key' | 'password'>(authInfo?.authMethod || 'password');
+  const [selectedKeyId, setSelectedKeyId] = useState<number | undefined>(authInfo?.keyId);
   const [sshKeys, setSshKeys] = useState<SSHKey[]>([]);
   const authInputRef = useRef<InputRef>(null);
+  
+  // 存储当前认证信息，用于回调
+  const currentAuthRef = useRef<{ username: string; password?: string; keyId?: number }>({
+    username: authInfo?.username || '',
+    password: authInfo?.password,
+    keyId: authInfo?.keyId,
+  });
+
+  // 如果有预设的认证信息，初始化相关状态
+  useEffect(() => {
+    if (authInfo) {
+      setAuthMethod(authInfo.authMethod);
+      if (authInfo.keyId) {
+        setSelectedKeyId(authInfo.keyId);
+      }
+      currentAuthRef.current = {
+        username: authInfo.username,
+        password: authInfo.password,
+        keyId: authInfo.keyId,
+      };
+    }
+  }, [authInfo]);
 
   useEffect(() => {
     // 初始化终端
@@ -44,13 +78,14 @@ const Terminal: React.FC<TerminalProps> = ({ hostId, hostName, onClose }) => {
         background: '#1e1e1e',
         foreground: '#d4d4d4',
         cursor: '#aeafad',
+        selectionBackground: '#264f78', // 选择高亮颜色
       },
       fontSize: 14,
       fontFamily: 'Consolas, "Courier New", monospace',
       cursorBlink: true,
       cursorStyle: 'block',
-      rows: 24,
-      cols: 80,
+      rows: 40,
+      cols: 160,
     });
 
     const fitAddon = new FitAddon();
@@ -60,41 +95,81 @@ const Terminal: React.FC<TerminalProps> = ({ hostId, hostName, onClose }) => {
 
     if (terminalRef.current) {
       terminal.open(terminalRef.current);
-      fitAddon.fit();
+      // 延迟执行 fit，确保 DOM 完全渲染
+      setTimeout(() => {
+        if (fitAddonRef.current) {
+          fitAddonRef.current.fit();
+        }
+      }, 100);
     }
 
-    // 处理窗口大小变化和容器大小变化
-    const handleResize = () => {
-      if (fitAddonRef.current && terminalInstanceRef.current) {
-        // 先适应容器大小
-        fitAddonRef.current.fit();
-        
-        // 然后发送终端大小到服务器（不依赖 connected state，直接检查 WebSocket 状态）
-        if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-          const dims = terminalInstanceRef.current.cols && terminalInstanceRef.current.rows
-            ? { rows: terminalInstanceRef.current.rows, cols: terminalInstanceRef.current.cols }
-            : { rows: 24, cols: 80 };
-          sendTerminalResize(wsRef.current, dims.rows, dims.cols);
-        }
+    // 选择即复制功能：鼠标选择文本后自动复制到剪贴板
+    let selectionTimeout: NodeJS.Timeout | null = null;
+    const handleSelectionChange = () => {
+      // 使用防抖，避免选择过程中频繁触发
+      if (selectionTimeout) {
+        clearTimeout(selectionTimeout);
       }
+      selectionTimeout = setTimeout(() => {
+        const selection = terminal.getSelection();
+        if (selection && selection.length > 0) {
+          navigator.clipboard.writeText(selection).then(() => {
+            // 复制成功，显示简短提示
+            message.success({ content: '已复制到剪贴板', duration: 1 });
+          }).catch((err) => {
+            console.error('复制失败:', err);
+          });
+        }
+      }, 200); // 200ms 防抖，等待用户完成选择
+    };
+    terminal.onSelectionChange(handleSelectionChange);
+
+    // 防抖定时器
+    let resizeTimeout: NodeJS.Timeout | null = null;
+
+    // 处理终端大小变化 - 自动适配容器
+    const handleResize = () => {
+      // 使用防抖避免频繁触发
+      if (resizeTimeout) {
+        clearTimeout(resizeTimeout);
+      }
+      resizeTimeout = setTimeout(() => {
+        if (fitAddonRef.current && terminalInstanceRef.current) {
+          try {
+            fitAddonRef.current.fit();
+            // 只有在 SSH 连接建立后才发送终端大小到服务器
+            // 使用 connectedRef 避免闭包问题
+            if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN && connectedRef.current) {
+              const dims = terminalInstanceRef.current.cols && terminalInstanceRef.current.rows
+                ? { rows: terminalInstanceRef.current.rows, cols: terminalInstanceRef.current.cols }
+                : { rows: 40, cols: 160 };
+              sendTerminalResize(wsRef.current, dims.rows, dims.cols);
+            }
+          } catch (e) {
+            // 忽略 fit 错误
+          }
+        }
+      }, 50);
     };
 
+    // 监听窗口大小变化
     window.addEventListener('resize', handleResize);
-    
+
     // 使用 ResizeObserver 监听容器大小变化（更准确）
     let resizeObserver: ResizeObserver | null = null;
-    if (terminalRef.current) {
+    const currentTerminalRef = terminalRef.current;
+    if (currentTerminalRef) {
       resizeObserver = new ResizeObserver(() => {
         handleResize();
       });
-      resizeObserver.observe(terminalRef.current);
+      resizeObserver.observe(currentTerminalRef);
     }
 
     // 清理函数
     return () => {
       window.removeEventListener('resize', handleResize);
-      if (resizeObserver && terminalRef.current) {
-        resizeObserver.unobserve(terminalRef.current);
+      if (resizeObserver && currentTerminalRef) {
+        resizeObserver.unobserve(currentTerminalRef);
         resizeObserver.disconnect();
       }
       if (wsRef.current) {
@@ -144,6 +219,8 @@ const Terminal: React.FC<TerminalProps> = ({ hostId, hostName, onClose }) => {
         message.warning('请选择SSH密钥');
         return;
       }
+      // 保存密钥ID
+      currentAuthRef.current.keyId = selectedKeyId;
       sendKeyId(wsRef.current, selectedKeyId);
       setAuthType('username');
       setAuthValue('');
@@ -159,6 +236,8 @@ const Terminal: React.FC<TerminalProps> = ({ hostId, hostName, onClose }) => {
         message.warning('请输入用户名');
         return;
       }
+      // 保存用户名
+      currentAuthRef.current.username = authValue.trim();
       sendUsername(wsRef.current, authValue.trim());
       if (authMethod === 'password') {
         setAuthType('password');
@@ -180,6 +259,8 @@ const Terminal: React.FC<TerminalProps> = ({ hostId, hostName, onClose }) => {
         message.warning('请输入密码');
         return;
       }
+      // 保存密码
+      currentAuthRef.current.password = authValue;
       sendPassword(wsRef.current, authValue);
       setAuthModalVisible(false);
       setAuthValue('');
@@ -190,6 +271,7 @@ const Terminal: React.FC<TerminalProps> = ({ hostId, hostName, onClose }) => {
     if (connecting || connected) return;
 
     setConnecting(true);
+    if (onStatusChange) onStatusChange('connecting');
     const terminal = terminalInstanceRef.current;
     if (!terminal) return;
 
@@ -202,6 +284,12 @@ const Terminal: React.FC<TerminalProps> = ({ hostId, hostName, onClose }) => {
             try {
               const msg: TerminalMessage = JSON.parse(data);
               if (msg.type === 'auth_method_request') {
+                // 如果有预设的认证信息（克隆），自动发送
+                if (authInfo) {
+                  setAuthMethod(authInfo.authMethod);
+                  sendAuthMethod(ws, authInfo.authMethod);
+                  return;
+                }
                 setAuthType('auth_method');
                 setAuthMethod('password'); // 默认选择密码
                 setAuthModalVisible(true);
@@ -209,11 +297,23 @@ const Terminal: React.FC<TerminalProps> = ({ hostId, hostName, onClose }) => {
                 return;
               }
               if (msg.type === 'key_selection_request') {
+                // 如果有预设的密钥ID（克隆），自动发送
+                if (authInfo?.keyId) {
+                  setSelectedKeyId(authInfo.keyId);
+                  sendKeyId(ws, authInfo.keyId);
+                  return;
+                }
                 setAuthType('key_selection');
                 setAuthModalVisible(true);
                 return;
               }
               if (msg.type === 'username_request') {
+                // 如果有预设的用户名（克隆），自动发送
+                if (authInfo?.username) {
+                  currentAuthRef.current.username = authInfo.username;
+                  sendUsername(ws, authInfo.username);
+                  return;
+                }
                 setAuthType('username');
                 setAuthValue('');
                 setAuthModalVisible(true);
@@ -223,6 +323,12 @@ const Terminal: React.FC<TerminalProps> = ({ hostId, hostName, onClose }) => {
                 return;
               }
               if (msg.type === 'password_request') {
+                // 如果有预设的密码（克隆），自动发送
+                if (authInfo?.password) {
+                  currentAuthRef.current.password = authInfo.password;
+                  sendPassword(ws, authInfo.password);
+                  return;
+                }
                 setAuthType('password');
                 setAuthValue('');
                 setAuthModalVisible(true);
@@ -238,24 +344,39 @@ const Terminal: React.FC<TerminalProps> = ({ hostId, hostName, onClose }) => {
                 setAuthModalVisible(false);
                 return;
               }
+              // 处理连接成功消息
               if (msg.type === 'connected') {
-                // SSH 连接已建立
                 setConnected(true);
+                connectedRef.current = true;
                 setConnecting(false);
                 setAuthModalVisible(false);
-                
-                // 连接建立后立即发送终端大小，确保前后端一致
-                if (terminalInstanceRef.current && wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-                  // 确保终端已适应容器大小
-                  if (fitAddonRef.current) {
-                    fitAddonRef.current.fit();
-                  }
-                  
-                  const dims = terminalInstanceRef.current.cols && terminalInstanceRef.current.rows
-                    ? { rows: terminalInstanceRef.current.rows, cols: terminalInstanceRef.current.cols }
-                    : { rows: 24, cols: 80 };
-                  sendTerminalResize(wsRef.current, dims.rows, dims.cols);
+                if (onStatusChange) onStatusChange('connected');
+                // 保存认证信息供克隆使用
+                if (onAuthInfoUpdate && currentAuthRef.current.username) {
+                  onAuthInfoUpdate({
+                    authMethod: authMethod,
+                    username: currentAuthRef.current.username,
+                    password: currentAuthRef.current.password,
+                    keyId: currentAuthRef.current.keyId,
+                  });
                 }
+                // 清除之前的"正在连接"消息，显示连接成功
+                terminal.clear();
+                terminal.writeln('\x1b[32m✓ SSH 连接成功\x1b[0m\r\n');
+                // 连接成功后，多次 fit 确保终端填满容器
+                const doFit = () => {
+                  if (fitAddonRef.current && terminalInstanceRef.current && wsRef.current) {
+                    fitAddonRef.current.fit();
+                    const rows = terminalInstanceRef.current.rows;
+                    const cols = terminalInstanceRef.current.cols;
+                    sendTerminalResize(wsRef.current, rows, cols);
+                  }
+                };
+                // 延迟多次执行确保布局稳定
+                setTimeout(doFit, 50);
+                setTimeout(doFit, 200);
+                setTimeout(doFit, 500);
+                // 不显示这个 JSON 消息到终端
                 return;
               }
             } catch (e) {
@@ -264,10 +385,15 @@ const Terminal: React.FC<TerminalProps> = ({ hostId, hostName, onClose }) => {
 
             // 显示终端输出（如果收到终端输出，说明连接已建立）
             if (terminal) {
-              if (!connected) {
+              if (!connectedRef.current) {
+                // 首次收到终端输出，清除"正在连接"消息
+                terminal.clear();
+                terminal.writeln('\x1b[32m✓ SSH 连接成功\x1b[0m\r\n');
                 setConnected(true);
+                connectedRef.current = true;
                 setConnecting(false);
                 setAuthModalVisible(false);
+                if (onStatusChange) onStatusChange('connected');
               }
               terminal.write(data);
             }
@@ -277,10 +403,14 @@ const Terminal: React.FC<TerminalProps> = ({ hostId, hostName, onClose }) => {
           message.error('连接错误');
           setConnecting(false);
           setConnected(false);
+          connectedRef.current = false; // 同步更新 ref
+          if (onStatusChange) onStatusChange('disconnected');
         },
         () => {
           setConnected(false);
+          connectedRef.current = false; // 同步更新 ref
           setConnecting(false);
+          if (onStatusChange) onStatusChange('disconnected');
           if (terminal) {
             terminal.writeln('\r\n\x1b[31m✗ 连接已断开\x1b[0m\r\n');
           }
@@ -294,29 +424,24 @@ const Terminal: React.FC<TerminalProps> = ({ hostId, hostName, onClose }) => {
         // 等待服务器请求用户名和密码
         terminal.writeln('\r\n\x1b[33m正在连接，请等待认证...\x1b[0m\r\n');
         
-        // 确保终端已适应容器大小，然后发送实际的终端大小
-        if (fitAddonRef.current && terminalRef.current) {
-          fitAddonRef.current.fit();
-        }
-        
-        // 发送初始终端大小（使用实际大小而不是默认值）
+        // 发送初始终端大小
         const dims = terminal.cols && terminal.rows
           ? { rows: terminal.rows, cols: terminal.cols }
-          : { rows: 24, cols: 80 };
+          : { rows: 40, cols: 160 };
         sendTerminalResize(ws, dims.rows, dims.cols);
       };
 
-      // 处理终端输入（使用 WebSocket 状态而不是 React state，避免闭包问题）
+      // 处理终端输入 - 使用 wsRef 避免闭包问题
       terminal.onData((data) => {
         if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
           sendTerminalInput(wsRef.current, data);
         }
       });
 
-      // 处理粘贴（使用 WebSocket 状态而不是 React state，避免闭包问题）
+      // 处理粘贴 - 使用 wsRef 避免闭包问题
       terminal.onBinary((data) => {
         if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-          wsRef.current.send(data);
+          sendTerminalInput(wsRef.current, data);
         }
       });
 
@@ -333,6 +458,8 @@ const Terminal: React.FC<TerminalProps> = ({ hostId, hostName, onClose }) => {
       wsRef.current = null;
     }
     setConnected(false);
+    connectedRef.current = false; // 同步更新 ref
+    if (onStatusChange) onStatusChange('disconnected');
   };
 
   const clear = () => {
@@ -348,8 +475,8 @@ const Terminal: React.FC<TerminalProps> = ({ hostId, hostName, onClose }) => {
   }, [hostId]);
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      <div style={{ padding: '8px', background: '#2d2d2d', borderBottom: '1px solid #3e3e3e' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', flex: 1 }}>
+      <div style={{ padding: '8px', background: '#2d2d2d', borderBottom: '1px solid #3e3e3e', flexShrink: 0 }}>
         <Space>
           <span style={{ color: '#d4d4d4' }}>
             {hostName || `主机 #${hostId}`}
@@ -395,7 +522,6 @@ const Terminal: React.FC<TerminalProps> = ({ hostId, hostName, onClose }) => {
         ref={terminalRef}
         style={{
           flex: 1,
-          padding: '8px',
           background: '#1e1e1e',
           overflow: 'hidden',
         }}
@@ -424,9 +550,9 @@ const Terminal: React.FC<TerminalProps> = ({ hostId, hostName, onClose }) => {
           <Radio.Group
             value={authMethod}
             onChange={(e) => setAuthMethod(e.target.value)}
-            style={{ width: '100%' }}
+            style={{ width: '100%', marginTop: 16 }}
           >
-            <Space direction="vertical">
+            <Space direction="vertical" size="middle">
               <Radio value="password">密码认证</Radio>
               <Radio value="key">SSH密钥认证</Radio>
             </Space>

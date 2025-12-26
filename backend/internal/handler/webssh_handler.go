@@ -115,6 +115,8 @@ func (h *WebSSHHandler) HandleTerminal(c *gin.Context) {
 		return
 	}
 
+	log.Printf("Authentication successful for user %d, username: %s", userID, username)
+
 	sshClient, err := h.establishSSHConnection(host, conn, authMethod, username)
 	if err != nil {
 		log.Printf("Failed to establish SSH connection: %v", err)
@@ -122,6 +124,8 @@ func (h *WebSSHHandler) HandleTerminal(c *gin.Context) {
 		return
 	}
 	defer sshClient.Close()
+
+	log.Printf("SSH connection established to %s:%d", host.IPAddress, host.SSHPort)
 
 	// 创建 SSH 会话
 	session, err := sshClient.NewSession()
@@ -140,7 +144,7 @@ func (h *WebSSHHandler) HandleTerminal(c *gin.Context) {
 	}
 
 	// 默认终端大小
-	rows, cols := 24, 80
+	rows, cols := 40, 160
 	if err := session.RequestPty("xterm-256color", rows, cols, modes); err != nil {
 		log.Printf("Failed to request PTY: %v", err)
 		sendErrorMessage(conn, "Failed to request PTY")
@@ -187,14 +191,58 @@ func (h *WebSSHHandler) HandleTerminal(c *gin.Context) {
 
 	// 使用 WaitGroup 管理 goroutines
 	var wg sync.WaitGroup
-	wg.Add(3)
+	wg.Add(4)
+
+	// 最后活动时间跟踪（用于检测空闲）
+	// 包括：用户输入、SSH输出、ping消息
+	lastActivity := time.Now()
+	var lastActivityMutex sync.Mutex
+	updateActivity := func() {
+		lastActivityMutex.Lock()
+		lastActivity = time.Now()
+		lastActivityMutex.Unlock()
+	}
+
+	// 用于通知所有goroutine退出
+	done := make(chan struct{})
+
+	// 空闲超时检测：如果 30 分钟内没有任何活动（输入或输出），关闭连接
+	// 注意：只要有SSH输出（如编译日志），就不会被认为是空闲
+	go func() {
+		defer wg.Done()
+		ticker := time.NewTicker(1 * time.Minute)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-done:
+				return
+			case <-ticker.C:
+				lastActivityMutex.Lock()
+				idleDuration := time.Since(lastActivity)
+				lastActivityMutex.Unlock()
+
+				// 如果空闲超过 30 分钟（无任何输入或输出），关闭连接
+				if idleDuration > 30*time.Minute {
+					log.Printf("SSH connection idle for %v, closing", idleDuration)
+					session.Close()
+					sshClient.Close()
+					conn.Close()
+					return
+				}
+			}
+		}
+	}()
 
 	// 从 WebSocket 读取输入并发送到 SSH stdin
 	go func() {
 		defer wg.Done()
 		defer stdin.Close()
+		defer close(done) // 当WebSocket关闭时，通知其他goroutine退出
 
 		for {
+			// 不设置读取超时，让连接保持打开
+			// 只要SSH会话还在运行，就保持WebSocket连接
 			_, message, err := conn.ReadMessage()
 			if err != nil {
 				if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
@@ -202,6 +250,9 @@ func (h *WebSSHHandler) HandleTerminal(c *gin.Context) {
 				}
 				return
 			}
+
+			// 更新活动时间
+			updateActivity()
 
 			var msg TerminalMessage
 			if err := json.Unmarshal(message, &msg); err != nil {
@@ -221,7 +272,7 @@ func (h *WebSSHHandler) HandleTerminal(c *gin.Context) {
 					rows, cols = msg.Rows, msg.Columns
 				}
 			case "ping":
-				// 响应 ping
+				// 响应 ping（ping 也算活动）
 				conn.WriteJSON(TerminalMessage{Type: "pong"})
 			}
 		}
@@ -230,20 +281,27 @@ func (h *WebSSHHandler) HandleTerminal(c *gin.Context) {
 	// 从 SSH stdout 读取并发送到 WebSocket
 	go func() {
 		defer wg.Done()
-		buffer := make([]byte, 1024)
+		buffer := make([]byte, 4096) // 增大缓冲区以处理大量输出
 		for {
-			n, err := stdout.Read(buffer)
-			if n > 0 {
-				if err := conn.WriteMessage(websocket.TextMessage, buffer[:n]); err != nil {
-					log.Printf("WebSocket write error (stdout): %v", err)
+			select {
+			case <-done:
+				return
+			default:
+				n, err := stdout.Read(buffer)
+				if n > 0 {
+					// 更新活动时间（有输出也算活动，这对于长时间运行的任务很重要）
+					updateActivity()
+					if err := conn.WriteMessage(websocket.TextMessage, buffer[:n]); err != nil {
+						log.Printf("WebSocket write error (stdout): %v", err)
+						return
+					}
+				}
+				if err != nil {
+					if err != io.EOF {
+						log.Printf("SSH stdout read error: %v", err)
+					}
 					return
 				}
-			}
-			if err != nil {
-				if err != io.EOF {
-					log.Printf("SSH stdout read error: %v", err)
-				}
-				return
 			}
 		}
 	}()
@@ -251,20 +309,27 @@ func (h *WebSSHHandler) HandleTerminal(c *gin.Context) {
 	// 从 SSH stderr 读取并发送到 WebSocket
 	go func() {
 		defer wg.Done()
-		buffer := make([]byte, 1024)
+		buffer := make([]byte, 4096) // 增大缓冲区以处理大量输出
 		for {
-			n, err := stderr.Read(buffer)
-			if n > 0 {
-				if err := conn.WriteMessage(websocket.TextMessage, buffer[:n]); err != nil {
-					log.Printf("WebSocket write error (stderr): %v", err)
+			select {
+			case <-done:
+				return
+			default:
+				n, err := stderr.Read(buffer)
+				if n > 0 {
+					// 更新活动时间（有错误输出也算活动）
+					updateActivity()
+					if err := conn.WriteMessage(websocket.TextMessage, buffer[:n]); err != nil {
+						log.Printf("WebSocket write error (stderr): %v", err)
+						return
+					}
+				}
+				if err != nil {
+					if err != io.EOF {
+						log.Printf("SSH stderr read error: %v", err)
+					}
 					return
 				}
-			}
-			if err != nil {
-				if err != io.EOF {
-					log.Printf("SSH stderr read error: %v", err)
-				}
-				return
 			}
 		}
 	}()
@@ -300,6 +365,22 @@ func (h *WebSSHHandler) establishSSHConnection(host *models.Host, conn *websocke
 	if err != nil {
 		return nil, fmt.Errorf("failed to dial SSH server: %w", err)
 	}
+
+	// 启动 SSH 连接保活机制
+	// 每 30 秒发送一次 keepalive，确保连接在有操作时保持活跃
+	go func() {
+		ticker := time.NewTicker(30 * time.Second)
+		defer ticker.Stop()
+
+		for range ticker.C {
+			// 发送 keepalive 请求，忽略错误（连接关闭时会自动退出）
+			_, _, err := client.SendRequest("keepalive@openssh.com", false, nil)
+			if err != nil {
+				// 连接已关闭，退出keepalive循环
+				return
+			}
+		}
+	}()
 
 	return client, nil
 }

@@ -500,7 +500,9 @@ const Deployments: React.FC = () => {
                 pageSize: configPageSize,
                 total: configTotal,
                 showSizeChanger: true,
-                showTotal: (total) => `共 ${total} 条`,
+                showQuickJumper: true,
+                pageSizeOptions: ['10', '20', '50', '100'],
+                showTotal: (total, range) => `第 ${range[0]}-${range[1]} 条，共 ${total} 条`,
                 onChange: (page, pageSize) => {
                   setConfigPage(page);
                   setConfigPageSize(pageSize);
@@ -519,7 +521,9 @@ const Deployments: React.FC = () => {
                 pageSize: deploymentPageSize,
                 total: deploymentTotal,
                 showSizeChanger: true,
-                showTotal: (total) => `共 ${total} 条`,
+                showQuickJumper: true,
+                pageSizeOptions: ['10', '20', '50', '100'],
+                showTotal: (total, range) => `第 ${range[0]}-${range[1]} 条，共 ${total} 条`,
                 onChange: (page, pageSize) => {
                   setDeploymentPage(page);
                   setDeploymentPageSize(pageSize);
@@ -538,7 +542,9 @@ const Deployments: React.FC = () => {
                 pageSize: versionPageSize,
                 total: versionTotal,
                 showSizeChanger: true,
-                showTotal: (total) => `共 ${total} 条`,
+                showQuickJumper: true,
+                pageSizeOptions: ['10', '20', '50', '100'],
+                showTotal: (total, range) => `第 ${range[0]}-${range[1]} 条，共 ${total} 条`,
                 onChange: (page, pageSize) => {
                   setVersionPage(page);
                   setVersionPageSize(pageSize);

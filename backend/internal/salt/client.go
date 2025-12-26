@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/kkops/backend/internal/config"
@@ -177,28 +178,19 @@ func (c *Client) doRequest(method, endpoint string, body interface{}) (*http.Res
 
 // GetMinionStatus 获取 Minion 状态
 func (c *Client) GetMinionStatus(minionID string) (bool, error) {
-	resp, err := c.doRequest("GET", fmt.Sprintf("/minions/%s", minionID), nil)
+	// 使用 test.ping 命令来检查 Minion 是否在线
+	pingResult, err := c.TestPing(minionID)
 	if err != nil {
 		return false, err
 	}
-	defer resp.Body.Close()
 
-	if resp.StatusCode == http.StatusNotFound {
-		return false, nil // Minion 不存在
+	// 检查指定 minion 是否在 ping 结果中且返回 true
+	if status, exists := pingResult[minionID]; exists {
+		return status, nil
 	}
 
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return false, fmt.Errorf("failed to get minion status: status %d, body: %s", resp.StatusCode, string(body))
-	}
-
-	var statusResp MinionStatusResponse
-	if err := json.NewDecoder(resp.Body).Decode(&statusResp); err != nil {
-		return false, fmt.Errorf("failed to decode minion status response: %w", err)
-	}
-
-	// 如果返回有数据，说明 Minion 存在且在线
-	return len(statusResp.Return) > 0, nil
+	// 如果 minion 不在结果中，说明它不在线或不存在
+	return false, nil
 }
 
 // ExecuteCommand 执行 Salt 命令
@@ -207,8 +199,44 @@ func (c *Client) ExecuteCommand(target string, function string, args []interface
 		"client":  "local",
 		"tgt":     target,
 		"fun":     function,
-		"arg":     args,
 		"timeout": c.timeout.Seconds(),
+	}
+
+	// 只有当 args 不为空时才设置 arg 字段
+	if len(args) > 0 {
+		// 对于 pkg.install 等函数，需要特殊处理参数格式
+		if function == "pkg.install" && len(args) > 0 {
+			var finalArgs []string
+
+			// 处理嵌套数组的情况（如 [["nginx","mysql-server"]] -> ["nginx","mysql-server"]）
+			if len(args) == 1 {
+				if nestedArray, ok := args[0].([]interface{}); ok {
+					// 如果第一个参数是数组，展开它
+					for _, item := range nestedArray {
+						if str, ok := item.(string); ok {
+							finalArgs = append(finalArgs, str)
+						}
+					}
+				} else if str, ok := args[0].(string); ok {
+					finalArgs = append(finalArgs, str)
+				}
+			} else {
+				// 处理平坦数组的情况
+				for _, arg := range args {
+					if str, ok := arg.(string); ok {
+						finalArgs = append(finalArgs, str)
+					}
+				}
+			}
+
+			if len(finalArgs) > 0 {
+				cmdBody["arg"] = strings.Join(finalArgs, ",")
+			} else {
+				cmdBody["arg"] = args
+			}
+		} else {
+			cmdBody["arg"] = args
+		}
 	}
 
 	resp, err := c.doRequest("POST", "/", cmdBody)
@@ -256,6 +284,11 @@ func (c *Client) TestPing(target string) (map[string]bool, error) {
 // GetGrains 获取 Minion 的 Grains 信息
 func (c *Client) GetGrains(target string) (map[string]interface{}, error) {
 	return c.ExecuteCommand(target, "grains.items", nil)
+}
+
+// GetDiskUsage 获取 Minion 的磁盘使用情况
+func (c *Client) GetDiskUsage(target string) (map[string]interface{}, error) {
+	return c.ExecuteCommand(target, "disk.usage", nil)
 }
 
 // StateApply 执行 Salt state.apply
@@ -308,4 +341,257 @@ func (c *Client) GetJobStatus(jobID string) (map[string]interface{}, error) {
 // 尝试认证并返回连接状态
 func (c *Client) TestConnection() error {
 	return c.authenticate()
+}
+
+// MinionInfo Minion 信息结构
+type MinionInfo struct {
+	ID          string                 `json:"id"`
+	IPAddress   string                 `json:"ip_address"`
+	Hostname    string                 `json:"hostname"`
+	OS          string                 `json:"os"`
+	OSRelease   string                 `json:"os_release"`
+	NumCPUs     int                    `json:"num_cpus"`
+	MemTotalMB  float64                `json:"mem_total"`
+	SaltVersion string                 `json:"salt_version"`
+	Grains      map[string]interface{} `json:"grains"`
+}
+
+// ListMinions 获取所有已连接的 Minion 列表
+// 首先尝试使用 GET /minions 端点，如果失败则尝试使用 runner 客户端
+func (c *Client) ListMinions() ([]MinionInfo, error) {
+	// 方法1: 尝试使用 GET /minions 端点
+	resp, err := c.doRequest("GET", "/minions", nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list minions: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+
+	if resp.StatusCode != http.StatusOK {
+		// 如果 GET /minions 失败，尝试使用 runner 客户端
+		return c.listMinionsViaRunner()
+	}
+
+	var minionResp struct {
+		Return []map[string]interface{} `json:"return"`
+	}
+	if err := json.Unmarshal(body, &minionResp); err != nil {
+		return nil, fmt.Errorf("failed to decode minions response: %w", err)
+	}
+
+	if len(minionResp.Return) == 0 {
+		return []MinionInfo{}, nil
+	}
+
+	var minions []MinionInfo
+	for minionID, data := range minionResp.Return[0] {
+		info := MinionInfo{
+			ID: minionID,
+		}
+
+		if grains, ok := data.(map[string]interface{}); ok {
+			info.Grains = grains
+			c.extractMinionInfo(&info, grains)
+		}
+
+		minions = append(minions, info)
+	}
+
+	return minions, nil
+}
+
+// listMinionsViaRunner 使用 runner 客户端获取 minion 列表
+func (c *Client) listMinionsViaRunner() ([]MinionInfo, error) {
+	// 使用 manage.status runner 获取 minion 状态
+	cmdBody := map[string]interface{}{
+		"client": "runner",
+		"fun":    "manage.status",
+	}
+
+	resp, err := c.doRequest("POST", "/", cmdBody)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get minion status via runner: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("failed to list minions via runner: status %d, body: %s", resp.StatusCode, string(body))
+	}
+
+	var runnerResp struct {
+		Return []map[string]interface{} `json:"return"`
+	}
+	if err := json.Unmarshal(body, &runnerResp); err != nil {
+		return nil, fmt.Errorf("failed to decode runner response: %w", err)
+	}
+
+	if len(runnerResp.Return) == 0 {
+		return []MinionInfo{}, nil
+	}
+
+	var minions []MinionInfo
+	result := runnerResp.Return[0]
+
+	// manage.status 返回 {"up": ["minion1", "minion2"], "down": ["minion3"]}
+	if upMinions, ok := result["up"].([]interface{}); ok {
+		for _, m := range upMinions {
+			if minionID, ok := m.(string); ok {
+				minions = append(minions, MinionInfo{
+					ID: minionID,
+				})
+			}
+		}
+	}
+
+	return minions, nil
+}
+
+// extractMinionInfo 从 grains 中提取 minion 信息
+func (c *Client) extractMinionInfo(info *MinionInfo, grains map[string]interface{}) {
+	// 提取 IP 地址（优先选择私有 IP）
+	if ipv4, ok := grains["ipv4"].([]interface{}); ok {
+		var privateIP, publicIP string
+		for _, ip := range ipv4 {
+			if ipStr, ok := ip.(string); ok && ipStr != "127.0.0.1" {
+				if isPrivateIPAddr(ipStr) {
+					privateIP = ipStr
+				} else {
+					publicIP = ipStr
+				}
+			}
+		}
+		// 优先使用私有 IP
+		if privateIP != "" {
+			info.IPAddress = privateIP
+		} else if publicIP != "" {
+			info.IPAddress = publicIP
+		}
+	}
+	// 提取主机名
+	if hostname, ok := grains["host"].(string); ok {
+		info.Hostname = hostname
+	} else if fqdn, ok := grains["fqdn"].(string); ok {
+		info.Hostname = fqdn
+	}
+	// 提取操作系统信息
+	if os, ok := grains["os"].(string); ok {
+		info.OS = os
+	}
+	if osRelease, ok := grains["osrelease"].(string); ok {
+		info.OSRelease = osRelease
+	}
+	// 提取 CPU 核心数
+	if numCpus, ok := grains["num_cpus"].(float64); ok {
+		info.NumCPUs = int(numCpus)
+	}
+	// 提取内存信息（MB）
+	if memTotal, ok := grains["mem_total"].(float64); ok {
+		info.MemTotalMB = memTotal
+	}
+	// 提取 Salt 版本
+	if saltVersion, ok := grains["saltversion"].(string); ok {
+		info.SaltVersion = saltVersion
+	}
+}
+
+// ExecuteState 执行 Salt state.apply
+func (c *Client) ExecuteState(formulaName, target string, pillarData map[string]interface{}) (map[string]interface{}, error) {
+	cmdBody := map[string]interface{}{
+		"client": "local",
+		"tgt":    target,
+		"fun":    "state.apply",
+		"arg":    []interface{}{formulaName},
+	}
+
+	// 添加 Pillar 数据
+	if pillarData != nil && len(pillarData) > 0 {
+		cmdBody["kwarg"] = map[string]interface{}{
+			"pillar": pillarData,
+		}
+	}
+
+	resp, err := c.doRequest("POST", "/", cmdBody)
+	if err != nil {
+		return nil, fmt.Errorf("failed to execute state: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("state execution failed: status %d, body: %s", resp.StatusCode, string(body))
+	}
+
+	var result map[string]interface{}
+	if err := json.Unmarshal(body, &result); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	return result, nil
+}
+
+// ExecuteStateWithArgs 执行 Salt state.apply 带额外参数
+func (c *Client) ExecuteStateWithArgs(formulaName, target string, args []interface{}, pillarData map[string]interface{}) (map[string]interface{}, error) {
+	cmdBody := map[string]interface{}{
+		"client": "local",
+		"tgt":    target,
+		"fun":    "state.apply",
+	}
+
+	// 构建参数列表
+	stateArgs := []interface{}{formulaName}
+	if len(args) > 0 {
+		stateArgs = append(stateArgs, args...)
+	}
+	cmdBody["arg"] = stateArgs
+
+	// 添加 Pillar 数据
+	if pillarData != nil && len(pillarData) > 0 {
+		if kwarg, ok := cmdBody["kwarg"].(map[string]interface{}); ok {
+			kwarg["pillar"] = pillarData
+		} else {
+			cmdBody["kwarg"] = map[string]interface{}{
+				"pillar": pillarData,
+			}
+		}
+	}
+
+	resp, err := c.doRequest("POST", "/", cmdBody)
+	if err != nil {
+		return nil, fmt.Errorf("failed to execute state: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("state execution failed: status %d, body: %s", resp.StatusCode, string(body))
+	}
+
+	var result map[string]interface{}
+	if err := json.Unmarshal(body, &result); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	return result, nil
+}
+
+// isPrivateIPAddr 判断是否为私有 IP 地址
+func isPrivateIPAddr(ip string) bool {
+	if len(ip) < 3 {
+		return false
+	}
+	// 简单判断私有 IP 范围
+	return ip[:3] == "10." ||
+		(len(ip) >= 4 && ip[:4] == "172.") ||
+		(len(ip) >= 8 && ip[:8] == "192.168.")
 }

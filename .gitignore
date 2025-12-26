@@ -33,3 +33,5 @@ go.work.sum
 
 .cursor
 .vagrant
+.kiro
+.vscode

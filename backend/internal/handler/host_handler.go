@@ -80,6 +80,11 @@ func (h *HostHandler) ListHosts(c *gin.Context) {
 			filters["tag_id"] = id
 		}
 	}
+	if cloudPlatformID := c.Query("cloud_platform_id"); cloudPlatformID != "" {
+		if id, err := strconv.ParseUint(cloudPlatformID, 10, 64); err == nil {
+			filters["cloud_platform_id"] = id
+		}
+	}
 
 	hosts, total, err := h.hostService.ListHosts(page, pageSize, filters)
 	if err != nil {
@@ -259,3 +264,54 @@ func (h *HostHandler) SyncAllHostsStatus(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "all hosts status synced successfully"})
 }
 
+
+
+// DiscoverMinions 发现所有 Salt Minion
+func (h *HostHandler) DiscoverMinions(c *gin.Context) {
+	minions, err := h.hostService.DiscoverMinions()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"minions": minions,
+		"total":   len(minions),
+	})
+}
+
+// AutoAssignMinion 自动为主机分配 Salt Minion ID
+func (h *HostHandler) AutoAssignMinion(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid host id"})
+		return
+	}
+
+	minionID, err := h.hostService.AutoAssignMinion(id)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	if minionID == nil {
+		c.JSON(http.StatusOK, gin.H{
+			"message":   "no matching minion found",
+			"minion_id": nil,
+		})
+		return
+	}
+
+	// 返回更新后的主机信息
+	host, err := h.hostService.GetHost(id)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get updated host"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message":   "minion assigned successfully",
+		"minion_id": *minionID,
+		"host":      host,
+	})
+}

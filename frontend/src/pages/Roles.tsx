@@ -12,12 +12,14 @@ import {
   Tag,
   Tree,
   Checkbox,
+  Descriptions,
 } from 'antd';
 import {
   PlusOutlined,
   EditOutlined,
   DeleteOutlined,
   ReloadOutlined,
+  EyeOutlined,
 } from '@ant-design/icons';
 import { roleService, Role } from '../services/role';
 import { permissionService, Permission } from '../services/permission';
@@ -30,7 +32,9 @@ const Roles: React.FC = () => {
   const [pageSize, setPageSize] = useState(10);
   const [modalVisible, setModalVisible] = useState(false);
   const [permissionModalVisible, setPermissionModalVisible] = useState(false);
+  const [detailModalVisible, setDetailModalVisible] = useState(false);
   const [editingRole, setEditingRole] = useState<Role | null>(null);
+  const [detailRole, setDetailRole] = useState<Role | null>(null);
   const [allPermissions, setAllPermissions] = useState<Permission[]>([]);
   const [rolePermissions, setRolePermissions] = useState<number[]>([]);
   const [currentRoleId, setCurrentRoleId] = useState<number | null>(null);
@@ -62,6 +66,16 @@ const Roles: React.FC = () => {
       setAllPermissions(response.permissions);
     } catch (error: any) {
       message.error('加载权限列表失败');
+    }
+  };
+
+  const handleViewDetail = async (role: Role) => {
+    try {
+      const response = await roleService.get(role.id);
+      setDetailRole(response.role);
+      setDetailModalVisible(true);
+    } catch (error: any) {
+      message.error('获取角色详情失败');
     }
   };
 
@@ -162,10 +176,10 @@ const Roles: React.FC = () => {
 
   const columns = [
     {
-      title: 'ID',
-      dataIndex: 'id',
-      key: 'id',
+      title: '序号',
+      key: 'index',
       width: 80,
+      render: (_: any, __: any, index: number) => (page - 1) * pageSize + index + 1,
     },
     {
       title: '角色名称',
@@ -197,10 +211,18 @@ const Roles: React.FC = () => {
     {
       title: '操作',
       key: 'action',
-      width: 200,
+      width: 250,
       fixed: 'right' as const,
       render: (_: any, record: Role) => (
         <Space>
+          <Button
+            type="link"
+            size="small"
+            icon={<EyeOutlined />}
+            onClick={() => handleViewDetail(record)}
+          >
+            详情
+          </Button>
           <Button
             type="link"
             size="small"
@@ -261,7 +283,9 @@ const Roles: React.FC = () => {
             pageSize: pageSize,
             total: total,
             showSizeChanger: true,
-            showTotal: (total) => `共 ${total} 条`,
+            showQuickJumper: true,
+            pageSizeOptions: ['10', '20', '50', '100'],
+            showTotal: (total, range) => `第 ${range[0]}-${range[1]} 条，共 ${total} 条`,
             onChange: (page, pageSize) => {
               setPage(page);
               setPageSize(pageSize);
@@ -334,6 +358,38 @@ const Roles: React.FC = () => {
             </div>
           ))}
         </div>
+      </Modal>
+
+      {/* 角色详情模态框 */}
+      <Modal
+        title="角色详情"
+        open={detailModalVisible}
+        onCancel={() => setDetailModalVisible(false)}
+        footer={null}
+        width={600}
+      >
+        {detailRole && (
+          <Descriptions bordered column={1} size="small">
+            <Descriptions.Item label="角色名称">{detailRole.name}</Descriptions.Item>
+            <Descriptions.Item label="描述">{detailRole.description || '-'}</Descriptions.Item>
+            <Descriptions.Item label="权限数量">{detailRole.permissions?.length || 0}</Descriptions.Item>
+            <Descriptions.Item label="权限列表">
+              <div style={{ maxHeight: 200, overflowY: 'auto' }}>
+                <Space wrap>
+                  {detailRole.permissions?.map((p) => (
+                    <Tag key={p.id} color="blue">{p.name}</Tag>
+                  )) || <span>无</span>}
+                </Space>
+              </div>
+            </Descriptions.Item>
+            <Descriptions.Item label="创建时间">
+              {detailRole.created_at ? new Date(detailRole.created_at).toLocaleString() : '-'}
+            </Descriptions.Item>
+            <Descriptions.Item label="更新时间">
+              {detailRole.updated_at ? new Date(detailRole.updated_at).toLocaleString() : '-'}
+            </Descriptions.Item>
+          </Descriptions>
+        )}
       </Modal>
     </>
   );

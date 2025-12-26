@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Card, Form, Input, Button, InputNumber, Switch, message, Space, Tabs } from 'antd';
-import { SaveOutlined, ReloadOutlined, ApiOutlined } from '@ant-design/icons';
+import { Card, Form, Input, Button, InputNumber, Switch, message, Space, Tabs, Table, Modal, Popconfirm, Tooltip } from 'antd';
+import { SaveOutlined, ReloadOutlined, ApiOutlined, PlusOutlined, SyncOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons';
 import settingsService, { SaltConfig } from '../services/settings';
+import AuditLogSettings from '../components/AuditLogSettings';
+import formulaService, { FormulaRepository } from '../services/formula';
 
 const { TabPane } = Tabs;
 
@@ -11,10 +13,107 @@ const Settings: React.FC = () => {
   const [testing, setTesting] = useState(false);
   const [form] = Form.useForm();
 
+  // Formula仓库管理状态
+  const [repositories, setRepositories] = useState<FormulaRepository[]>([]);
+  const [repoLoading, setRepoLoading] = useState(false);
+  const [repoModalVisible, setRepoModalVisible] = useState(false);
+  const [editingRepo, setEditingRepo] = useState<FormulaRepository | undefined>(undefined);
+  const [repoForm] = Form.useForm();
+
   useEffect(() => {
     loadSaltConfig();
+    loadRepositories();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Formula仓库管理方法
+  const loadRepositories = async () => {
+    setRepoLoading(true);
+    try {
+      const response = await formulaService.listRepositories(1, 100);
+      setRepositories(response.repositories || []);
+    } catch (error: any) {
+      message.error('加载仓库列表失败');
+    } finally {
+      setRepoLoading(false);
+    }
+  };
+
+  const handleSyncRepository = async (repoId: number) => {
+    try {
+      await formulaService.syncRepository(repoId);
+      message.success('仓库同步成功');
+      loadRepositories();
+    } catch (error: any) {
+      message.error(error.message || '同步仓库失败');
+    }
+  };
+
+  const handleDeleteRepository = async (repoId: number) => {
+    // TODO: 实现删除仓库API
+    message.warning('删除仓库功能暂未实现');
+  };
+
+  const openRepoModal = (repo?: FormulaRepository) => {
+    setEditingRepo(repo);
+    if (repo) {
+      repoForm.setFieldsValue({
+        name: repo.name,
+        url: repo.url,
+        branch: repo.branch || 'master',
+        local_path: repo.local_path,
+        is_active: repo.is_active,
+      });
+    } else {
+      repoForm.resetFields();
+      repoForm.setFieldsValue({
+        branch: 'master',
+        is_active: true,
+      });
+    }
+    setRepoModalVisible(true);
+  };
+
+  const closeRepoModal = () => {
+    setRepoModalVisible(false);
+    setEditingRepo(undefined);
+    repoForm.resetFields();
+  };
+
+  const handleRepoSubmit = async () => {
+    try {
+      const values = await repoForm.validateFields();
+
+      if (editingRepo) {
+        // 编辑仓库
+        await formulaService.updateRepository(editingRepo.id, {
+          name: values.name,
+          url: values.url,
+          branch: values.branch,
+          local_path: values.local_path,
+          is_active: values.is_active,
+        });
+        message.success('仓库更新成功');
+        loadRepositories();
+      } else {
+        // 创建新仓库
+        await formulaService.createRepository({
+          name: values.name,
+          url: values.url,
+          branch: values.branch,
+          local_path: values.local_path,
+        });
+        message.success('仓库创建成功');
+        loadRepositories();
+      }
+
+      closeRepoModal();
+    } catch (error: any) {
+      if (error.message) {
+        message.error(error.message);
+      }
+    }
+  };
 
   const loadSaltConfig = async () => {
     setLoading(true);
@@ -194,6 +293,173 @@ const Settings: React.FC = () => {
               </Space>
             </Form.Item>
           </Form>
+        </TabPane>
+        
+        <TabPane tab="审计日志" key="audit">
+          <AuditLogSettings />
+        </TabPane>
+
+        <TabPane tab="Formula仓库" key="formula-repositories">
+          <div style={{ marginBottom: 16 }}>
+            <Space>
+              <Button
+                type="primary"
+                icon={<PlusOutlined />}
+                onClick={() => openRepoModal()}
+              >
+                新建仓库
+              </Button>
+              <Button
+                icon={<ReloadOutlined />}
+                onClick={loadRepositories}
+                loading={repoLoading}
+              >
+                刷新
+              </Button>
+            </Space>
+          </div>
+
+          <Table
+            columns={[
+              {
+                title: '名称',
+                dataIndex: 'name',
+                key: 'name',
+              },
+              {
+                title: 'Git URL',
+                dataIndex: 'url',
+                key: 'url',
+                ellipsis: true,
+              },
+              {
+                title: '分支',
+                dataIndex: 'branch',
+                key: 'branch',
+              },
+              {
+                title: '状态',
+                dataIndex: 'is_active',
+                key: 'is_active',
+                render: (isActive: boolean) => (
+                  <span style={{ color: isActive ? '#52c41a' : '#ff4d4f' }}>
+                    {isActive ? '启用' : '禁用'}
+                  </span>
+                ),
+              },
+              {
+                title: '最后同步',
+                dataIndex: 'last_sync_at',
+                key: 'last_sync_at',
+                render: (date: string) => date ? new Date(date).toLocaleString() : '从未同步',
+              },
+              {
+                title: '操作',
+                key: 'actions',
+                render: (_, record: FormulaRepository) => (
+                  <Space>
+                    <Tooltip title="同步仓库">
+                      <Button
+                        size="small"
+                        icon={<SyncOutlined />}
+                        onClick={() => handleSyncRepository(record.id)}
+                      />
+                    </Tooltip>
+                    <Tooltip title="编辑仓库">
+                      <Button
+                        size="small"
+                        icon={<EditOutlined />}
+                        onClick={() => openRepoModal(record)}
+                      />
+                    </Tooltip>
+                    <Tooltip title="删除仓库">
+                      <Popconfirm
+                        title="确认删除这个仓库？"
+                        onConfirm={() => handleDeleteRepository(record.id)}
+                        okText="确定"
+                        cancelText="取消"
+                      >
+                        <Button
+                          size="small"
+                          danger
+                          icon={<DeleteOutlined />}
+                        />
+                      </Popconfirm>
+                    </Tooltip>
+                  </Space>
+                ),
+              },
+            ]}
+            dataSource={repositories}
+            rowKey="id"
+            loading={repoLoading}
+            pagination={{
+              pageSize: 10,
+              showSizeChanger: false,
+              showQuickJumper: false,
+              showTotal: (total, range) => `第 ${range[0]}-${range[1]} 条，共 ${total} 条`,
+            }}
+          />
+
+          {/* Formula仓库编辑模态框 */}
+          <Modal
+            title={editingRepo ? '编辑Formula仓库' : '新建Formula仓库'}
+            open={repoModalVisible}
+            onOk={handleRepoSubmit}
+            onCancel={closeRepoModal}
+            okText="保存"
+            cancelText="取消"
+            width={600}
+          >
+            <Form
+              form={repoForm}
+              layout="vertical"
+              style={{ marginTop: '24px' }}
+            >
+              <Form.Item
+                name="name"
+                label="仓库名称"
+                rules={[{ required: true, message: '请输入仓库名称' }]}
+              >
+                <Input placeholder="例如: salt-formulas" />
+              </Form.Item>
+
+              <Form.Item
+                name="url"
+                label="Git仓库URL"
+                rules={[
+                  { required: true, message: '请输入Git仓库URL' },
+                  { type: 'url', message: '请输入有效的URL格式' },
+                ]}
+              >
+                <Input placeholder="https://github.com/example/salt-formulas.git" />
+              </Form.Item>
+
+              <Form.Item
+                name="branch"
+                label="分支"
+                rules={[{ required: true, message: '请输入分支名称' }]}
+              >
+                <Input placeholder="master 或 main" />
+              </Form.Item>
+
+              <Form.Item
+                name="local_path"
+                label="本地路径"
+                tooltip="可选，留空使用默认临时目录"
+              >
+                <Input placeholder="/opt/salt-formulas" />
+              </Form.Item>
+
+              <Form.Item
+                name="is_active"
+                label="启用状态"
+                valuePropName="checked"
+              >
+                <Switch />
+              </Form.Item>
+            </Form>
+          </Modal>
         </TabPane>
       </Tabs>
     </Card>

@@ -15,6 +15,7 @@ type UserService interface {
 	UpdateUser(id uint64, displayName, email string) (*models.User, error)
 	DeleteUser(id uint64) error
 	ChangePassword(id uint64, oldPassword, newPassword string) error
+	ResetPassword(id uint64, newPassword string) error
 	AssignRole(userID, roleID uint64) error
 	RemoveRole(userID, roleID uint64) error
 	GetUserPermissions(userID uint64) ([]models.Permission, error)
@@ -110,6 +111,22 @@ func (s *userService) ChangePassword(id uint64, oldPassword, newPassword string)
 
 	if !utils.CheckPassword(oldPassword, user.PasswordHash) {
 		return errors.New("invalid old password")
+	}
+
+	hashedPassword, err := utils.HashPassword(newPassword)
+	if err != nil {
+		return err
+	}
+
+	user.PasswordHash = hashedPassword
+	return s.userRepo.Update(user)
+}
+
+// ResetPassword 管理员重置用户密码（无需验证旧密码）
+func (s *userService) ResetPassword(id uint64, newPassword string) error {
+	user, err := s.userRepo.GetByID(id)
+	if err != nil {
+		return err
 	}
 
 	hashedPassword, err := utils.HashPassword(newPassword)

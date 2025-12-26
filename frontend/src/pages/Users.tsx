@@ -12,6 +12,7 @@ import {
   Card,
   Select,
   Transfer,
+  Descriptions,
 } from 'antd';
 import {
   PlusOutlined,
@@ -19,6 +20,8 @@ import {
   DeleteOutlined,
   ReloadOutlined,
   UserOutlined,
+  EyeOutlined,
+  LockOutlined,
 } from '@ant-design/icons';
 import { userService, CreateUserRequest, UpdateUserRequest } from '../services/user';
 import { User } from '../services/auth';
@@ -41,10 +44,15 @@ const Users: React.FC = () => {
   const [pageSize, setPageSize] = useState(10);
   const [modalVisible, setModalVisible] = useState(false);
   const [roleModalVisible, setRoleModalVisible] = useState(false);
+  const [detailModalVisible, setDetailModalVisible] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [detailUser, setDetailUser] = useState<User | null>(null);
   const [userRoles, setUserRoles] = useState<number[]>([]);
+  const [passwordModalVisible, setPasswordModalVisible] = useState(false);
+  const [passwordUser, setPasswordUser] = useState<User | null>(null);
   const [form] = Form.useForm();
+  const [passwordForm] = Form.useForm();
 
   useEffect(() => {
     loadUsers();
@@ -81,6 +89,16 @@ const Users: React.FC = () => {
       setUserRoles(user.roles?.map((r: Role) => r.id) || []);
     } catch (error: any) {
       message.error('加载用户角色失败');
+    }
+  };
+
+  const handleViewDetail = async (user: User) => {
+    try {
+      const response = await api.get(`/users/${user.id}`);
+      setDetailUser(response.data.user);
+      setDetailModalVisible(true);
+    } catch (error: any) {
+      message.error('获取用户详情失败');
     }
   };
 
@@ -146,6 +164,29 @@ const Users: React.FC = () => {
     }
   };
 
+  const handleResetPassword = (user: User) => {
+    setPasswordUser(user);
+    passwordForm.resetFields();
+    setPasswordModalVisible(true);
+  };
+
+  const handlePasswordSubmit = async () => {
+    if (!passwordUser) return;
+
+    try {
+      const values = await passwordForm.validateFields();
+      await userService.resetPassword(passwordUser.id, values.new_password);
+      message.success('密码重置成功');
+      setPasswordModalVisible(false);
+      passwordForm.resetFields();
+    } catch (error: any) {
+      if (error.errorFields) {
+        return;
+      }
+      message.error(error.response?.data?.error || '密码重置失败');
+    }
+  };
+
   const handleSubmit = async () => {
     try {
       const values = await form.validateFields();
@@ -178,10 +219,10 @@ const Users: React.FC = () => {
 
   const columns = [
     {
-      title: 'ID',
-      dataIndex: 'id',
-      key: 'id',
+      title: '序号',
+      key: 'index',
       width: 80,
+      render: (_: any, __: any, index: number) => (page - 1) * pageSize + index + 1,
     },
     {
       title: '用户名',
@@ -227,15 +268,29 @@ const Users: React.FC = () => {
     {
       title: '操作',
       key: 'action',
-      width: 200,
+      width: 320,
       render: (_: any, record: User) => (
         <Space>
+          <Button
+            type="link"
+            icon={<EyeOutlined />}
+            onClick={() => handleViewDetail(record)}
+          >
+            详情
+          </Button>
           <Button
             type="link"
             icon={<EditOutlined />}
             onClick={() => handleEdit(record)}
           >
             编辑
+          </Button>
+          <Button
+            type="link"
+            icon={<LockOutlined />}
+            onClick={() => handleResetPassword(record)}
+          >
+            密码
           </Button>
           <Button
             type="link"
@@ -284,7 +339,9 @@ const Users: React.FC = () => {
             pageSize: pageSize,
             total: total,
             showSizeChanger: true,
-            showTotal: (total) => `共 ${total} 条`,
+            showQuickJumper: true,
+            pageSizeOptions: ['10', '20', '50', '100'],
+            showTotal: (total, range) => `第 ${range[0]}-${range[1]} 条，共 ${total} 条`,
             onChange: (page, pageSize) => {
               setPage(page);
               setPageSize(pageSize);
@@ -364,6 +421,87 @@ const Users: React.FC = () => {
             </Option>
           ))}
         </Select>
+      </Modal>
+
+      {/* 用户详情模态框 */}
+      <Modal
+        title="用户详情"
+        open={detailModalVisible}
+        onCancel={() => setDetailModalVisible(false)}
+        footer={null}
+        width={600}
+      >
+        {detailUser && (
+          <Descriptions bordered column={2} size="small">
+            <Descriptions.Item label="用户名">{detailUser.username}</Descriptions.Item>
+            <Descriptions.Item label="显示名称">{detailUser.display_name || '-'}</Descriptions.Item>
+            <Descriptions.Item label="邮箱">{detailUser.email}</Descriptions.Item>
+            <Descriptions.Item label="状态" span={2}>
+              {getStatusTag(detailUser.status || 'active')}
+            </Descriptions.Item>
+            <Descriptions.Item label="角色" span={2}>
+              <Space wrap>
+                {detailUser.roles?.map((role: Role) => (
+                  <Tag key={role.id} color="blue">{role.name}</Tag>
+                )) || <span>无</span>}
+              </Space>
+            </Descriptions.Item>
+            <Descriptions.Item label="最后登录" span={2}>
+              {detailUser.last_login_at ? new Date(detailUser.last_login_at).toLocaleString() : '-'}
+            </Descriptions.Item>
+            <Descriptions.Item label="创建时间">
+              {detailUser.created_at ? new Date(detailUser.created_at).toLocaleString() : '-'}
+            </Descriptions.Item>
+            <Descriptions.Item label="更新时间">
+              {detailUser.updated_at ? new Date(detailUser.updated_at).toLocaleString() : '-'}
+            </Descriptions.Item>
+          </Descriptions>
+        )}
+      </Modal>
+
+      {/* 重置密码模态框 */}
+      <Modal
+        title={`重置密码 - ${passwordUser?.username || ''}`}
+        open={passwordModalVisible}
+        onOk={handlePasswordSubmit}
+        onCancel={() => {
+          setPasswordModalVisible(false);
+          passwordForm.resetFields();
+        }}
+        okText="确定"
+        cancelText="取消"
+        width={400}
+      >
+        <Form form={passwordForm} layout="vertical">
+          <Form.Item
+            name="new_password"
+            label="新密码"
+            rules={[
+              { required: true, message: '请输入新密码' },
+              { min: 6, message: '密码长度至少6位' },
+            ]}
+          >
+            <Input.Password placeholder="请输入新密码" />
+          </Form.Item>
+          <Form.Item
+            name="confirm_password"
+            label="确认密码"
+            dependencies={['new_password']}
+            rules={[
+              { required: true, message: '请确认新密码' },
+              ({ getFieldValue }) => ({
+                validator(_, value) {
+                  if (!value || getFieldValue('new_password') === value) {
+                    return Promise.resolve();
+                  }
+                  return Promise.reject(new Error('两次输入的密码不一致'));
+                },
+              }),
+            ]}
+          >
+            <Input.Password placeholder="请再次输入新密码" />
+          </Form.Item>
+        </Form>
       </Modal>
     </>
   );

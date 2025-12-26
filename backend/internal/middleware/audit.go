@@ -37,12 +37,28 @@ func AuditMiddleware(auditService service.AuditService) gin.HandlerFunc {
 		var userIDPtr *uint64
 		var usernameStr string
 		if userID != nil {
-			if uid, ok := userID.(uint64); ok {
+			// 处理不同的类型可能（uint64, uint, float64等）
+			switch uid := userID.(type) {
+			case uint64:
 				userIDPtr = &uid
+			case uint:
+				uid64 := uint64(uid)
+				userIDPtr = &uid64
+			case float64:
+				uid64 := uint64(uid)
+				userIDPtr = &uid64
+			case int64:
+				uid64 := uint64(uid)
+				userIDPtr = &uid64
+			case int:
+				uid64 := uint64(uid)
+				userIDPtr = &uid64
 			}
 		}
 		if username != nil {
-			usernameStr = username.(string)
+			if uname, ok := username.(string); ok {
+				usernameStr = uname
+			}
 		}
 
 		// 读取请求体（用于记录请求数据）

@@ -6,6 +6,7 @@ export interface HostTag {
   color?: string;
   description?: string;
   created_at: string;
+  updated_at?: string;
   hosts?: Array<{
     id: number;
     hostname: string;

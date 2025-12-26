@@ -1,0 +1,51 @@
+<svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <!-- 现代渐变 - 专业科技蓝 -->
+    <linearGradient id="faviconPrimaryGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#2563eb;stop-opacity:1" />
+      <stop offset="50%" style="stop-color:#3b82f6;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#60a5fa;stop-opacity:1" />
+    </linearGradient>
+
+    <!-- 辅助渐变 - 优雅紫色 -->
+    <linearGradient id="faviconAccentGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#7c3aed;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#a855f7;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+
+  <!-- 主容器背景 -->
+  <rect width="32" height="32" rx="4" fill="#ffffff"/>
+  <rect x="2" y="2" width="28" height="28" rx="3" fill="#f8fafc"/>
+  <rect x="3" y="3" width="26" height="26" rx="2" fill="#ffffff" stroke="#e2e8f0" stroke-width="0.5"/>
+
+  <!-- K字母 - 极简几何 -->
+  <g transform="translate(6,6)">
+    <!-- K的主体线条 -->
+    <rect x="0" y="0" width="2" height="20" rx="1" fill="url(#faviconPrimaryGradient)"/>
+    <!-- K的上分支 -->
+    <path d="M2 2 L6 2 L6 6 L2 6 Z" fill="url(#faviconPrimaryGradient)" rx="1"/>
+    <!-- K的下分支 -->
+    <path d="M2 14 L5 20 L5 16 L2 16 Z" fill="url(#faviconPrimaryGradient)" rx="1"/>
+  </g>
+
+  <!-- O字母 - 完美圆形 -->
+  <g transform="translate(15,6)">
+    <!-- O的外环 -->
+    <circle cx="5" cy="10" r="8" fill="none" stroke="url(#faviconPrimaryGradient)" stroke-width="2.5"/>
+    <!-- O的内环 -->
+    <circle cx="5" cy="10" r="4" fill="none" stroke="url(#faviconAccentGradient)" stroke-width="1" opacity="0.7"/>
+    <!-- O的装饰点 -->
+    <circle cx="5" cy="6" r="0.8" fill="url(#faviconAccentGradient)" opacity="0.9"/>
+  </g>
+
+  <!-- P字母 - 专业设计 -->
+  <g transform="translate(23,6)">
+    <!-- P的主体 -->
+    <rect x="0" y="0" width="2" height="20" rx="1" fill="url(#faviconPrimaryGradient)"/>
+    <!-- P的上横 -->
+    <rect x="2" y="0" width="5" height="3" rx="1" fill="url(#faviconPrimaryGradient)"/>
+    <!-- P的下横 -->
+    <rect x="2" y="8" width="4" height="2" rx="1" fill="url(#faviconPrimaryGradient)"/>
+  </g>
+</svg>

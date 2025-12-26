@@ -26,9 +26,9 @@ curl -fsSL https://github.com/saltstack/salt-install-guide/releases/latest/downl
 # 更新包元数据
 apt-get update
 
-# 安装 Salt Master 和 API
-echo "📦 安装 Salt Master 和 Salt API..."
-apt-get install -y salt-master salt-api python3-pip
+# 安装 Salt Master、Minion 和 API
+echo "📦 安装 Salt Master、Salt Minion 和 Salt API..."
+apt-get install -y salt-master salt-minion salt-api python3-pip
 pip3 install cherrypy --break-system-packages
 
 # 配置 Salt Master
@@ -41,6 +41,13 @@ rest_cherrypy:
   port: 8000
   host: 0.0.0.0
   disable_ssl: true
+
+# 启用 Salt API 客户端（重要！）
+netapi_enable_clients:
+  - local
+  - local_async
+  - runner
+  - runner_async
 EOF
 
 # 外部认证配置
@@ -61,6 +68,15 @@ cat > /etc/salt/master.d/interface.conf << 'EOF'
 interface: 0.0.0.0
 EOF
 
+# 配置 Salt Minion（指向本地 Master）
+echo "🔧 配置 Salt Minion..."
+mkdir -p /etc/salt/minion.d
+
+cat > /etc/salt/minion.d/master.conf << EOF
+master: 127.0.0.1
+id: salt-master
+EOF
+
 # 配置防火墙（允许 Salt 端口）
 if command -v ufw &> /dev/null; then
   ufw allow 4505/tcp
@@ -78,9 +94,14 @@ echo 'salt:salt123' | chpasswd
 # 启动服务
 echo "🚀 启动 Salt 服务..."
 systemctl enable salt-master
+systemctl enable salt-minion
 systemctl enable salt-api
 systemctl restart salt-master
 systemctl restart salt-api
+
+# 等待 Master 启动后再启动 Minion
+sleep 3
+systemctl restart salt-minion
 
 # 等待服务启动
 sleep 5
@@ -100,8 +121,17 @@ else
   exit 1
 fi
 
+if systemctl is-active --quiet salt-minion; then
+  echo "✅ Salt Minion service is running"
+  systemctl status salt-minion --no-pager -l | head -5
+else
+  echo "❌ Salt Minion service failed to start"
+  systemctl status salt-minion --no-pager -l
+fi
+
 # 显示版本
 salt-master --version || true
+salt-minion --version || true
 
 echo ""
 echo "✅ Salt Master 配置完成!"

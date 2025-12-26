@@ -15,6 +15,10 @@ type AuditRepository interface {
 	GetByUser(userID uint64, limit int) ([]models.AuditLog, error)
 	CountByAction(action string, startTime, endTime time.Time) (int64, error)
 	DeleteOldLogs(beforeTime time.Time) error
+	// New methods for audit log cleanup
+	GetTotalCount() (int64, error)
+	GetCountBeforeTime(beforeTime time.Time) (int64, error)
+	DeleteBeforeTime(beforeTime time.Time) (int64, error)
 }
 
 type auditRepository struct {
@@ -111,5 +115,25 @@ func (r *auditRepository) CountByAction(action string, startTime, endTime time.T
 
 func (r *auditRepository) DeleteOldLogs(beforeTime time.Time) error {
 	return r.db.Where("created_at < ?", beforeTime).Delete(&models.AuditLog{}).Error
+}
+
+// GetTotalCount returns the total number of audit log records
+func (r *auditRepository) GetTotalCount() (int64, error) {
+	var count int64
+	err := r.db.Model(&models.AuditLog{}).Count(&count).Error
+	return count, err
+}
+
+// GetCountBeforeTime returns the number of audit log records before the specified time
+func (r *auditRepository) GetCountBeforeTime(beforeTime time.Time) (int64, error) {
+	var count int64
+	err := r.db.Model(&models.AuditLog{}).Where("created_at < ?", beforeTime).Count(&count).Error
+	return count, err
+}
+
+// DeleteBeforeTime deletes audit log records before the specified time and returns the number of deleted records
+func (r *auditRepository) DeleteBeforeTime(beforeTime time.Time) (int64, error) {
+	result := r.db.Where("created_at < ?", beforeTime).Delete(&models.AuditLog{})
+	return result.RowsAffected, result.Error
 }
 

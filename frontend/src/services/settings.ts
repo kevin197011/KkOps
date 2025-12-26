@@ -9,6 +9,16 @@ export interface SaltConfig {
   verify_ssl: boolean;
 }
 
+export interface AuditLogSettings {
+  retention_days: number;
+}
+
+export interface AuditLogStats {
+  total: number;
+  oldRecords: number;
+  retentionDays: number;
+}
+
 export interface SettingsResponse {
   settings: Record<string, string>;
 }
@@ -73,6 +83,29 @@ const settingsService = {
     verify_ssl: boolean;
   }): Promise<{ success: boolean; message: string; error?: string }> => {
     const response = await api.post('/settings/salt/test', config || {});
+    return response.data;
+  },
+
+  // 获取审计日志设置
+  getAuditLogSettings: async (): Promise<AuditLogSettings> => {
+    const response = await api.get('/settings/audit');
+    return response.data;
+  },
+
+  // 更新审计日志设置
+  updateAuditLogSettings: async (settings: AuditLogSettings): Promise<void> => {
+    await api.put('/settings/audit', settings);
+  },
+
+  // 获取审计日志统计信息
+  getAuditLogStats: async (): Promise<AuditLogStats> => {
+    const response = await api.get('/settings/audit/stats');
+    return response.data;
+  },
+
+  // 立即清理过期审计日志
+  cleanupAuditLogs: async (): Promise<{ deleted_count: number }> => {
+    const response = await api.post('/settings/audit/cleanup');
     return response.data;
   },
 };

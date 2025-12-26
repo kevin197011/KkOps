@@ -21,14 +21,32 @@ type SettingsService interface {
 	UpdateSetting(key, value, category, description string, updatedBy uint64) error
 	GetSaltConfig() (*config.SaltConfig, error)
 	UpdateSaltConfig(cfg *config.SaltConfig, updatedBy uint64) error
+	GetAuditLogSettings() (*AuditLogSettings, error)
+	UpdateAuditLogSettings(settings *AuditLogSettings, updatedBy uint64) error
+	GetAuditLogStats() (*AuditLogStats, error)
+	CleanupAuditLogs() (int64, error)
+}
+
+type AuditLogSettings struct {
+	RetentionDays int `json:"retention_days"`
+}
+
+type AuditLogStats struct {
+	Total        int64 `json:"total"`
+	OldRecords   int64 `json:"oldRecords"`
+	RetentionDays int   `json:"retentionDays"`
 }
 
 type settingsService struct {
 	settingsRepo repository.SettingsRepository
+	auditRepo    repository.AuditRepository
 }
 
-func NewSettingsService(settingsRepo repository.SettingsRepository) SettingsService {
-	return &settingsService{settingsRepo: settingsRepo}
+func NewSettingsService(settingsRepo repository.SettingsRepository, auditRepo repository.AuditRepository) SettingsService {
+	return &settingsService{
+		settingsRepo: settingsRepo,
+		auditRepo:    auditRepo,
+	}
 }
 
 func (s *settingsService) GetSetting(key string) (*models.SystemSettings, error) {
@@ -216,5 +234,76 @@ func (s *settingsService) UpdateSaltConfig(cfg *config.SaltConfig, updatedBy uin
 	}
 
 	return nil
+}
+
+func (s *settingsService) GetAuditLogSettings() (*AuditLogSettings, error) {
+	// 获取审计日志保存天数设置，默认30天
+	retentionDays := 30
+	if setting, err := s.settingsRepo.GetByKey("audit.retention_days"); err == nil {
+		if days, err := strconv.Atoi(setting.Value); err == nil && days > 0 {
+			retentionDays = days
+		}
+	}
+
+	return &AuditLogSettings{
+		RetentionDays: retentionDays,
+	}, nil
+}
+
+func (s *settingsService) UpdateAuditLogSettings(settings *AuditLogSettings, updatedBy uint64) error {
+	// 验证保存天数
+	if settings.RetentionDays < 1 || settings.RetentionDays > 3650 {
+		return errors.New("retention days must be between 1 and 3650")
+	}
+
+	// 更新设置
+	return s.UpdateSetting(
+		"audit.retention_days",
+		strconv.Itoa(settings.RetentionDays),
+		"audit",
+		"Audit log retention period in days",
+		updatedBy,
+	)
+}
+
+func (s *settingsService) GetAuditLogStats() (*AuditLogStats, error) {
+	// 获取当前保存天数设置
+	settings, err := s.GetAuditLogSettings()
+	if err != nil {
+		return nil, err
+	}
+
+	// 获取总记录数
+	total, err := s.auditRepo.GetTotalCount()
+	if err != nil {
+		return nil, err
+	}
+
+	// 获取过期记录数
+	cutoffTime := time.Now().AddDate(0, 0, -settings.RetentionDays)
+	oldRecords, err := s.auditRepo.GetCountBeforeTime(cutoffTime)
+	if err != nil {
+		return nil, err
+	}
+
+	return &AuditLogStats{
+		Total:         total,
+		OldRecords:    oldRecords,
+		RetentionDays: settings.RetentionDays,
+	}, nil
+}
+
+func (s *settingsService) CleanupAuditLogs() (int64, error) {
+	// 获取保存天数设置
+	settings, err := s.GetAuditLogSettings()
+	if err != nil {
+		return 0, err
+	}
+
+	// 计算截止时间
+	cutoffTime := time.Now().AddDate(0, 0, -settings.RetentionDays)
+
+	// 删除过期记录
+	return s.auditRepo.DeleteBeforeTime(cutoffTime)
 }
 

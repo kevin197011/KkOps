@@ -56,6 +56,8 @@ func main() {
 	roleRepo := repository.NewRoleRepository(models.DB)
 	permissionRepo := repository.NewPermissionRepository(models.DB)
 	projectRepo := repository.NewProjectRepository(models.DB)
+	environmentRepo := repository.NewEnvironmentRepository(models.DB)
+	cloudPlatformRepo := repository.NewCloudPlatformRepository(models.DB)
 	hostRepo := repository.NewHostRepository(models.DB)
 	hostGroupRepo := repository.NewHostGroupRepository(models.DB)
 	hostTagRepo := repository.NewHostTagRepository(models.DB)
@@ -63,6 +65,9 @@ func main() {
 	deploymentRepo := repository.NewDeploymentRepository(models.DB)
 	deploymentVersionRepo := repository.NewDeploymentVersionRepository(models.DB)
 	auditRepo := repository.NewAuditRepository(models.DB)
+	batchOperationRepo := repository.NewBatchOperationRepository(models.DB)
+	commandTemplateRepo := repository.NewCommandTemplateRepository(models.DB)
+	formulaRepo := repository.NewFormulaRepository(models.DB)
 	sshKeyRepo := repository.NewSSHKeyRepository(models.DB)
 	settingsRepo := repository.NewSettingsRepository(models.DB)
 
@@ -72,16 +77,27 @@ func main() {
 	roleService := service.NewRoleService(roleRepo)
 	permissionService := service.NewPermissionService(permissionRepo)
 	projectService := service.NewProjectService(projectRepo)
+	environmentService := service.NewEnvironmentService(environmentRepo)
+	cloudPlatformService := service.NewCloudPlatformService(cloudPlatformRepo)
 	// 使用Manager.GetClient()以支持热重载，但保持Service接口兼容
-	hostService := service.NewHostService(hostRepo, saltManager.GetClient())
+	hostService := service.NewHostService(hostRepo, environmentRepo, saltManager.GetClient())
 	hostGroupService := service.NewHostGroupService(hostGroupRepo)
 	hostTagService := service.NewHostTagService(hostTagRepo)
 	deploymentConfigService := service.NewDeploymentConfigService(deploymentConfigRepo)
 	deploymentService := service.NewDeploymentService(deploymentRepo, deploymentConfigRepo, hostRepo, saltManager.GetClient())
 	deploymentVersionService := service.NewDeploymentVersionService(deploymentVersionRepo)
 	auditService := service.NewAuditService(auditRepo)
+	batchOperationService := service.NewBatchOperationService(batchOperationRepo, hostRepo, saltManager.GetClient())
+	commandTemplateService := service.NewCommandTemplateService(commandTemplateRepo)
+	formulaService := service.NewFormulaService(formulaRepo, saltManager.GetClient())
 	sshKeyService := service.NewSSHKeyService(sshKeyRepo)
-	settingsService := service.NewSettingsService(settingsRepo)
+	settingsService := service.NewSettingsService(settingsRepo, auditRepo)
+
+	// 初始化调度器服务
+	schedulerService := service.NewSchedulerService(settingsService, hostService, batchOperationService)
+	// 启动调度器
+	schedulerService.Start()
+	defer schedulerService.Stop()
 
 	// 初始化Handler
 	authHandler := handler.NewAuthHandler(authService, auditService)
@@ -89,6 +105,8 @@ func main() {
 	roleHandler := handler.NewRoleHandler(roleService)
 	permissionHandler := handler.NewPermissionHandler(permissionService)
 	projectHandler := handler.NewProjectHandler(projectService)
+	environmentHandler := handler.NewEnvironmentHandler(environmentService)
+	cloudPlatformHandler := handler.NewCloudPlatformHandler(cloudPlatformService)
 	hostHandler := handler.NewHostHandler(hostService)
 	hostGroupHandler := handler.NewHostGroupHandler(hostGroupService)
 	hostTagHandler := handler.NewHostTagHandler(hostTagService)
@@ -100,11 +118,13 @@ func main() {
 	auditHandler := handler.NewAuditHandler(auditService)
 	settingsHandler := handler.NewSettingsHandler(settingsService, saltManager) // 传入Manager以支持热重载
 
+	// 批量操作相关Repository和Service
+	batchOperationHandler := handler.NewBatchOperationHandler(batchOperationService)
+	commandTemplateHandler := handler.NewCommandTemplateHandler(commandTemplateService)
+	formulaHandler := handler.NewFormulaHandler(formulaService)
+
 	// 初始化Gin路由
 	r := gin.Default()
-
-	// 审计日志中间件（放在最前面，记录所有请求）
-	r.Use(middleware.AuditMiddleware(auditService))
 
 	// CORS中间件
 	r.Use(func(c *gin.Context) {
@@ -129,8 +149,9 @@ func main() {
 		c.Status(200)
 	})
 
-	// 公开路由
+	// 公开路由（也需要审计）
 	api := r.Group("/api/v1")
+	api.Use(middleware.AuditMiddleware(auditService))
 	{
 		api.POST("/auth/login", authHandler.Login)
 		api.POST("/auth/register", authHandler.Register)
@@ -139,6 +160,7 @@ func main() {
 	// 需要认证的路由
 	auth := api.Group("")
 	auth.Use(middleware.AuthMiddleware())
+	auth.Use(middleware.AuditMiddleware(auditService))
 	{
 		// 用户管理
 		users := auth.Group("/users")
@@ -150,6 +172,7 @@ func main() {
 			users.DELETE("/:id", userHandler.DeleteUser)
 			users.POST("/:id/roles", userHandler.AssignRole)
 			users.DELETE("/:id/roles", userHandler.RemoveRole)
+			users.POST("/:id/reset-password", userHandler.ResetPassword)
 		}
 
 		// 密码管理
@@ -191,6 +214,26 @@ func main() {
 			projects.GET("/:id/members", projectHandler.GetMembers)
 		}
 
+		// 环境管理
+		environments := auth.Group("/environments")
+		{
+			environments.POST("", environmentHandler.CreateEnvironment)
+			environments.GET("", environmentHandler.ListEnvironments)
+			environments.GET("/:id", environmentHandler.GetEnvironment)
+			environments.PUT("/:id", environmentHandler.UpdateEnvironment)
+			environments.DELETE("/:id", environmentHandler.DeleteEnvironment)
+		}
+
+		// 云平台管理
+		cloudPlatforms := auth.Group("/cloud-platforms")
+		{
+			cloudPlatforms.POST("", cloudPlatformHandler.CreateCloudPlatform)
+			cloudPlatforms.GET("", cloudPlatformHandler.ListCloudPlatforms)
+			cloudPlatforms.GET("/:id", cloudPlatformHandler.GetCloudPlatform)
+			cloudPlatforms.PUT("/:id", cloudPlatformHandler.UpdateCloudPlatform)
+			cloudPlatforms.DELETE("/:id", cloudPlatformHandler.DeleteCloudPlatform)
+		}
+
 		// 主机管理
 		hosts := auth.Group("/hosts")
 		{
@@ -204,7 +247,9 @@ func main() {
 			hosts.POST("/:id/tags", hostHandler.AddTag)
 			hosts.DELETE("/:id/tags", hostHandler.RemoveTag)
 			hosts.POST("/:id/sync-status", hostHandler.SyncHostStatus)
+			hosts.POST("/:id/auto-assign-minion", hostHandler.AutoAssignMinion)
 			hosts.POST("/sync-all-status", hostHandler.SyncAllHostsStatus)
+			hosts.GET("/discover-minions", hostHandler.DiscoverMinions)
 		}
 
 		// 主机组管理
@@ -291,6 +336,56 @@ func main() {
 			audit.GET("/logs/user/:user_id", auditHandler.GetLogsByUser)
 		}
 
+		// 批量操作
+		batchOperations := auth.Group("/batch-operations")
+		{
+			batchOperations.POST("", middleware.RequirePermission("batch_operation:create"), batchOperationHandler.CreateOperation)
+			batchOperations.GET("", middleware.RequirePermission("batch_operation:read"), batchOperationHandler.ListOperations)
+			batchOperations.GET("/:id", middleware.RequirePermission("batch_operation:read"), batchOperationHandler.GetOperation)
+			batchOperations.GET("/:id/status", middleware.RequirePermission("batch_operation:read"), batchOperationHandler.GetOperationStatus)
+			batchOperations.GET("/:id/results", middleware.RequirePermission("batch_operation:read"), batchOperationHandler.GetOperationResults)
+			batchOperations.POST("/:id/cancel", middleware.RequirePermission("batch_operation:cancel"), batchOperationHandler.CancelOperation)
+			batchOperations.POST("/cleanup", middleware.RequirePermission("batch_operation:create"), batchOperationHandler.CleanupOldOperations)
+		}
+
+		// 命令模板
+		commandTemplates := auth.Group("/command-templates")
+		{
+			commandTemplates.POST("", commandTemplateHandler.CreateTemplate)
+			commandTemplates.GET("", commandTemplateHandler.ListTemplates)
+			commandTemplates.GET("/:id", commandTemplateHandler.GetTemplate)
+			commandTemplates.PUT("/:id", commandTemplateHandler.UpdateTemplate)
+			commandTemplates.DELETE("/:id", commandTemplateHandler.DeleteTemplate)
+		}
+
+		// Formula管理
+		formulas := auth.Group("/formulas")
+		{
+			formulas.POST("", middleware.RequirePermission("batch_operation:create"), formulaHandler.CreateFormula)
+			formulas.GET("", middleware.RequirePermission("batch_operation:read"), formulaHandler.ListFormulas)
+			formulas.GET("/:id", middleware.RequirePermission("batch_operation:read"), formulaHandler.GetFormula)
+			formulas.PUT("/:id/parameters", middleware.RequirePermission("batch_operation:create"), formulaHandler.UpdateFormulaParameters)
+
+			// Formula模板
+			formulas.POST("/:id/templates", middleware.RequirePermission("batch_operation:create"), formulaHandler.CreateFormulaTemplate)
+			formulas.GET("/:id/templates", middleware.RequirePermission("batch_operation:read"), formulaHandler.GetFormulaTemplates)
+
+			// Formula部署
+			formulas.POST("/deployments", middleware.RequirePermission("batch_operation:create"), formulaHandler.CreateDeployment)
+			formulas.GET("/deployments", middleware.RequirePermission("batch_operation:read"), formulaHandler.ListDeployments)
+			formulas.GET("/deployments/:id", middleware.RequirePermission("batch_operation:read"), formulaHandler.GetDeployment)
+			formulas.POST("/deployments/:id/execute", middleware.RequirePermission("batch_operation:create"), formulaHandler.ExecuteDeployment)
+			formulas.POST("/deployments/:id/cancel", middleware.RequirePermission("batch_operation:create"), formulaHandler.CancelDeployment)
+			formulas.POST("/deployments/cleanup", middleware.RequirePermission("batch_operation:create"), formulaHandler.CleanupOldDeployments)
+
+			// Formula仓库
+			formulas.POST("/repositories", middleware.RequirePermission("batch_operation:create"), formulaHandler.CreateRepository)
+			formulas.GET("/repositories", middleware.RequirePermission("batch_operation:read"), formulaHandler.ListRepositories)
+			formulas.GET("/repositories/:id", middleware.RequirePermission("batch_operation:read"), formulaHandler.GetRepository)
+			formulas.PUT("/repositories/:id", middleware.RequirePermission("batch_operation:create"), formulaHandler.UpdateRepository)
+			formulas.POST("/repositories/:id/sync", middleware.RequirePermission("batch_operation:create"), formulaHandler.SyncRepository)
+		}
+
 		// 系统设置（仅管理员）
 		settings := auth.Group("/settings")
 		settings.Use(middleware.RequireRole("admin"))
@@ -302,6 +397,11 @@ func main() {
 			settings.GET("/salt", settingsHandler.GetSaltConfig)
 			settings.PUT("/salt", settingsHandler.UpdateSaltConfig)
 			settings.POST("/salt/test", settingsHandler.TestSaltConnection)
+			// Audit log settings endpoints
+			settings.GET("/audit", settingsHandler.GetAuditLogSettings)
+			settings.PUT("/audit", settingsHandler.UpdateAuditLogSettings)
+			settings.GET("/audit/stats", settingsHandler.GetAuditLogStats)
+			settings.POST("/audit/cleanup", settingsHandler.CleanupAuditLogs)
 		}
 	}
 

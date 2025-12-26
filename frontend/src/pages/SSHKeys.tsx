@@ -10,6 +10,7 @@ import {
   Form,
   Input,
   Popconfirm,
+  Descriptions,
 } from 'antd';
 import {
   ReloadOutlined,
@@ -28,7 +29,9 @@ const SSHKeys: React.FC = () => {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [modalVisible, setModalVisible] = useState(false);
+  const [detailModalVisible, setDetailModalVisible] = useState(false);
   const [editingSshKey, setEditingSshKey] = useState<SSHKey | null>(null);
+  const [detailSshKey, setDetailSshKey] = useState<SSHKey | null>(null);
   const [form] = Form.useForm();
   const [showPrivateKey, setShowPrivateKey] = useState(false); // 控制私钥显示/隐藏
 
@@ -55,6 +58,16 @@ const SSHKeys: React.FC = () => {
     setShowPrivateKey(true); // 创建模式下默认显示私钥输入框
     form.resetFields();
     setModalVisible(true);
+  };
+
+  const handleViewDetail = async (key: SSHKey) => {
+    try {
+      const response = await sshKeyService.get(key.id);
+      setDetailSshKey(response.ssh_key);
+      setDetailModalVisible(true);
+    } catch (error: any) {
+      message.error('获取SSH密钥详情失败');
+    }
   };
 
   // 掩码私钥内容（保留 BEGIN 和 END 行，中间用星号替换）
@@ -150,10 +163,10 @@ const SSHKeys: React.FC = () => {
 
   const columns = [
     {
-      title: 'ID',
-      dataIndex: 'id',
-      key: 'id',
+      title: '序号',
+      key: 'index',
       width: 80,
+      render: (_: any, __: any, index: number) => (page - 1) * pageSize + index + 1,
     },
     {
       title: '名称',
@@ -192,10 +205,18 @@ const SSHKeys: React.FC = () => {
     {
       title: '操作',
       key: 'action',
-      width: 150,
+      width: 200,
       fixed: 'right' as const,
       render: (_: any, record: SSHKey) => (
         <Space>
+          <Button
+            type="link"
+            size="small"
+            icon={<EyeOutlined />}
+            onClick={() => handleViewDetail(record)}
+          >
+            详情
+          </Button>
           <Button
             type="link"
             size="small"
@@ -249,7 +270,9 @@ const SSHKeys: React.FC = () => {
             pageSize: pageSize,
             total: total,
             showSizeChanger: true,
-            showTotal: (total) => `共 ${total} 条`,
+            showQuickJumper: true,
+            pageSizeOptions: ['10', '20', '50', '100'],
+            showTotal: (total, range) => `第 ${range[0]}-${range[1]} 条，共 ${total} 条`,
             onChange: (page, pageSize) => {
               setPage(page);
               setPageSize(pageSize);
@@ -369,6 +392,36 @@ const SSHKeys: React.FC = () => {
             </Form.Item>
           </Form.Item>
         </Form>
+      </Modal>
+
+      {/* SSH密钥详情模态框 */}
+      <Modal
+        title="SSH密钥详情"
+        open={detailModalVisible}
+        onCancel={() => setDetailModalVisible(false)}
+        footer={null}
+        width={600}
+      >
+        {detailSshKey && (
+          <Descriptions bordered column={1} size="small">
+            <Descriptions.Item label="名称">{detailSshKey.name}</Descriptions.Item>
+            <Descriptions.Item label="用户名">{detailSshKey.username || '-'}</Descriptions.Item>
+            <Descriptions.Item label="类型">
+              <Tag>{detailSshKey.key_type?.toUpperCase() || '-'}</Tag>
+            </Descriptions.Item>
+            <Descriptions.Item label="指纹">
+              <span style={{ fontFamily: 'monospace', fontSize: '12px' }}>
+                {detailSshKey.fingerprint || '-'}
+              </span>
+            </Descriptions.Item>
+            <Descriptions.Item label="创建时间">
+              {detailSshKey.created_at ? new Date(detailSshKey.created_at).toLocaleString() : '-'}
+            </Descriptions.Item>
+            <Descriptions.Item label="更新时间">
+              {detailSshKey.updated_at ? new Date(detailSshKey.updated_at).toLocaleString() : '-'}
+            </Descriptions.Item>
+          </Descriptions>
+        )}
       </Modal>
     </>
   );

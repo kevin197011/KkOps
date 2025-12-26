@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Table, Button, Space, Modal, Form, Input, message, Popconfirm } from 'antd';
-import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons';
+import { Table, Button, Space, Modal, Form, Input, message, Popconfirm, Descriptions } from 'antd';
+import { PlusOutlined, EditOutlined, DeleteOutlined, EyeOutlined } from '@ant-design/icons';
 import { projectService, Project } from '../services/project';
 
 const Projects: React.FC = () => {
@@ -10,7 +10,9 @@ const Projects: React.FC = () => {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [modalVisible, setModalVisible] = useState(false);
+  const [detailModalVisible, setDetailModalVisible] = useState(false);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
+  const [detailProject, setDetailProject] = useState<Project | null>(null);
   const [form] = Form.useForm();
 
   useEffect(() => {
@@ -35,6 +37,16 @@ const Projects: React.FC = () => {
     setEditingProject(null);
     form.resetFields();
     setModalVisible(true);
+  };
+
+  const handleViewDetail = async (project: Project) => {
+    try {
+      const response = await projectService.get(project.id);
+      setDetailProject(response.project);
+      setDetailModalVisible(true);
+    } catch (error: any) {
+      message.error('获取项目详情失败');
+    }
   };
 
   const handleEdit = (project: Project) => {
@@ -75,10 +87,10 @@ const Projects: React.FC = () => {
 
   const columns = [
     {
-      title: 'ID',
-      dataIndex: 'id',
-      key: 'id',
+      title: '序号',
+      key: 'index',
       width: 80,
+      render: (_: any, __: any, index: number) => (page - 1) * pageSize + index + 1,
     },
     {
       title: '项目名称',
@@ -113,6 +125,13 @@ const Projects: React.FC = () => {
       key: 'action',
       render: (_: any, record: Project) => (
         <Space>
+          <Button
+            type="link"
+            icon={<EyeOutlined />}
+            onClick={() => handleViewDetail(record)}
+          >
+            详情
+          </Button>
           <Button
             type="link"
             icon={<EditOutlined />}
@@ -158,7 +177,9 @@ const Projects: React.FC = () => {
           pageSize: pageSize,
           total: total,
           showSizeChanger: true,
-          showTotal: (total) => `共 ${total} 条`,
+          showQuickJumper: true,
+          pageSizeOptions: ['10', '20', '50', '100'],
+          showTotal: (total, range) => `第 ${range[0]}-${range[1]} 条，共 ${total} 条`,
           onChange: (page, pageSize) => {
             setPage(page);
             setPageSize(pageSize);
@@ -197,6 +218,32 @@ const Projects: React.FC = () => {
             </Form.Item>
           )}
         </Form>
+      </Modal>
+
+      {/* 项目详情模态框 */}
+      <Modal
+        title="项目详情"
+        open={detailModalVisible}
+        onCancel={() => setDetailModalVisible(false)}
+        footer={null}
+        width={600}
+      >
+        {detailProject && (
+          <Descriptions bordered column={1} size="small">
+            <Descriptions.Item label="项目名称">{detailProject.name}</Descriptions.Item>
+            <Descriptions.Item label="描述">{detailProject.description || '-'}</Descriptions.Item>
+            <Descriptions.Item label="状态">{detailProject.status === 'active' ? '启用' : '禁用'}</Descriptions.Item>
+            <Descriptions.Item label="创建人">
+              {detailProject.creator?.display_name || detailProject.creator?.username || '-'}
+            </Descriptions.Item>
+            <Descriptions.Item label="创建时间">
+              {detailProject.created_at ? new Date(detailProject.created_at).toLocaleString() : '-'}
+            </Descriptions.Item>
+            <Descriptions.Item label="更新时间">
+              {detailProject.updated_at ? new Date(detailProject.updated_at).toLocaleString() : '-'}
+            </Descriptions.Item>
+          </Descriptions>
+        )}
       </Modal>
     </>
   );

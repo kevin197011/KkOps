@@ -17,7 +17,11 @@ export interface User {
   username: string;
   email: string;
   display_name?: string;
+  status?: string;
   roles?: Array<{ id: number; name: string }>;
+  last_login_at?: string;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface LoginResponse {

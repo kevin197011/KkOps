@@ -13,15 +13,24 @@ export interface Host {
   disk_gb?: number;
   status: 'online' | 'offline' | 'unknown';
   environment?: string;
+  cloud_platform_id?: number;
   ssh_port?: number;
   ssh_username?: string;
   ssh_key_id?: number;
   last_seen_at?: string;
   salt_version?: string;
   description?: string;
+  created_at?: string;
+  updated_at?: string;
   project?: {
     id: number;
     name: string;
+  };
+  cloud_platform?: {
+    id: number;
+    name: string;
+    display_name: string;
+    color?: string;
   };
   groups?: Array<{ id: number; name: string }>;
   tags?: Array<{ id: number; name: string; color?: string }>;
@@ -39,6 +48,7 @@ export interface CreateHostRequest {
   disk_gb?: number;
   status?: string;
   environment?: string;
+  cloud_platform_id?: number;
   ssh_port?: number;
   ssh_username?: string;
   ssh_key_id?: number;
@@ -58,6 +68,7 @@ export interface HostFilters {
   ip_address?: string;
   status?: string;
   environment?: string;
+  cloud_platform_id?: number;
   group_id?: number;
   tag_id?: number;
 }
@@ -111,5 +122,38 @@ export const hostService = {
       data: { tag_id: tagId },
     });
   },
+
+  // 同步主机状态（通过 Salt）
+  syncStatus: async (hostId: number): Promise<{ host: Host; message: string }> => {
+    const response = await api.post(`/hosts/${hostId}/sync-status`);
+    return response.data;
+  },
+
+  // 同步所有主机状态
+  syncAllStatus: async (): Promise<{ message: string }> => {
+    const response = await api.post('/hosts/sync-all-status');
+    return response.data;
+  },
+
+  // 发现所有 Salt Minion
+  discoverMinions: async (): Promise<{ minions: MinionInfo[]; total: number }> => {
+    const response = await api.get('/hosts/discover-minions');
+    return response.data;
+  },
+
+  // 自动为主机分配 Salt Minion ID
+  autoAssignMinion: async (hostId: number): Promise<{ host: Host; minion_id: string | null; message: string }> => {
+    const response = await api.post(`/hosts/${hostId}/auto-assign-minion`);
+    return response.data;
+  },
 };
+
+// Salt Minion 信息
+export interface MinionInfo {
+  id: string;
+  ip_address: string;
+  hostname: string;
+  os: string;
+  os_release: string;
+}
 

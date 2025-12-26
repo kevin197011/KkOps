@@ -340,3 +340,69 @@ func reloadSaltConfigFromDatabase() error {
 	return nil
 }
 
+// GetAuditLogSettings 获取审计日志设置
+func (h *SettingsHandler) GetAuditLogSettings(c *gin.Context) {
+	settings, err := h.settingsService.GetAuditLogSettings()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, settings)
+}
+
+// UpdateAuditLogSettings 更新审计日志设置
+func (h *SettingsHandler) UpdateAuditLogSettings(c *gin.Context) {
+	// 获取当前用户ID
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "user not authenticated"})
+		return
+	}
+
+	var req struct {
+		RetentionDays int `json:"retention_days" binding:"required,min=1,max=3650"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	settings := &service.AuditLogSettings{
+		RetentionDays: req.RetentionDays,
+	}
+
+	if err := h.settingsService.UpdateAuditLogSettings(settings, userID.(uint64)); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "audit log settings updated successfully"})
+}
+
+// GetAuditLogStats 获取审计日志统计信息
+func (h *SettingsHandler) GetAuditLogStats(c *gin.Context) {
+	stats, err := h.settingsService.GetAuditLogStats()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, stats)
+}
+
+// CleanupAuditLogs 手动清理审计日志
+func (h *SettingsHandler) CleanupAuditLogs(c *gin.Context) {
+	deletedCount, err := h.settingsService.CleanupAuditLogs()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message":       "audit logs cleaned up successfully",
+		"deleted_count": deletedCount,
+	})
+}
+

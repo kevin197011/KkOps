@@ -13,15 +13,22 @@ import {
   Tag,
   Card,
   ColorPicker,
+  Descriptions,
+  Tooltip,
 } from 'antd';
 import {
   PlusOutlined,
   EditOutlined,
   DeleteOutlined,
   ReloadOutlined,
+  EyeOutlined,
+  SyncOutlined,
+  LinkOutlined,
 } from '@ant-design/icons';
 import { hostService, Host, CreateHostRequest } from '../services/host';
 import { projectService, Project } from '../services/project';
+import { environmentService, Environment } from '../services/environment';
+import { cloudPlatformService, CloudPlatform } from '../services/cloudPlatform';
 import { hostGroupService, HostGroup } from '../services/hostGroup';
 import { hostTagService, HostTag } from '../services/hostTag';
 import { sshKeyService, SSHKey } from '../services/sshKey';
@@ -31,16 +38,23 @@ const { Option } = Select;
 const Hosts: React.FC = () => {
   const [hosts, setHosts] = useState<Host[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
+  const [environments, setEnvironments] = useState<Environment[]>([]);
+  const [cloudPlatforms, setCloudPlatforms] = useState<CloudPlatform[]>([]);
   const [hostGroups, setHostGroups] = useState<HostGroup[]>([]);
   const [hostTags, setHostTags] = useState<HostTag[]>([]);
   const [sshKeys, setSshKeys] = useState<SSHKey[]>([]);
   const [loading, setLoading] = useState(false);
+  const [syncingHostId, setSyncingHostId] = useState<number | null>(null);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [modalVisible, setModalVisible] = useState(false);
+  const [detailModalVisible, setDetailModalVisible] = useState(false);
   const [editingHost, setEditingHost] = useState<Host | null>(null);
+  const [detailHost, setDetailHost] = useState<Host | null>(null);
   const [selectedProjectId, setSelectedProjectId] = useState<number | undefined>(undefined);
+  const [selectedEnvironment, setSelectedEnvironment] = useState<string | undefined>(undefined);
+  const [selectedCloudPlatformId, setSelectedCloudPlatformId] = useState<number | undefined>(undefined);
   const [selectedGroupId, setSelectedGroupId] = useState<number | undefined>(undefined);
   const [selectedTagId, setSelectedTagId] = useState<number | undefined>(undefined);
   const [tagModalVisible, setTagModalVisible] = useState(false);
@@ -49,6 +63,8 @@ const Hosts: React.FC = () => {
 
   useEffect(() => {
     loadProjects();
+    loadEnvironments();
+    loadCloudPlatforms();
     loadHostGroups();
     loadHostTags();
     loadSSHKeys();
@@ -57,7 +73,7 @@ const Hosts: React.FC = () => {
   useEffect(() => {
     loadHosts();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, pageSize, selectedProjectId, selectedGroupId, selectedTagId]);
+  }, [page, pageSize, selectedProjectId, selectedEnvironment, selectedCloudPlatformId, selectedGroupId, selectedTagId]);
 
   const loadProjects = async () => {
     try {
@@ -65,6 +81,24 @@ const Hosts: React.FC = () => {
       setProjects(response.projects);
     } catch (error: any) {
       message.error('加载项目列表失败');
+    }
+  };
+
+  const loadEnvironments = async () => {
+    try {
+      const response = await environmentService.list(1, 100);
+      setEnvironments(response.environments);
+    } catch (error: any) {
+      // 静默失败，不影响主流程
+    }
+  };
+
+  const loadCloudPlatforms = async () => {
+    try {
+      const response = await cloudPlatformService.list(1, 100);
+      setCloudPlatforms(response.cloud_platforms || []);
+    } catch (error: any) {
+      // 静默失败，不影响主流程
     }
   };
 
@@ -129,6 +163,8 @@ const Hosts: React.FC = () => {
     try {
       const filters: any = {};
       if (selectedProjectId) filters.project_id = selectedProjectId;
+      if (selectedEnvironment) filters.environment = selectedEnvironment;
+      if (selectedCloudPlatformId) filters.cloud_platform_id = selectedCloudPlatformId;
       if (selectedGroupId) filters.group_id = selectedGroupId;
       if (selectedTagId) filters.tag_id = selectedTagId;
       const response = await hostService.list(page, pageSize, filters);
@@ -147,6 +183,16 @@ const Hosts: React.FC = () => {
     setModalVisible(true);
   };
 
+  const handleViewDetail = async (host: Host) => {
+    try {
+      const response = await hostService.get(host.id);
+      setDetailHost(response.host);
+      setDetailModalVisible(true);
+    } catch (error: any) {
+      message.error('获取主机详情失败');
+    }
+  };
+
   const handleEdit = async (host: Host) => {
     try {
       // 获取完整的主机信息，包括project_id、groups、tags
@@ -156,6 +202,7 @@ const Hosts: React.FC = () => {
       form.setFieldsValue({
         ...fullHost,
         project_id: (fullHost as any).project_id,
+        cloud_platform_id: fullHost.cloud_platform_id || undefined,
         group_ids: fullHost.groups?.map((g) => g.id) || [],
         tag_ids: fullHost.tags?.map((t) => t.id) || [],
         ssh_key_id: fullHost.ssh_key_id || undefined,
@@ -173,6 +220,52 @@ const Hosts: React.FC = () => {
       loadHosts();
     } catch (error: any) {
       message.error(error.response?.data?.error || '删除失败');
+    }
+  };
+
+  // 同步单个主机状态（通过 Salt）
+  const handleSyncStatus = async (host: Host) => {
+    if (!host.salt_minion_id) {
+      message.warning('该主机未配置 Salt Minion ID，无法同步状态');
+      return;
+    }
+    setSyncingHostId(host.id);
+    try {
+      const response = await hostService.syncStatus(host.id);
+      message.success(`状态同步成功：${response.host.status}`);
+      loadHosts();
+    } catch (error: any) {
+      message.error(error.response?.data?.error || '同步状态失败');
+    } finally {
+      setSyncingHostId(null);
+    }
+  };
+
+  // 同步单个主机（包含自动匹配和状态同步）
+  const handleSyncHost = async (host: Host) => {
+    setSyncingHostId(host.id);
+    try {
+      await hostService.syncStatus(host.id);
+      message.success('主机同步完成');
+      loadHosts();
+    } catch (error: any) {
+      message.error(error.response?.data?.error || '同步失败');
+    } finally {
+      setSyncingHostId(null);
+    }
+  };
+
+  // 同步所有主机状态
+  const handleSyncAllStatus = async () => {
+    setLoading(true);
+    try {
+      await hostService.syncAllStatus();
+      message.success('所有主机状态同步完成');
+      loadHosts();
+    } catch (error: any) {
+      message.error(error.response?.data?.error || '同步失败');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -251,15 +344,15 @@ const Hosts: React.FC = () => {
 
   const columns = [
     {
-      title: 'ID',
-      dataIndex: 'id',
-      key: 'id',
+      title: '序号',
+      key: 'index',
       width: 80,
+      render: (_: any, __: any, index: number) => (page - 1) * pageSize + index + 1,
     },
     {
       title: '项目',
       key: 'project',
-      width: 150,
+      width: 120,
       render: (_: any, record: Host) => {
         if (record.project) {
           return <span>{record.project.name}</span>;
@@ -269,6 +362,48 @@ const Hosts: React.FC = () => {
           const project = projects.find((p) => p.id === record.project_id);
           if (project) {
             return <span>{project.name}</span>;
+          }
+        }
+        return <span style={{ color: '#999' }}>-</span>;
+      },
+    },
+    {
+      title: '环境',
+      dataIndex: 'environment',
+      key: 'environment',
+      width: 90,
+      render: (env: string) => {
+        if (!env) {
+          return <span style={{ color: '#999' }}>-</span>;
+        }
+        // 从 environments 状态中查找对应的环境配置
+        const envConfig = environments.find((e) => e.name === env);
+        if (envConfig) {
+          return <Tag color={envConfig.color || 'default'}>{envConfig.display_name || env.toUpperCase()}</Tag>;
+        }
+        // 如果没找到，使用默认颜色
+        const defaultColors: Record<string, string> = {
+          dev: 'blue',
+          uat: 'orange',
+          staging: 'purple',
+          prod: 'red',
+          test: 'green',
+        };
+        return <Tag color={defaultColors[env] || 'default'}>{env.toUpperCase()}</Tag>;
+      },
+    },
+    {
+      title: '云平台',
+      key: 'cloud_platform',
+      width: 100,
+      render: (_: any, record: Host) => {
+        if (record.cloud_platform) {
+          return <Tag color={record.cloud_platform.color || 'default'}>{record.cloud_platform.display_name}</Tag>;
+        }
+        if (record.cloud_platform_id) {
+          const cp = cloudPlatforms.find((p) => p.id === record.cloud_platform_id);
+          if (cp) {
+            return <Tag color={cp.color || 'default'}>{cp.display_name}</Tag>;
           }
         }
         return <span style={{ color: '#999' }}>-</span>;
@@ -307,26 +442,7 @@ const Hosts: React.FC = () => {
       render: (status: string) => getStatusTag(status),
     },
     {
-      title: '环境',
-      dataIndex: 'environment',
-      key: 'environment',
-      width: 100,
-      render: (env: string) => {
-        if (!env) {
-          return <span style={{ color: '#999' }}>-</span>;
-        }
-        const envColors: Record<string, string> = {
-          dev: 'blue',
-          uat: 'orange',
-          staging: 'purple',
-          prod: 'red',
-          test: 'green',
-        };
-        return <Tag color={envColors[env] || 'default'}>{env.toUpperCase()}</Tag>;
-      },
-    },
-    {
-      title: '组',
+      title: '主机组',
       key: 'groups',
       width: 150,
       render: (_: any, record: Host) => (
@@ -368,9 +484,17 @@ const Hosts: React.FC = () => {
     {
       title: '操作',
       key: 'action',
-      width: 150,
+      width: 280,
       render: (_: any, record: Host) => (
-        <Space>
+        <Space wrap>
+          <Button
+            type="link"
+            size="small"
+            icon={<EyeOutlined />}
+            onClick={() => handleViewDetail(record)}
+          >
+            详情
+          </Button>
           <Button
             type="link"
             size="small"
@@ -379,6 +503,31 @@ const Hosts: React.FC = () => {
           >
             编辑
           </Button>
+          {record.salt_minion_id ? (
+            <Tooltip title="同步 Salt 状态">
+              <Button
+                type="link"
+                size="small"
+                icon={<SyncOutlined spin={syncingHostId === record.id} />}
+                onClick={() => handleSyncStatus(record)}
+                loading={syncingHostId === record.id}
+              >
+                同步
+              </Button>
+            </Tooltip>
+          ) : (
+            <Tooltip title="同步主机（自动匹配 Salt Minion 并更新状态信息）">
+              <Button
+                type="link"
+                size="small"
+                icon={<SyncOutlined />}
+                onClick={() => handleSyncHost(record)}
+                loading={syncingHostId === record.id}
+              >
+                同步
+              </Button>
+            </Tooltip>
+          )}
           <Popconfirm
             title="确定要删除这台主机吗？"
             onConfirm={() => handleDelete(record.id)}
@@ -422,6 +571,38 @@ const Hosts: React.FC = () => {
               ))}
             </Select>
             <Select
+              placeholder="选择环境"
+              allowClear
+              style={{ width: 150 }}
+              value={selectedEnvironment}
+              onChange={(value) => {
+                setSelectedEnvironment(value);
+                setPage(1);
+              }}
+            >
+              {environments.map((env) => (
+                <Option key={env.id} value={env.name}>
+                  <Tag color={env.color || 'default'}>{env.name.toUpperCase()}</Tag>
+                </Option>
+              ))}
+            </Select>
+            <Select
+              placeholder="选择云平台"
+              allowClear
+              style={{ width: 150 }}
+              value={selectedCloudPlatformId}
+              onChange={(value) => {
+                setSelectedCloudPlatformId(value);
+                setPage(1);
+              }}
+            >
+              {cloudPlatforms.map((cp) => (
+                <Option key={cp.id} value={cp.id}>
+                  <Tag color={cp.color || 'default'}>{cp.display_name}</Tag>
+                </Option>
+              ))}
+            </Select>
+            <Select
               placeholder="选择主机组"
               allowClear
               style={{ width: 150 }}
@@ -456,6 +637,11 @@ const Hosts: React.FC = () => {
             <Button icon={<ReloadOutlined />} onClick={loadHosts}>
               刷新
             </Button>
+            <Tooltip title="并发同步所有主机状态和信息（最多100个并发）">
+              <Button icon={<SyncOutlined />} onClick={handleSyncAllStatus} loading={loading}>
+                全部同步
+              </Button>
+            </Tooltip>
             <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate}>
               新建主机
             </Button>
@@ -472,7 +658,9 @@ const Hosts: React.FC = () => {
             pageSize: pageSize,
             total: total,
             showSizeChanger: true,
-            showTotal: (total) => `共 ${total} 条`,
+            showQuickJumper: true,
+            pageSizeOptions: ['10', '20', '50', '100'],
+            showTotal: (total, range) => `第 ${range[0]}-${range[1]} 条，共 ${total} 条`,
             onChange: (page, pageSize) => {
               setPage(page);
               setPageSize(pageSize);
@@ -510,11 +698,25 @@ const Hosts: React.FC = () => {
             tooltip="选择主机所属环境（可选）"
           >
             <Select placeholder="请选择环境（可选）" allowClear>
-              <Option value="dev">DEV - 开发环境</Option>
-              <Option value="test">TEST - 测试环境</Option>
-              <Option value="uat">UAT - 用户验收测试环境</Option>
-              <Option value="staging">STAGING - 预发布环境</Option>
-              <Option value="prod">PROD - 生产环境</Option>
+              {environments.map((env) => (
+                <Option key={env.id} value={env.name}>
+                  <Tag color={env.color || 'default'}>{env.name.toUpperCase()}</Tag>
+                  <span style={{ marginLeft: 8 }}>{env.display_name}</span>
+                </Option>
+              ))}
+            </Select>
+          </Form.Item>
+          <Form.Item
+            name="cloud_platform_id"
+            label="云平台"
+            tooltip="选择主机所属云平台（可选）"
+          >
+            <Select placeholder="请选择云平台（可选）" allowClear>
+              {cloudPlatforms.map((cp) => (
+                <Option key={cp.id} value={cp.id}>
+                  <Tag color={cp.color || 'default'}>{cp.display_name}</Tag>
+                </Option>
+              ))}
             </Select>
           </Form.Item>
           <Form.Item
@@ -532,6 +734,27 @@ const Hosts: React.FC = () => {
               {
                 pattern: /^(\d{1,3}\.){3}\d{1,3}$/,
                 message: '请输入有效的IP地址',
+              },
+              {
+                validator: async (rule, value) => {
+                  if (!value) return;
+                  try {
+                    // 检查IP地址是否已被使用
+                    const response = await hostService.list(1, 1, { ip_address: value });
+                    if (response.hosts.length > 0) {
+                      // 如果是编辑模式，允许使用当前主机的IP地址
+                      if (editingHost && response.hosts[0].id === editingHost.id) {
+                        return;
+                      }
+                      throw new Error(`IP地址 ${value} 已被主机 "${response.hosts[0].hostname}" (ID: ${response.hosts[0].id}) 使用`);
+                    }
+                  } catch (error: any) {
+                    if (error.message.includes('已被')) {
+                      throw new Error(error.message);
+                    }
+                    // 忽略其他错误（如网络错误），让后端处理
+                  }
+                },
               },
             ]}
           >
@@ -706,6 +929,73 @@ const Hosts: React.FC = () => {
             />
           </Form.Item>
         </Form>
+      </Modal>
+
+      {/* 主机详情模态框 */}
+      <Modal
+        title="主机详情"
+        open={detailModalVisible}
+        onCancel={() => setDetailModalVisible(false)}
+        footer={null}
+        width={700}
+      >
+        {detailHost && (
+          <Descriptions bordered column={2} size="small">
+            <Descriptions.Item label="主机名">{detailHost.hostname}</Descriptions.Item>
+            <Descriptions.Item label="IP地址">{detailHost.ip_address}</Descriptions.Item>
+            <Descriptions.Item label="SSH端口">{detailHost.ssh_port || 22}</Descriptions.Item>
+            <Descriptions.Item label="状态">{getStatusTag(detailHost.status)}</Descriptions.Item>
+            <Descriptions.Item label="项目">{detailHost.project?.name || '-'}</Descriptions.Item>
+            <Descriptions.Item label="环境">
+              {detailHost.environment ? (() => {
+                const envConfig = environments.find((e) => e.name === detailHost.environment);
+                if (envConfig) {
+                  return <Tag color={envConfig.color || 'default'}>{envConfig.display_name || detailHost.environment.toUpperCase()}</Tag>;
+                }
+                const defaultColors: Record<string, string> = { dev: 'blue', test: 'green', uat: 'orange', staging: 'purple', prod: 'red' };
+                return <Tag color={defaultColors[detailHost.environment] || 'default'}>{detailHost.environment.toUpperCase()}</Tag>;
+              })() : '-'}
+            </Descriptions.Item>
+            <Descriptions.Item label="云平台">
+              {detailHost.cloud_platform ? (
+                <Tag color={detailHost.cloud_platform.color || 'default'}>{detailHost.cloud_platform.display_name}</Tag>
+              ) : detailHost.cloud_platform_id ? (() => {
+                const cp = cloudPlatforms.find((p) => p.id === detailHost.cloud_platform_id);
+                return cp ? <Tag color={cp.color || 'default'}>{cp.display_name}</Tag> : '-';
+              })() : '-'}
+            </Descriptions.Item>
+            <Descriptions.Item label="操作系统" span={2}>
+              {detailHost.os_type ? `${detailHost.os_type}${detailHost.os_version ? ` ${detailHost.os_version}` : ''}` : '-'}
+            </Descriptions.Item>
+            <Descriptions.Item label="CPU核心数">{detailHost.cpu_cores || '-'}</Descriptions.Item>
+            <Descriptions.Item label="内存">{detailHost.memory_gb ? `${detailHost.memory_gb} GB` : '-'}</Descriptions.Item>
+            <Descriptions.Item label="磁盘">{detailHost.disk_gb ? `${detailHost.disk_gb} GB` : '-'}</Descriptions.Item>
+            <Descriptions.Item label="Salt Minion ID">{detailHost.salt_minion_id || '-'}</Descriptions.Item>
+            <Descriptions.Item label="主机组" span={2}>
+              <Space wrap>
+                {detailHost.groups && detailHost.groups.length > 0 ? (
+                  detailHost.groups.map((group) => <Tag key={group.id}>{group.name}</Tag>)
+                ) : '-'}
+              </Space>
+            </Descriptions.Item>
+            <Descriptions.Item label="标签" span={2}>
+              <Space wrap>
+                {detailHost.tags && detailHost.tags.length > 0 ? (
+                  detailHost.tags.map((tag) => (
+                    <Tag key={tag.id} color={tag.color || '#1890ff'}>{tag.name}</Tag>
+                  ))
+                ) : '-'}
+              </Space>
+            </Descriptions.Item>
+            <Descriptions.Item label="描述" span={2}>{detailHost.description || '-'}</Descriptions.Item>
+            <Descriptions.Item label="最后在线">
+              {detailHost.last_seen_at ? new Date(detailHost.last_seen_at).toLocaleString() : '-'}
+            </Descriptions.Item>
+            <Descriptions.Item label="创建时间">
+              {detailHost.created_at ? new Date(detailHost.created_at).toLocaleString() : '-'}
+            </Descriptions.Item>
+          </Descriptions>
+        )}
       </Modal>
     </>
   );

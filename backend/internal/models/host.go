@@ -8,33 +8,35 @@ import (
 
 // Host 主机模型
 type Host struct {
-	ID           uint64         `gorm:"primaryKey" json:"id"`
-	ProjectID    uint64         `gorm:"not null;index" json:"project_id"`
-	Hostname     string         `gorm:"size:255;not null;index" json:"hostname"`
-	IPAddress    string         `gorm:"size:45;not null;index" json:"ip_address"`
-	SaltMinionID *string        `gorm:"uniqueIndex;size:255" json:"salt_minion_id"`
-	OSType       string         `gorm:"size:50" json:"os_type"`
-	OSVersion    string         `gorm:"size:100" json:"os_version"`
-	CPUCores     *int           `json:"cpu_cores"`
-	MemoryGB     *float64       `gorm:"type:decimal(10,2)" json:"memory_gb"`
-	DiskGB       *float64       `gorm:"type:decimal(10,2)" json:"disk_gb"`
-	Status       string         `gorm:"size:20;not null;default:'unknown';index" json:"status"`
-	Environment  string         `gorm:"size:20;index" json:"environment"`
-	SSHPort      int            `gorm:"not null;default:22" json:"ssh_port"`
-	SSHKeyID     *uint64        `gorm:"index" json:"ssh_key_id"` // 可选的默认SSH密钥ID
-	LastSeenAt   *time.Time     `json:"last_seen_at"`
-	SaltVersion  string         `gorm:"size:50" json:"salt_version"`
-	Metadata     string         `gorm:"type:jsonb" json:"metadata"`
-	Description  string         `json:"description"`
-	CreatedAt    time.Time      `json:"created_at"`
-	UpdatedAt    time.Time      `json:"updated_at"`
-	DeletedAt    gorm.DeletedAt `gorm:"index" json:"-"`
+	ID              uint64         `gorm:"primaryKey" json:"id"`
+	ProjectID       uint64         `gorm:"not null;index" json:"project_id"`
+	Hostname        string         `gorm:"size:255;not null;index" json:"hostname"`
+	IPAddress       string         `gorm:"size:45;not null;index" json:"ip_address"`
+	SaltMinionID    *string        `gorm:"uniqueIndex;size:255" json:"salt_minion_id"`
+	OSType          string         `gorm:"size:50" json:"os_type"`
+	OSVersion       string         `gorm:"size:100" json:"os_version"`
+	CPUCores        *int           `json:"cpu_cores"`
+	MemoryGB        *float64       `gorm:"type:decimal(10,2)" json:"memory_gb"`
+	DiskGB          *float64       `gorm:"type:decimal(10,2)" json:"disk_gb"`
+	Status          string         `gorm:"size:20;not null;default:'unknown';index" json:"status"`
+	Environment     string         `gorm:"size:20;index" json:"environment"`
+	CloudPlatformID *uint64        `gorm:"index" json:"cloud_platform_id"` // 云平台ID
+	SSHPort         int            `gorm:"not null;default:22" json:"ssh_port"`
+	SSHKeyID        *uint64        `gorm:"index" json:"ssh_key_id"` // 可选的默认SSH密钥ID
+	LastSeenAt      *time.Time     `json:"last_seen_at"`
+	SaltVersion     string         `gorm:"size:50" json:"salt_version"`
+	Metadata        string         `gorm:"type:jsonb" json:"metadata"`
+	Description     string         `json:"description"`
+	CreatedAt       time.Time      `json:"created_at"`
+	UpdatedAt       time.Time      `json:"updated_at"`
+	DeletedAt       gorm.DeletedAt `gorm:"index" json:"-"`
 
 	// 关联
-	Project *Project    `gorm:"foreignKey:ProjectID" json:"project,omitempty"`
-	SSHKey  *SSHKey     `gorm:"foreignKey:SSHKeyID" json:"ssh_key,omitempty"`
-	Groups  []HostGroup `gorm:"many2many:host_group_members;" json:"groups,omitempty"`
-	Tags    []HostTag   `gorm:"many2many:host_tag_assignments;" json:"tags,omitempty"`
+	Project       *Project        `gorm:"foreignKey:ProjectID" json:"project,omitempty"`
+	SSHKey        *SSHKey         `gorm:"foreignKey:SSHKeyID" json:"ssh_key,omitempty"`
+	CloudPlatform *CloudPlatform  `gorm:"foreignKey:CloudPlatformID" json:"cloud_platform,omitempty"`
+	Groups        []HostGroup     `gorm:"many2many:host_group_members;foreignKey:ID;joinForeignKey:HostID;References:ID;joinReferences:GroupID" json:"groups,omitempty"`
+	Tags          []HostTag       `gorm:"many2many:host_tag_assignments;foreignKey:ID;joinForeignKey:HostID;References:ID;joinReferences:TagID" json:"tags,omitempty"`
 }
 
 // TableName 指定表名
@@ -54,7 +56,7 @@ type HostGroup struct {
 
 	// 关联
 	Project *Project `gorm:"foreignKey:ProjectID" json:"project,omitempty"`
-	Hosts   []Host   `gorm:"many2many:host_group_members;" json:"hosts,omitempty"`
+	Hosts   []Host   `gorm:"many2many:host_group_members;foreignKey:ID;joinForeignKey:GroupID;References:ID;joinReferences:HostID" json:"hosts,omitempty"`
 }
 
 // TableName 指定表名
@@ -71,7 +73,7 @@ type HostTag struct {
 	CreatedAt   time.Time `json:"created_at"`
 
 	// 关联
-	Hosts []Host `gorm:"many2many:host_tag_assignments;" json:"hosts,omitempty"`
+	Hosts []Host `gorm:"many2many:host_tag_assignments;foreignKey:ID;joinForeignKey:TagID;References:ID;joinReferences:HostID" json:"hosts,omitempty"`
 }
 
 // TableName 指定表名
@@ -82,8 +84,8 @@ func (HostTag) TableName() string {
 // HostGroupMember 主机组成员关联模型
 type HostGroupMember struct {
 	ID        uint64    `gorm:"primaryKey"`
-	HostID    uint64    `gorm:"not null;index"`
-	GroupID   uint64    `gorm:"not null;index"`
+	HostID    uint64    `gorm:"column:host_id;not null;index"`
+	GroupID   uint64    `gorm:"column:group_id;not null;index"`
 	CreatedAt time.Time `gorm:"not null;default:now()"`
 }
 

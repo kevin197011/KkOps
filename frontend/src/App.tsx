@@ -8,6 +8,8 @@ import MainLayout from './components/MainLayout';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Projects from './pages/Projects';
+import Environments from './pages/Environments';
+import CloudPlatforms from './pages/CloudPlatforms';
 import Hosts from './pages/Hosts';
 import Users from './pages/Users';
 import Roles from './pages/Roles';
@@ -19,6 +21,8 @@ import Audit from './pages/Audit';
 import WebSSH from './pages/WebSSH';
 import SSHKeys from './pages/SSHKeys';
 import Settings from './pages/Settings';
+import BatchOperations from './pages/BatchOperations';
+import FormulaDeployment from './pages/FormulaDeployment';
 import './App.css';
 
 const App: React.FC = () => {
@@ -49,6 +53,26 @@ const App: React.FC = () => {
               }
             />
             <Route
+              path="/environments"
+              element={
+                <PrivateRoute>
+                  <MainLayout>
+                    <Environments />
+                  </MainLayout>
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/cloud-platforms"
+              element={
+                <PrivateRoute>
+                  <MainLayout>
+                    <CloudPlatforms />
+                  </MainLayout>
+                </PrivateRoute>
+              }
+            />
+            <Route
               path="/hosts"
               element={
                 <PrivateRoute>
@@ -62,9 +86,7 @@ const App: React.FC = () => {
               path="/webssh"
               element={
                 <PrivateRoute>
-                  <MainLayout>
-                    <WebSSH />
-                  </MainLayout>
+                  <WebSSH />
                 </PrivateRoute>
               }
             />
@@ -154,6 +176,26 @@ const App: React.FC = () => {
                 <PrivateRoute>
                   <MainLayout>
                     <Settings />
+                  </MainLayout>
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/batch-operations"
+              element={
+                <PrivateRoute>
+                  <MainLayout>
+                    <BatchOperations />
+                  </MainLayout>
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/formulas"
+              element={
+                <PrivateRoute>
+                  <MainLayout>
+                    <FormulaDeployment />
                   </MainLayout>
                 </PrivateRoute>
               }

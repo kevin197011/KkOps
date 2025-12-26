@@ -263,6 +263,53 @@ task :run do
   system 'docker compose logs -f'
 end
 
+# 审计日志测试任务
+namespace :test do
+  desc '测试审计日志清理功能'
+  task :audit_cleanup do
+    puts '🧪 运行审计日志清理功能测试...'
+    system 'ruby scripts/test_audit_log_cleanup.rb'
+  end
+
+  desc '完整的审计日志功能测试'
+  task :audit_complete do
+    puts '🧪 运行完整的审计日志功能测试...'
+    system 'ruby scripts/test_audit_log_complete.rb'
+  end
+
+  desc '运行所有审计日志相关测试'
+  task :audit_all => [:audit_cleanup, :audit_complete] do
+    puts '✅ 所有审计日志测试完成'
+  end
+end
+
+# 开发辅助任务
+namespace :dev do
+  desc '启动后端开发服务器'
+  task :backend do
+    puts '🚀 启动后端开发服务器...'
+    system 'cd backend && air'
+  end
+
+  desc '启动前端开发服务器'
+  task :frontend do
+    puts '🚀 启动前端开发服务器...'
+    system 'cd frontend && npm run dev'
+  end
+
+  desc '构建后端'
+  task :build_backend do
+    puts '🔨 构建后端...'
+    system 'cd backend && go build -o bin/app ./cmd/api'
+  end
+
+  desc '构建前端'
+  task :build_frontend do
+    puts '🔨 构建前端...'
+    system 'cd frontend && npm run build'
+  end
+end
+
 # task :push do
 #   system 'git add .'
 #   system "git commit -m 'Update #{Time.now}'"

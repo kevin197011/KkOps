@@ -56,5 +56,9 @@ export const userService = {
       data: { role_id: roleId },
     });
   },
+
+  resetPassword: async (userId: number, newPassword: string): Promise<void> => {
+    await api.post(`/users/${userId}/reset-password`, { new_password: newPassword });
+  },
 };
 

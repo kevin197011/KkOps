@@ -40,10 +40,25 @@ export const permissionService = {
   },
 
   listAll: async (): Promise<{ permissions: Permission[] }> => {
-    const response = await api.get('/permissions', {
-      params: { page: 1, page_size: 1000 },
-    });
-    return response.data;
+    let allPermissions: Permission[] = [];
+    let page = 1;
+    const pageSize = 100;
+    let hasMore = true;
+
+    while (hasMore) {
+      const response = await api.get('/permissions', {
+        params: { page, page_size: pageSize },
+      });
+      
+      const { permissions, total } = response.data;
+      allPermissions = [...allPermissions, ...permissions];
+      
+      // Check if we have more pages
+      hasMore = allPermissions.length < total;
+      page++;
+    }
+
+    return { permissions: allPermissions };
   },
 
   listByResourceType: async (resourceType: string): Promise<{ permissions: Permission[] }> => {
