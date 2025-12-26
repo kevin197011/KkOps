@@ -384,7 +384,21 @@ func (s *formulaService) SyncRepository(repoID uint) error {
 		return fmt.Errorf("failed to discover formulas: %v", err)
 	}
 
-	// 保存发现的Formula到数据库
+	// 先删除该仓库的所有旧 Formula
+	existingFormulas, err := s.formulaRepo.GetByRepository(repo.URL)
+	if err != nil {
+		log.Printf("Warning: Failed to get existing formulas: %v", err)
+	} else {
+		log.Printf("Deleting all %d existing formulas for repository: %s", len(existingFormulas), repo.URL)
+		for _, existing := range existingFormulas {
+			log.Printf("Deleting formula: %s (id=%d)", existing.Name, existing.ID)
+			if err := s.formulaRepo.Delete(existing.ID); err != nil {
+				log.Printf("Failed to delete formula %s: %v", existing.Name, err)
+			}
+		}
+	}
+
+	// 保存发现的Formula到数据库（全部新建）
 	for _, formula := range formulas {
 		// 最后验证：确保Formula name不为空
 		if formula.Name == "" {
@@ -403,34 +417,41 @@ func (s *formulaService) SyncRepository(repoID uint) error {
 			formulaCopy.CreatedBy = repo.CreatedBy
 		}
 
-		existing, err := s.formulaRepo.GetByName(formulaCopy.Name)
-		if err != nil {
-			if err.Error() != "record not found" {
-				log.Printf("Error checking existing formula %s: %v", formulaCopy.Name, err)
-				continue
-			}
-			// record not found - 创建新Formula
-			log.Printf("Creating new formula: %s (created_by=%d)", formulaCopy.Name, formulaCopy.CreatedBy)
-			if err := s.formulaRepo.Create(&formulaCopy); err != nil {
-				log.Printf("Failed to create formula %s: %v", formulaCopy.Name, err)
-			}
-		} else if existing != nil && existing.ID > 0 {
-			// 更新现有Formula
-			existing.Description = formulaCopy.Description
-			existing.Category = formulaCopy.Category
-			existing.Version = formulaCopy.Version
-			existing.Path = formulaCopy.Path
-			existing.Metadata = formulaCopy.Metadata
-			existing.UpdatedAt = time.Now()
-			log.Printf("Updating existing formula: %s (id=%d)", formulaCopy.Name, existing.ID)
-			if err := s.formulaRepo.Update(existing); err != nil {
-				log.Printf("Failed to update formula %s: %v", formulaCopy.Name, err)
-			}
-		} else {
-			// existing 为 nil 或 ID 为 0 - 创建新Formula
-			log.Printf("Creating new formula: %s (created_by=%d)", formulaCopy.Name, formulaCopy.CreatedBy)
-			if err := s.formulaRepo.Create(&formulaCopy); err != nil {
-				log.Printf("Failed to create formula %s: %v", formulaCopy.Name, err)
+		// 创建新 Formula
+		log.Printf("Creating formula: %s (created_by=%d)", formulaCopy.Name, formulaCopy.CreatedBy)
+		if err := s.formulaRepo.Create(&formulaCopy); err != nil {
+			log.Printf("Failed to create formula %s: %v", formulaCopy.Name, err)
+			continue
+		}
+
+		// 从 metadata 中提取参数并创建参数记录
+		if formulaCopy.Metadata != nil {
+			var metadata map[string]interface{}
+			if err := json.Unmarshal(formulaCopy.Metadata, &metadata); err == nil {
+				if params, ok := metadata["parameters"].([]interface{}); ok {
+					log.Printf("Creating %d parameters for formula %s", len(params), formulaCopy.Name)
+					for i, p := range params {
+						if paramMap, ok := p.(map[string]interface{}); ok {
+							param := models.FormulaParameter{
+								FormulaID:   formulaCopy.ID,
+								Name:        getString(paramMap, "name"),
+								Type:        getString(paramMap, "type"),
+								Label:       getString(paramMap, "label"),
+								Description: getString(paramMap, "description"),
+								Required:    getBool(paramMap, "required"),
+								Order:       i,
+							}
+							// 设置默认值
+							if defaultVal, exists := paramMap["default"]; exists {
+								defaultJSON, _ := json.Marshal(defaultVal)
+								param.Default = defaultJSON
+							}
+							if err := s.formulaRepo.CreateParameter(&param); err != nil {
+								log.Printf("Failed to create parameter %s for formula %s: %v", param.Name, formulaCopy.Name, err)
+							}
+						}
+					}
+				}
 			}
 		}
 	}
@@ -549,7 +570,182 @@ func (s *formulaService) parseFormulaMetadata(formulaPath string) (map[string]in
 	}
 	metadata["subdirs"] = subdirs
 
+	// 解析 init.sls 中的 pillar 参数
+	initPath := filepath.Join(formulaPath, "init.sls")
+	if params, err := s.parsePillarParameters(initPath); err == nil && len(params) > 0 {
+		metadata["parameters"] = params
+	}
+
 	return metadata, nil
+}
+
+// parsePillarParameters 从 init.sls 文件中解析 pillar 参数
+// 支持的格式:
+// {% set config = salt['pillar.get']('motd', {}) %}
+// {% set message = config.get('message', 'default value') %}
+// {% set port = salt['pillar.get']('mysql:port', 3306) %}
+func (s *formulaService) parsePillarParameters(initPath string) ([]map[string]interface{}, error) {
+	content, err := os.ReadFile(initPath)
+	if err != nil {
+		return nil, err
+	}
+
+	var params []map[string]interface{}
+	lines := strings.Split(string(content), "\n")
+
+	// 用于跟踪 pillar 根键名
+	var pillarRoot string
+
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+
+		// 匹配: {% set config = salt['pillar.get']('motd', {}) %}
+		// 提取 pillar 根键名
+		if strings.Contains(line, "salt['pillar.get']") || strings.Contains(line, "salt[\"pillar.get\"]") {
+			// 提取 pillar.get 的第一个参数作为根键名
+			start := strings.Index(line, "pillar.get']('")
+			if start == -1 {
+				start = strings.Index(line, "pillar.get'](\"")
+			}
+			if start != -1 {
+				start += len("pillar.get']('")
+				end := strings.Index(line[start:], "'")
+				if end == -1 {
+					end = strings.Index(line[start:], "\"")
+				}
+				if end != -1 {
+					pillarRoot = line[start : start+end]
+					// 如果包含冒号，说明是嵌套路径，如 'mysql:port'
+					if strings.Contains(pillarRoot, ":") {
+						parts := strings.Split(pillarRoot, ":")
+						pillarRoot = parts[0]
+					}
+				}
+			}
+		}
+
+		// 匹配: {% set param_name = config.get('param_name', default_value) %}
+		if strings.Contains(line, ".get('") || strings.Contains(line, ".get(\"") {
+			param := s.parseConfigGetLine(line, pillarRoot)
+			if param != nil {
+				params = append(params, param)
+			}
+		}
+	}
+
+	return params, nil
+}
+
+// parseConfigGetLine 解析 config.get() 行
+func (s *formulaService) parseConfigGetLine(line, pillarRoot string) map[string]interface{} {
+	// 匹配: {% set param_name = config.get('param_name', default_value) %}
+	// 或: {% set param_name = config.get('param_name', 'default string') %}
+
+	// 提取变量名
+	setIdx := strings.Index(line, "{% set ")
+	if setIdx == -1 {
+		setIdx = strings.Index(line, "{%- set ")
+	}
+	if setIdx == -1 {
+		return nil
+	}
+
+	// 找到 = 号
+	eqIdx := strings.Index(line, " = ")
+	if eqIdx == -1 {
+		return nil
+	}
+
+	// 提取变量名
+	varStart := setIdx + len("{% set ")
+	if strings.Contains(line, "{%- set ") {
+		varStart = setIdx + len("{%- set ")
+	}
+	varName := strings.TrimSpace(line[varStart:eqIdx])
+
+	// 跳过 config 变量本身
+	if varName == "config" || varName == "cfg" || varName == "settings" {
+		return nil
+	}
+
+	// 提取参数名和默认值
+	getStart := strings.Index(line, ".get('")
+	quote := "'"
+	if getStart == -1 {
+		getStart = strings.Index(line, ".get(\"")
+		quote = "\""
+	}
+	if getStart == -1 {
+		return nil
+	}
+
+	getStart += len(".get('")
+	// 找到参数名结束位置
+	paramEnd := strings.Index(line[getStart:], quote)
+	if paramEnd == -1 {
+		return nil
+	}
+	paramName := line[getStart : getStart+paramEnd]
+
+	// 提取默认值
+	defaultStart := getStart + paramEnd + len(quote) + 2 // 跳过 ', '
+	defaultEnd := strings.LastIndex(line, ")")
+	if defaultEnd == -1 || defaultStart >= defaultEnd {
+		return nil
+	}
+
+	defaultStr := strings.TrimSpace(line[defaultStart:defaultEnd])
+	// 去掉末尾的 %}
+	if idx := strings.Index(defaultStr, "%}"); idx != -1 {
+		defaultStr = strings.TrimSpace(defaultStr[:idx])
+	}
+
+	// 解析默认值和类型
+	paramType := "string"
+	var defaultValue interface{}
+
+	defaultStr = strings.TrimSpace(defaultStr)
+	if defaultStr == "true" || defaultStr == "True" {
+		paramType = "boolean"
+		defaultValue = true
+	} else if defaultStr == "false" || defaultStr == "False" {
+		paramType = "boolean"
+		defaultValue = false
+	} else if strings.HasPrefix(defaultStr, "'") || strings.HasPrefix(defaultStr, "\"") {
+		// 字符串
+		paramType = "string"
+		defaultValue = strings.Trim(defaultStr, "'\"")
+	} else if strings.HasPrefix(defaultStr, "[") {
+		paramType = "array"
+		defaultValue = defaultStr
+	} else if strings.HasPrefix(defaultStr, "{") {
+		paramType = "object"
+		defaultValue = defaultStr
+	} else if _, err := fmt.Sscanf(defaultStr, "%d", new(int)); err == nil {
+		paramType = "number"
+		var num int
+		fmt.Sscanf(defaultStr, "%d", &num)
+		defaultValue = num
+	} else {
+		defaultValue = defaultStr
+	}
+
+	// 构建参数路径（用于 pillar）
+	pillarPath := paramName
+	if pillarRoot != "" {
+		pillarPath = pillarRoot + "." + paramName
+	}
+
+	return map[string]interface{}{
+		"name":         paramName,
+		"pillar_path":  pillarPath,
+		"pillar_root":  pillarRoot,
+		"type":         paramType,
+		"default":      defaultValue,
+		"label":        varName,
+		"description":  fmt.Sprintf("Parameter: %s (pillar: %s)", paramName, pillarPath),
+		"required":     false,
+	}
 }
 
 // syncGitRepository 同步Git仓库
@@ -715,4 +911,24 @@ func (s *formulaService) syncToSaltMaster(repo *models.FormulaRepository) error 
 	log.Printf("Rsync output: %s", string(output))
 	log.Printf("Successfully synced repository to Salt Master via rsync")
 	return nil
+}
+
+// 辅助函数：从 map 中获取字符串
+func getString(m map[string]interface{}, key string) string {
+	if v, ok := m[key]; ok {
+		if s, ok := v.(string); ok {
+			return s
+		}
+	}
+	return ""
+}
+
+// 辅助函数：从 map 中获取布尔值
+func getBool(m map[string]interface{}, key string) bool {
+	if v, ok := m[key]; ok {
+		if b, ok := v.(bool); ok {
+			return b
+		}
+	}
+	return false
 }

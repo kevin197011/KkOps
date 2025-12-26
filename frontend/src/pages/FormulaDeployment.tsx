@@ -17,19 +17,19 @@ import {
   Descriptions,
   Spin,
   Alert,
+  Collapse,
 } from 'antd';
 import {
   PlayCircleOutlined,
-  SaveOutlined,
   ReloadOutlined,
   HistoryOutlined,
-  ThunderboltOutlined,
   CheckCircleOutlined,
   CloseCircleOutlined,
   ClockCircleOutlined,
   StopOutlined,
   BookOutlined,
   SyncOutlined,
+  DeleteOutlined,
 } from '@ant-design/icons';
 import HostSelector from '../components/HostSelector';
 import formulaService from '../services/formula';
@@ -304,26 +304,12 @@ interface FormulaDeployment {
   updated_at: string;
 }
 
-// Formula模板接口
-interface FormulaTemplate {
-  id: number;
-  formula_id: number;
-  name: string;
-  description: string;
-  pillar_data?: any;
-  is_public: boolean;
-  created_by: number;
-  created_at: string;
-  updated_at: string;
-}
-
 const FormulaDeployment: React.FC = () => {
   const [form] = Form.useForm();
   const [selectedHosts, setSelectedHosts] = useState<Array<{ id: number; hostname: string; ip_address?: string }>>([]);
   const [formulas, setFormulas] = useState<Formula[]>([]);
   const [selectedFormula, setSelectedFormula] = useState<Formula | undefined>(undefined);
   const [formulaParameters, setFormulaParameters] = useState<FormulaParameter[]>([]);
-  const [formulaTemplates, setFormulaTemplates] = useState<FormulaTemplate[]>([]);
   const [currentDeployment, setCurrentDeployment] = useState<FormulaDeployment | undefined>(undefined);
   const [deployments, setDeployments] = useState<FormulaDeployment[]>([]);
   const [totalDeployments, setTotalDeployments] = useState(0);
@@ -331,8 +317,6 @@ const FormulaDeployment: React.FC = () => {
   const [pageSize] = useState(20);
   const [loading, setLoading] = useState(false);
   const [deploymentsLoading, setDeploymentsLoading] = useState(false);
-  const [saveTemplateModalVisible, setSaveTemplateModalVisible] = useState(false);
-  const [templateForm] = Form.useForm();
   const pollingRef = useRef<NodeJS.Timeout | null>(null);
 
   // 加载Formula列表
@@ -355,22 +339,9 @@ const FormulaDeployment: React.FC = () => {
 
       setSelectedFormula(formula);
       setFormulaParameters(parameters);
-
-      // 加载Formula模板
-      loadFormulaTemplates(formulaId);
     } catch (error: any) {
       console.error('Failed to load formula details:', error);
       message.error('加载Formula详情失败');
-    }
-  };
-
-  // 加载Formula模板
-  const loadFormulaTemplates = async (formulaId: number) => {
-    try {
-      const response = await formulaService.getFormulaTemplates(formulaId);
-      setFormulaTemplates(response.templates || []);
-    } catch (error: any) {
-      console.error('Failed to load formula templates:', error);
     }
   };
 
@@ -443,13 +414,6 @@ const FormulaDeployment: React.FC = () => {
     }
   };
 
-  // 模板选择处理
-  const handleTemplateSelect = (template: FormulaTemplate) => {
-    form.setFieldsValue({
-      pillar_data: template.pillar_data || {},
-    });
-  };
-
   // 执行部署
   const handleDeploy = async () => {
     if (!selectedFormula) {
@@ -498,51 +462,6 @@ const FormulaDeployment: React.FC = () => {
 
     } catch (error: any) {
       message.error(error.message || '执行部署失败');
-    }
-  };
-
-  // 保存为模板
-  const handleSaveAsTemplate = () => {
-    if (!selectedFormula) {
-      message.warning('请先选择Formula');
-      return;
-    }
-
-    const values = form.getFieldsValue();
-    templateForm.setFieldsValue({
-      name: `${selectedFormula.name} 模板`,
-      description: `从 ${selectedFormula.name} 创建的模板`,
-      pillar_data: values.pillar_data || {},
-    });
-
-    setSaveTemplateModalVisible(true);
-  };
-
-  // 提交保存模板
-  const handleSaveTemplate = async () => {
-    try {
-      const values = await templateForm.validateFields();
-      if (!selectedFormula) return;
-
-      const requestData = {
-        formula_id: selectedFormula.id,
-        name: values.name,
-        description: values.description || '',
-        pillar_data: values.pillar_data || {},
-        is_public: values.is_public || false,
-      };
-
-      await formulaService.createTemplate(selectedFormula.id, requestData);
-
-      message.success('模板保存成功');
-      setSaveTemplateModalVisible(false);
-      templateForm.resetFields();
-
-      // 重新加载模板
-      loadFormulaTemplates(selectedFormula.id);
-
-    } catch (error: any) {
-      message.error(error.message || '保存模板失败');
     }
   };
 
@@ -657,108 +576,6 @@ const FormulaDeployment: React.FC = () => {
     });
   };
 
-  // 部署历史表格列定义
-  const deploymentColumns = [
-    {
-      title: '部署名称',
-      dataIndex: 'name',
-      key: 'name',
-      render: (text: string, record: FormulaDeployment) => (
-        <div>
-          <div style={{ fontWeight: 'bold' }}>{text}</div>
-          <div style={{ fontSize: '12px', color: '#666' }}>
-            Formula: {formulas.find(f => f.id === record.formula_id)?.name || record.formula_id}
-          </div>
-        </div>
-      ),
-    },
-    {
-      title: '状态',
-      dataIndex: 'status',
-      key: 'status',
-      render: (status: string) => {
-        const statusConfig = {
-          pending: { color: 'orange', text: '等待中', icon: <ClockCircleOutlined /> },
-          running: { color: 'blue', text: '执行中', icon: <ThunderboltOutlined /> },
-          completed: { color: 'green', text: '成功', icon: <CheckCircleOutlined /> },
-          failed: { color: 'red', text: '失败', icon: <CloseCircleOutlined /> },
-          cancelled: { color: 'gray', text: '已取消', icon: <StopOutlined /> },
-        };
-
-        const config = statusConfig[status as keyof typeof statusConfig] || statusConfig.pending;
-
-        return (
-          <Tag color={config.color} icon={config.icon}>
-            {config.text}
-          </Tag>
-        );
-      },
-    },
-    {
-      title: '目标主机',
-      dataIndex: 'target_hosts',
-      key: 'target_hosts',
-      render: (hosts: string[]) => (
-        <div>
-          {Array.isArray(hosts) ? hosts.join(', ') : hosts}
-          <div style={{ fontSize: '12px', color: '#666' }}>
-            共 {Array.isArray(hosts) ? hosts.length : 0} 台
-          </div>
-        </div>
-      ),
-    },
-    {
-      title: '执行结果',
-      key: 'results',
-      render: (record: FormulaDeployment) => (
-        <div>
-          <div>成功: <Tag color="green">{record.success_count}</Tag></div>
-          <div>失败: <Tag color="red">{record.failed_count}</Tag></div>
-          {record.duration_seconds && (
-            <div style={{ fontSize: '12px', color: '#666' }}>
-              耗时: {Math.round(record.duration_seconds)}s
-            </div>
-          )}
-        </div>
-      ),
-    },
-    {
-      title: '执行时间',
-      key: 'time',
-      render: (record: FormulaDeployment) => (
-        <div style={{ fontSize: '12px' }}>
-          <div>开始: {record.started_at ? new Date(record.started_at).toLocaleString() : '-'}</div>
-          <div>结束: {record.completed_at ? new Date(record.completed_at).toLocaleString() : '-'}</div>
-        </div>
-      ),
-    },
-    {
-      title: '操作',
-      key: 'action',
-      render: (record: FormulaDeployment) => (
-        <Space size="small">
-          {record.status === 'running' && (
-            <Button
-              size="small"
-              danger
-              onClick={() => handleCancelDeployment(record.id)}
-            >
-              取消
-            </Button>
-          )}
-          {(record.status === 'completed' || record.status === 'failed') && (
-            <Button
-              size="small"
-              onClick={() => setCurrentDeployment(record)}
-            >
-              查看结果
-            </Button>
-          )}
-        </Space>
-      ),
-    },
-  ];
-
   return (
     <div style={{ padding: '20px' }}>
       <Title level={2}>
@@ -833,27 +650,14 @@ const FormulaDeployment: React.FC = () => {
       </Card>
 
       <Row gutter={[16, 16]}>
-        <Col span={24}>
-          <Card title="部署配置" extra={
-            <Space>
-              <Button icon={<SaveOutlined />} onClick={handleSaveAsTemplate}>
-                保存为模板
-              </Button>
-              <Button
-                type="primary"
-                icon={<PlayCircleOutlined />}
-                onClick={handleDeploy}
-                loading={loading}
-              >
-                执行部署
-              </Button>
-            </Space>
-          }>
+        <Col xs={24} lg={16}>
+          <Card title="部署配置" size="small">
             <Form form={form} layout="vertical">
               <Form.Item
                 label="Formula选择"
                 name="formula_id"
                 rules={[{ required: true, message: '请选择Formula' }]}
+                style={{ marginBottom: 12 }}
               >
                 <Select
                   placeholder="选择要部署的Formula"
@@ -874,40 +678,21 @@ const FormulaDeployment: React.FC = () => {
                 </Select>
               </Form.Item>
 
-              {selectedFormula && formulaTemplates.length > 0 && (
-                <Form.Item label="使用模板">
-                  <Space wrap>
-                    {formulaTemplates.map(template => (
-                      <Button
-                        key={template.id}
-                        size="small"
-                        onClick={() => handleTemplateSelect(template)}
-                      >
-                        {template.name}
-                      </Button>
-                    ))}
-                  </Space>
-                </Form.Item>
-              )}
-
               {selectedFormula && (
-                <div style={{ marginTop: '16px' }}>
-                  <Title level={4}>Formula信息</Title>
-                  <Descriptions size="small" column={2}>
+                <div style={{ marginBottom: 12 }}>
+                  <Descriptions size="small" column={2} bordered>
                     <Descriptions.Item label="名称">{selectedFormula.name}</Descriptions.Item>
                     <Descriptions.Item label="分类">{selectedFormula.category}</Descriptions.Item>
                     <Descriptions.Item label="版本">{selectedFormula.version || '最新'}</Descriptions.Item>
                     <Descriptions.Item label="路径">{selectedFormula.path}</Descriptions.Item>
+                    <Descriptions.Item label="描述" span={2}>{selectedFormula.description}</Descriptions.Item>
                   </Descriptions>
-                  <div style={{ marginTop: '16px' }}>
-                    <Text>{selectedFormula.description}</Text>
-                  </div>
                 </div>
               )}
 
               {selectedFormula && (
-                <div style={{ marginTop: '24px' }}>
-                  <Title level={4}>配置参数</Title>
+                <div>
+                  <Title level={5} style={{ marginBottom: 12 }}>配置参数</Title>
                   {renderParameterFields()}
                 </div>
               )}
@@ -915,13 +700,27 @@ const FormulaDeployment: React.FC = () => {
           </Card>
         </Col>
 
-        <Col span={24}>
-          <Card title="目标主机选择">
+        <Col xs={24} lg={8}>
+          <Card 
+            title="目标主机" 
+            size="small"
+            style={{ marginBottom: 16 }}
+          >
             <HostSelector
               value={selectedHosts}
               onChange={setSelectedHosts}
             />
           </Card>
+          <Button
+            type="primary"
+            icon={<PlayCircleOutlined />}
+            onClick={handleDeploy}
+            loading={loading}
+            size="large"
+            block
+          >
+            部署
+          </Button>
         </Col>
 
         {currentDeployment && (
@@ -959,61 +758,166 @@ const FormulaDeployment: React.FC = () => {
         )}
 
         <Col span={24}>
-          <Card
-            title="部署历史"
-            extra={
-              <Button icon={<ReloadOutlined />} onClick={() => loadDeployments()}>
-                刷新
-              </Button>
-            }
-          >
-            <Table
-              columns={deploymentColumns}
-              dataSource={deployments}
-              rowKey="id"
-              loading={deploymentsLoading}
-              pagination={{
-                current: currentPage,
-                pageSize: pageSize,
-                total: totalDeployments,
-                showSizeChanger: false,
-                showQuickJumper: true,
-                showTotal: (total, range) => `第 ${range[0]}-${range[1]} 条，共 ${total} 条`,
-                onChange: (page) => loadDeployments(page),
-              }}
-            />
-          </Card>
+          <Collapse
+            defaultActiveKey={[]}
+            style={{ marginTop: 0 }}
+            items={[
+              {
+                key: 'history',
+                label: (
+                  <Space>
+                    <HistoryOutlined />
+                    <span>部署历史</span>
+                    <Tag>{totalDeployments} 条记录</Tag>
+                  </Space>
+                ),
+                extra: (
+                  <Space onClick={(e) => e.stopPropagation()}>
+                    <Button
+                      size="small"
+                      icon={<ReloadOutlined />}
+                      onClick={() => loadDeployments(currentPage)}
+                      loading={deploymentsLoading}
+                    >
+                      刷新
+                    </Button>
+                    <Button
+                      size="small"
+                      danger
+                      icon={<DeleteOutlined />}
+                      onClick={async () => {
+                        try {
+                          const result = await formulaService.cleanupOldDeployments();
+                          message.success(`成功清理了 ${result.count} 条1个月前的部署记录`);
+                          loadDeployments(1);
+                        } catch (error: any) {
+                          message.error('清理数据失败: ' + (error.response?.data?.error || error.message));
+                        }
+                      }}
+                      loading={deploymentsLoading}
+                    >
+                      清理旧数据
+                    </Button>
+                  </Space>
+                ),
+                children: (
+                  <Table
+                    columns={[
+                      {
+                        title: 'ID',
+                        dataIndex: 'id',
+                        key: 'id',
+                        width: 60,
+                      },
+                      {
+                        title: 'Formula',
+                        key: 'formula',
+                        render: (_, record: FormulaDeployment) => (
+                          <Typography.Text code style={{ fontSize: '12px' }}>
+                            {formulas.find(f => f.id === record.formula_id)?.name || `ID:${record.formula_id}`}
+                          </Typography.Text>
+                        ),
+                      },
+                      {
+                        title: '主机',
+                        key: 'hosts',
+                        width: 60,
+                        render: (_, record: FormulaDeployment) => (
+                          Array.isArray(record.target_hosts) ? record.target_hosts.length : 0
+                        ),
+                      },
+                      {
+                        title: '状态',
+                        dataIndex: 'status',
+                        key: 'status',
+                        width: 80,
+                        render: (status: string) => {
+                          const statusConfig: Record<string, { color: string; text: string }> = {
+                            pending: { color: 'default', text: '等待中' },
+                            running: { color: 'processing', text: '运行中' },
+                            completed: { color: 'success', text: '已完成' },
+                            failed: { color: 'error', text: '失败' },
+                            cancelled: { color: 'warning', text: '已取消' },
+                          };
+                          const config = statusConfig[status] || statusConfig.pending;
+                          return <Tag color={config.color}>{config.text}</Tag>;
+                        },
+                      },
+                      {
+                        title: '结果',
+                        key: 'results',
+                        width: 100,
+                        render: (_, record: FormulaDeployment) => (
+                          <Space size="small">
+                            <Tag color="success" style={{ margin: 0 }}>{record.success_count}</Tag>
+                            <Tag color="error" style={{ margin: 0 }}>{record.failed_count}</Tag>
+                          </Space>
+                        ),
+                      },
+                      {
+                        title: '时间',
+                        dataIndex: 'started_at',
+                        key: 'started_at',
+                        width: 150,
+                        render: (text: string) => (
+                          <span style={{ fontSize: '12px' }}>
+                            {text ? new Date(text).toLocaleString('zh-CN') : '-'}
+                          </span>
+                        ),
+                      },
+                      {
+                        title: '操作',
+                        key: 'action',
+                        width: 100,
+                        render: (_, record: FormulaDeployment) => (
+                          <Space size="small">
+                            <Button
+                              size="small"
+                              type="link"
+                              style={{ padding: 0 }}
+                              onClick={() => {
+                                setCurrentDeployment(record);
+                                window.scrollTo({ top: 0, behavior: 'smooth' });
+                              }}
+                            >
+                              查看
+                            </Button>
+                            {record.status === 'running' && (
+                              <Button
+                                size="small"
+                                type="link"
+                                danger
+                                style={{ padding: 0 }}
+                                onClick={() => handleCancelDeployment(record.id)}
+                              >
+                                取消
+                              </Button>
+                            )}
+                          </Space>
+                        ),
+                      },
+                    ]}
+                    dataSource={deployments}
+                    rowKey="id"
+                    loading={deploymentsLoading}
+                    pagination={{
+                      current: currentPage,
+                      pageSize: pageSize,
+                      total: totalDeployments,
+                      showSizeChanger: false,
+                      showQuickJumper: true,
+                      size: 'small',
+                      showTotal: (total, range) => `${range[0]}-${range[1]} / ${total}`,
+                      onChange: (page) => loadDeployments(page),
+                    }}
+                    size="small"
+                  />
+                ),
+              },
+            ]}
+          />
         </Col>
       </Row>
-
-      {/* 保存模板模态框 */}
-      <Modal
-        title="保存为模板"
-        open={saveTemplateModalVisible}
-        onOk={handleSaveTemplate}
-        onCancel={() => {
-          setSaveTemplateModalVisible(false);
-          templateForm.resetFields();
-        }}
-        okText="保存"
-        cancelText="取消"
-      >
-        <Form form={templateForm} layout="vertical">
-          <Form.Item
-            label="模板名称"
-            name="name"
-            rules={[{ required: true, message: '请输入模板名称' }]}
-          >
-            <Input placeholder="为模板命名" />
-          </Form.Item>
-          <Form.Item label="模板描述" name="description">
-            <TextArea rows={2} placeholder="描述模板的使用场景" />
-          </Form.Item>
-          <Form.Item label="设为公开模板" name="is_public" valuePropName="checked">
-            <input type="checkbox" />
-          </Form.Item>
-        </Form>
-      </Modal>
     </div>
   );
 };

@@ -12,6 +12,7 @@ type FormulaRepository interface {
 	Create(formula *models.Formula) error
 	GetByID(id uint) (*models.Formula, error)
 	GetByName(name string) (*models.Formula, error)
+	GetByRepository(repoURL string) ([]models.Formula, error)
 	List(page, pageSize int, filters map[string]interface{}) ([]models.Formula, int64, error)
 	Update(formula *models.Formula) error
 	Delete(id uint) error
@@ -68,6 +69,12 @@ func (r *formulaRepository) GetByName(name string) (*models.Formula, error) {
 	var formula models.Formula
 	err := r.db.Where("name = ?", name).First(&formula).Error
 	return &formula, err
+}
+
+func (r *formulaRepository) GetByRepository(repoURL string) ([]models.Formula, error) {
+	var formulas []models.Formula
+	err := r.db.Where("repository = ?", repoURL).Find(&formulas).Error
+	return formulas, err
 }
 
 func (r *formulaRepository) List(page, pageSize int, filters map[string]interface{}) ([]models.Formula, int64, error) {
