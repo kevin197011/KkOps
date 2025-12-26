@@ -21,7 +21,7 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -mod=mod -a -installsuffix cg
 # 运行阶段
 FROM alpine:latest
 
-RUN apk update && apk --no-cache add ca-certificates tzdata wget git
+RUN apk update && apk --no-cache add ca-certificates tzdata wget git rsync openssh-client
 ENV TZ=Asia/Shanghai
 
 WORKDIR /app

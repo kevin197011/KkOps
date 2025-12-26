@@ -41,7 +41,7 @@ EOF
 
 # 配置 Minion ID
 cat > /etc/salt/minion.d/id.conf << EOF
-id: ${MINION_ID:-minion-ubuntu-01}
+id: ${MINION_ID:-salt-minion}
 EOF
 
 # 启动服务
@@ -68,6 +68,6 @@ salt-minion --version || true
 
 echo ""
 echo "✅ Salt Minion 配置完成!"
-echo "   - Minion ID: ${MINION_ID:-minion-ubuntu-01}"
+echo "   - Minion ID: ${MINION_ID:-salt-minion}"
 echo "   - Master: ${MASTER_IP}"
 

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Card, Table, Tag, Button, Space, Typography, Progress, Tooltip, message } from 'antd';
-import { DownloadOutlined, CheckCircleOutlined, CloseCircleOutlined, CopyOutlined, EyeOutlined, EyeInvisibleOutlined } from '@ant-design/icons';
+import { DownloadOutlined, CheckCircleOutlined, CloseCircleOutlined, CopyOutlined, EyeOutlined, EyeInvisibleOutlined, SyncOutlined, ClockCircleOutlined } from '@ant-design/icons';
 import { BatchOperation } from '../services/batchOperations';
 import type { ColumnsType } from 'antd/es/table';
 
@@ -265,17 +265,76 @@ const ResultViewer: React.FC<ResultViewerProps> = ({ operation, onRefresh }) => 
       }
       style={{ height: '100%' }}
     >
-      {operation.status === 'pending' && (
-        <div style={{ textAlign: 'center', padding: '20px' }}>
-          <Text type="secondary">操作等待中...</Text>
-        </div>
-      )}
-
-      {operation.status === 'running' && (
+      {(operation.status === 'pending' || operation.status === 'running') && (
         <div style={{ marginBottom: 16 }}>
+          {/* 进度条 */}
           <Progress percent={getProgress()} status="active" />
-          <div style={{ marginTop: 8, textAlign: 'center' }}>
-            <Text type="secondary">执行中... ({operation.success_count + operation.failed_count}/{operation.target_count})</Text>
+          <div style={{ marginTop: 8, textAlign: 'center', marginBottom: 12 }}>
+            <Text type="secondary">
+              {operation.status === 'pending' ? (
+                <><ClockCircleOutlined style={{ marginRight: 4 }} /> 等待执行...</>
+              ) : (
+                <><SyncOutlined spin style={{ marginRight: 4 }} /> 执行中... ({operation.success_count + operation.failed_count}/{operation.target_count})</>
+              )}
+            </Text>
+          </div>
+          
+          {/* 实时日志终端 */}
+          <div style={{
+            background: '#1e1e1e',
+            color: '#d4d4d4',
+            padding: '16px',
+            borderRadius: '6px',
+            fontFamily: 'Monaco, Menlo, "Ubuntu Mono", monospace',
+            fontSize: '13px',
+            minHeight: '180px',
+            maxHeight: '300px',
+            overflow: 'auto',
+          }}>
+            <div style={{ color: '#569cd6' }}>
+              <SyncOutlined spin style={{ marginRight: 6 }} />
+              [INFO] 批量操作任务已提交
+            </div>
+            <div style={{ color: '#6a9955', marginTop: 4 }}>
+              [INFO] 操作名称: {operation.name}
+            </div>
+            <div style={{ color: '#6a9955', marginTop: 4 }}>
+              [INFO] 命令函数: {operation.command_function}
+            </div>
+            {operation.command_args && (
+              <div style={{ color: '#6a9955', marginTop: 4 }}>
+                [INFO] 命令参数: {JSON.stringify(operation.command_args)}
+              </div>
+            )}
+            <div style={{ color: '#dcdcaa', marginTop: 4 }}>
+              [INFO] 目标主机数: {operation.target_count}
+            </div>
+            {operation.target_hosts && operation.target_hosts.length > 0 && (
+              <div style={{ color: '#ce9178', marginTop: 4 }}>
+                [INFO] 目标主机: {operation.target_hosts.slice(0, 5).map(h => h.hostname).join(', ')}
+                {operation.target_hosts.length > 5 && ` ... 等 ${operation.target_hosts.length} 台`}
+              </div>
+            )}
+            <div style={{ color: '#569cd6', marginTop: 8 }}>
+              {operation.status === 'pending' ? (
+                <><ClockCircleOutlined style={{ marginRight: 6 }} /> 等待Salt Master响应...</>
+              ) : (
+                <>
+                  <SyncOutlined spin style={{ marginRight: 6 }} />
+                  正在执行命令，已完成 {operation.success_count + operation.failed_count}/{operation.target_count}...
+                </>
+              )}
+            </div>
+            {operation.success_count > 0 && (
+              <div style={{ color: '#4ec9b0', marginTop: 4 }}>
+                [SUCCESS] 成功: {operation.success_count} 台
+              </div>
+            )}
+            {operation.failed_count > 0 && (
+              <div style={{ color: '#f14c4c', marginTop: 4 }}>
+                [FAILED] 失败: {operation.failed_count} 台
+              </div>
+            )}
           </div>
         </div>
       )}

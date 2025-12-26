@@ -16,6 +16,7 @@ import {
   Radio,
   InputNumber,
   Checkbox,
+  Collapse,
 } from 'antd';
 import {
   PlayCircleOutlined,
@@ -25,6 +26,8 @@ import {
   ThunderboltOutlined,
   StopOutlined,
   DeleteOutlined,
+  DownOutlined,
+  RightOutlined,
 } from '@ant-design/icons';
 import { batchOperationsService, BatchOperation, CreateBatchOperationRequest } from '../services/batchOperations';
 import { commandTemplateService, CommandTemplate } from '../services/commandTemplate';
@@ -558,122 +561,135 @@ echo "执行完成"
         </Col>
       </Row>
 
-      {/* 操作历史 */}
-      <Card
-        title="操作历史"
-        extra={
-          <Space>
-            <Button icon={<ReloadOutlined />} onClick={() => loadOperations(currentPage)} loading={operationsLoading}>
-              刷新
-            </Button>
-            <Button
-              danger
-              icon={<DeleteOutlined />}
-              onClick={handleCleanupOldOperations}
-              loading={operationsLoading}
-            >
-              清理1个月前数据
-            </Button>
-          </Space>
-        }
+      {/* 操作历史 - 可折叠 */}
+      <Collapse
+        defaultActiveKey={[]}
         style={{ marginTop: 16 }}
-      >
-        <Table
-          columns={[
-            {
-              title: 'ID',
-              dataIndex: 'id',
-              key: 'id',
-              width: 80,
-            },
-            {
-              title: '操作名称',
-              dataIndex: 'name',
-              key: 'name',
-            },
-            {
-              title: '命令',
-              key: 'command',
-              render: (_, record) => (
-                <Text code>{record.command_function}</Text>
-              ),
-            },
-            {
-              title: '目标数量',
-              dataIndex: 'target_count',
-              key: 'target_count',
-              width: 100,
-            },
-            {
-              title: '状态',
-              dataIndex: 'status',
-              key: 'status',
-              width: 100,
-              render: (status: string) => getStatusTag(status),
-            },
-            {
-              title: '结果',
-              key: 'results',
-              width: 120,
-              render: (_, record) => (
-                <Space>
-                  <Tag color="success">{record.success_count}</Tag>
-                  <Tag color="error">{record.failed_count}</Tag>
-                </Space>
-              ),
-            },
-            {
-              title: '执行时间',
-              dataIndex: 'started_at',
-              key: 'started_at',
-              width: 180,
-              render: (text: string) => new Date(text).toLocaleString('zh-CN'),
-            },
-            {
-              title: '操作',
-              key: 'action',
-              width: 150,
-              render: (_, record) => (
-                <Space>
-                  <Button
-                    size="small"
-                    type="link"
-                    onClick={() => {
-                      setCurrentOperation(record);
-                      // 滚动到顶部
-                      window.scrollTo({ top: 0, behavior: 'smooth' });
-                    }}
-                  >
-                    查看
-                  </Button>
-                  {(record.status === 'failed' || record.status === 'cancelled') && (
-                    <Button
-                      size="small"
-                      type="link"
-                      onClick={() => handleRetry(record)}
-                    >
-                      重试
-                    </Button>
-                  )}
-                </Space>
-              ),
-            },
-          ]}
-          dataSource={operations}
-          rowKey="id"
-          loading={operationsLoading}
-          pagination={{
-            current: currentPage,
-            pageSize: pageSize,
-            total: totalOperations,
-            showSizeChanger: false, // 不允许改变每页大小
-            showQuickJumper: true,
-            showTotal: (total, range) => `第 ${range[0]}-${range[1]} 条，共 ${total} 条`,
-            onChange: (page) => loadOperations(page),
-          }}
-          size="small"
-        />
-      </Card>
+        items={[
+          {
+            key: 'history',
+            label: (
+              <Space>
+                <HistoryOutlined />
+                <span>操作历史</span>
+                <Tag>{totalOperations} 条记录</Tag>
+              </Space>
+            ),
+            extra: (
+              <Space onClick={(e) => e.stopPropagation()}>
+                <Button size="small" icon={<ReloadOutlined />} onClick={() => loadOperations(currentPage)} loading={operationsLoading}>
+                  刷新
+                </Button>
+                <Button
+                  size="small"
+                  danger
+                  icon={<DeleteOutlined />}
+                  onClick={handleCleanupOldOperations}
+                  loading={operationsLoading}
+                >
+                  清理旧数据
+                </Button>
+              </Space>
+            ),
+            children: (
+              <Table
+                columns={[
+                  {
+                    title: 'ID',
+                    dataIndex: 'id',
+                    key: 'id',
+                    width: 60,
+                  },
+                  {
+                    title: '命令',
+                    key: 'command',
+                    render: (_, record) => (
+                      <Text code style={{ fontSize: '12px' }}>{record.command_function}</Text>
+                    ),
+                  },
+                  {
+                    title: '主机',
+                    dataIndex: 'target_count',
+                    key: 'target_count',
+                    width: 60,
+                  },
+                  {
+                    title: '状态',
+                    dataIndex: 'status',
+                    key: 'status',
+                    width: 80,
+                    render: (status: string) => getStatusTag(status),
+                  },
+                  {
+                    title: '结果',
+                    key: 'results',
+                    width: 100,
+                    render: (_, record) => (
+                      <Space size="small">
+                        <Tag color="success" style={{ margin: 0 }}>{record.success_count}</Tag>
+                        <Tag color="error" style={{ margin: 0 }}>{record.failed_count}</Tag>
+                      </Space>
+                    ),
+                  },
+                  {
+                    title: '时间',
+                    dataIndex: 'started_at',
+                    key: 'started_at',
+                    width: 150,
+                    render: (text: string) => (
+                      <span style={{ fontSize: '12px' }}>{new Date(text).toLocaleString('zh-CN')}</span>
+                    ),
+                  },
+                  {
+                    title: '操作',
+                    key: 'action',
+                    width: 100,
+                    render: (_, record) => (
+                      <Space size="small">
+                        <Button
+                          size="small"
+                          type="link"
+                          style={{ padding: 0 }}
+                          onClick={() => {
+                            setCurrentOperation(record);
+                            window.scrollTo({ top: 0, behavior: 'smooth' });
+                          }}
+                        >
+                          查看
+                        </Button>
+                        {(record.status === 'failed' || record.status === 'cancelled') && (
+                          <Button
+                            size="small"
+                            type="link"
+                            style={{ padding: 0 }}
+                            onClick={() => handleRetry(record)}
+                          >
+                            重试
+                          </Button>
+                        )}
+                      </Space>
+                    ),
+                  },
+                ]}
+                dataSource={operations}
+                rowKey="id"
+                loading={operationsLoading}
+                pagination={{
+                  current: currentPage,
+                  pageSize: pageSize,
+                  total: totalOperations,
+                  showSizeChanger: false,
+                  showQuickJumper: true,
+                  size: 'small',
+                  showTotal: (total, range) => `${range[0]}-${range[1]} / ${total}`,
+                  onChange: (page) => loadOperations(page),
+                }}
+                size="small"
+              />
+            ),
+          },
+        ]}
+      />
 
       {/* 保存模板对话框 */}
       <Modal

@@ -34,7 +34,7 @@ import {
 import HostSelector from '../components/HostSelector';
 import formulaService from '../services/formula';
 // Formula 部署结果查看器组件
-const FormulaResultViewer: React.FC<{ deployment: FormulaDeployment }> = ({ deployment }) => {
+const FormulaResultViewer: React.FC<{ deployment: FormulaDeployment; isLive?: boolean }> = ({ deployment, isLive = false }) => {
   const parseResults = (results: any) => {
     if (!results) return [];
 
@@ -52,53 +52,64 @@ const FormulaResultViewer: React.FC<{ deployment: FormulaDeployment }> = ({ depl
         error?: string;
       }> = [];
 
-      // 解析Salt API的返回结果
+      // 解析结果 - 直接是 {minion_id: result} 格式
       if (results && typeof results === 'object') {
-        const returnData = results.return;
-        if (Array.isArray(returnData) && returnData.length > 0) {
-          const minions = returnData[0];
-          if (typeof minions === 'object') {
-            Object.entries(minions).forEach(([minionID, minionResult]: [string, any]) => {
-              let status: 'success' | 'failed' = 'failed';
-              let output = '';
-              let error = '';
+        // 检查是否有 return 字段（Salt API 原始格式）
+        let minions = results;
+        if (results.return && Array.isArray(results.return) && results.return.length > 0) {
+          minions = results.return[0];
+        }
 
-              if (minionResult && typeof minionResult === 'object') {
-                const resultList = minionResult.result;
-                if (Array.isArray(resultList) && resultList.length > 0) {
-                  const firstResult = resultList[0];
-                  if (firstResult && typeof firstResult === 'object') {
-                    const resultStatus = firstResult.result;
-                    if (resultStatus === true) {
-                      status = 'success';
-                    }
+        Object.entries(minions).forEach(([minionID, minionResult]: [string, any]) => {
+          let status: 'success' | 'failed' = 'failed';
+          let output = '';
 
-                    // 获取输出信息
-                    if (firstResult.comment) {
-                      output = firstResult.comment;
-                    }
-                    if (firstResult.changes && typeof firstResult.changes === 'object') {
-                      const changesStr = JSON.stringify(firstResult.changes, null, 2);
-                      if (output) {
-                        output += '\n\n变更详情:\n' + changesStr;
-                      } else {
-                        output = '变更详情:\n' + changesStr;
-                      }
-                    }
-                  }
+          // 处理字符串错误信息
+          if (typeof minionResult === 'string') {
+            output = minionResult;
+            status = 'failed';
+          }
+          // 处理数组格式的错误信息
+          else if (Array.isArray(minionResult)) {
+            output = minionResult.join('\n');
+            status = 'failed';
+          }
+          // 处理对象格式的 state 结果
+          else if (minionResult && typeof minionResult === 'object') {
+            let allSuccess = true;
+            const outputParts: string[] = [];
+
+            // Salt state.apply 返回格式: {state_id: {result: bool, comment: string, changes: {}}}
+            Object.entries(minionResult).forEach(([stateId, stateResult]: [string, any]) => {
+              if (stateId === 'retcode') return; // 跳过 retcode 字段
+
+              if (stateResult && typeof stateResult === 'object') {
+                const stateSuccess = stateResult.result === true;
+                if (!stateSuccess) {
+                  allSuccess = false;
+                }
+
+                // 收集输出信息
+                if (stateResult.comment) {
+                  outputParts.push(`[${stateId}] ${stateResult.comment}`);
+                }
+                if (stateResult.changes && Object.keys(stateResult.changes).length > 0) {
+                  outputParts.push(`变更: ${JSON.stringify(stateResult.changes)}`);
                 }
               }
-
-              rows.push({
-                hostId: minionID,
-                hostname: minionID,
-                status,
-                output: output || undefined,
-                error: error || undefined,
-              });
             });
+
+            status = allSuccess ? 'success' : 'failed';
+            output = outputParts.join('\n') || (allSuccess ? '执行成功' : '执行失败');
           }
-        }
+
+          rows.push({
+            hostId: minionID,
+            hostname: minionID,
+            status,
+            output: output || undefined,
+          });
+        });
       }
 
       return rows;
@@ -110,63 +121,130 @@ const FormulaResultViewer: React.FC<{ deployment: FormulaDeployment }> = ({ depl
 
   const results = parseResults(deployment.results);
 
+  // 获取状态显示配置
+  const getStatusDisplay = (status: string) => {
+    const statusConfig: Record<string, { color: string; text: string; icon: React.ReactNode }> = {
+      pending: { color: 'orange', text: '等待中', icon: <ClockCircleOutlined /> },
+      running: { color: 'blue', text: '执行中', icon: <SyncOutlined spin /> },
+      completed: { color: 'green', text: '成功', icon: <CheckCircleOutlined /> },
+      failed: { color: 'red', text: '失败', icon: <CloseCircleOutlined /> },
+      cancelled: { color: 'gray', text: '已取消', icon: <StopOutlined /> },
+    };
+    return statusConfig[status] || statusConfig.pending;
+  };
+
+  const statusDisplay = getStatusDisplay(deployment.status);
+
   return (
     <div>
       <div style={{ marginBottom: 16 }}>
-        <Space>
-          <span>状态: <strong>{deployment.status}</strong></span>
+        <Space size="large">
+          <span>
+            状态: <Tag color={statusDisplay.color} icon={statusDisplay.icon}>{statusDisplay.text}</Tag>
+          </span>
           <span>成功: <strong style={{ color: '#52c41a' }}>{deployment.success_count}</strong></span>
           <span>失败: <strong style={{ color: '#ff4d4f' }}>{deployment.failed_count}</strong></span>
-          {deployment.duration_seconds && (
+          {deployment.duration_seconds !== undefined && deployment.duration_seconds > 0 && (
             <span>耗时: <strong>{Math.round(deployment.duration_seconds)}s</strong></span>
           )}
         </Space>
       </div>
 
-      {deployment.error_message && (
-        <div style={{ marginBottom: 16, color: '#ff4d4f' }}>
-          错误信息: {deployment.error_message}
+      {/* 实时日志区域 */}
+      {isLive && (deployment.status === 'pending' || deployment.status === 'running') && (
+        <div style={{ marginBottom: 16 }}>
+          <div style={{
+            background: '#1e1e1e',
+            color: '#d4d4d4',
+            padding: '16px',
+            borderRadius: '4px',
+            fontFamily: 'Monaco, Menlo, "Ubuntu Mono", monospace',
+            fontSize: '13px',
+            minHeight: '150px',
+            maxHeight: '300px',
+            overflow: 'auto',
+          }}>
+            <div style={{ color: '#569cd6' }}>
+              [INFO] 部署任务已提交，正在执行中...
+            </div>
+            <div style={{ color: '#6a9955' }}>
+              [INFO] Formula: {deployment.name}
+            </div>
+            <div style={{ color: '#6a9955' }}>
+              [INFO] 目标主机: {Array.isArray(deployment.target_hosts) ? deployment.target_hosts.join(', ') : deployment.target_hosts}
+            </div>
+            <div style={{ color: '#dcdcaa' }}>
+              [INFO] Salt Job ID: {deployment.salt_job_id || '获取中...'}
+            </div>
+            <div style={{ color: '#569cd6', marginTop: '8px' }}>
+              <SyncOutlined spin /> 等待执行结果...
+            </div>
+          </div>
         </div>
       )}
 
-      <Table
-        size="small"
-        columns={[
-          {
-            title: '主机',
-            dataIndex: 'hostname',
-            key: 'hostname',
-          },
-          {
-            title: '状态',
-            dataIndex: 'status',
-            key: 'status',
-            render: (status: string) => (
-              status === 'success' ?
-                <span style={{ color: '#52c41a' }}>成功</span> :
-                <span style={{ color: '#ff4d4f' }}>失败</span>
-            ),
-          },
-          {
-            title: '结果',
-            dataIndex: 'output',
-            key: 'output',
-            render: (output: string) => (
-              <div style={{
-                maxWidth: '400px',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap'
-              }}>
-                {output || '-'}
-              </div>
-            ),
-          },
-        ]}
-        dataSource={results}
-        rowKey="hostId"
-        pagination={false}
-      />
+      {deployment.error_message && (
+        <Alert
+          message="执行错误"
+          description={deployment.error_message}
+          type="error"
+          showIcon
+          style={{ marginBottom: 16 }}
+        />
+      )}
+
+      {results.length > 0 ? (
+        <Table
+          size="small"
+          columns={[
+            {
+              title: '主机',
+              dataIndex: 'hostname',
+              key: 'hostname',
+              width: 150,
+            },
+            {
+              title: '状态',
+              dataIndex: 'status',
+              key: 'status',
+              width: 80,
+              render: (status: string) => (
+                status === 'success' ?
+                  <Tag color="green" icon={<CheckCircleOutlined />}>成功</Tag> :
+                  <Tag color="red" icon={<CloseCircleOutlined />}>失败</Tag>
+              ),
+            },
+            {
+              title: '执行结果',
+              dataIndex: 'output',
+              key: 'output',
+              render: (output: string) => (
+                <pre style={{
+                  maxWidth: '500px',
+                  maxHeight: '200px',
+                  overflow: 'auto',
+                  whiteSpace: 'pre-wrap',
+                  wordBreak: 'break-all',
+                  margin: 0,
+                  padding: '8px',
+                  background: '#f5f5f5',
+                  borderRadius: '4px',
+                  fontSize: '12px',
+                }}>
+                  {output || '-'}
+                </pre>
+              ),
+            },
+          ]}
+          dataSource={results}
+          rowKey="hostId"
+          pagination={false}
+        />
+      ) : (
+        deployment.status !== 'pending' && deployment.status !== 'running' && (
+          <Alert message="暂无详细执行结果" type="info" />
+        )
+      )}
     </div>
   );
 };
@@ -386,12 +464,12 @@ const FormulaDeployment: React.FC = () => {
 
     try {
       const values = form.getFieldsValue();
-      const deploymentName = values.name || `${selectedFormula.name} - ${new Date().toLocaleString()}`;
+      const deploymentName = `${selectedFormula.name} - ${new Date().toLocaleString()}`;
 
       const requestData = {
         formula_id: selectedFormula.id,
         name: deploymentName,
-        description: values.description || '',
+        description: '',
         target_hosts: selectedHosts.map(h => h.hostname), // 使用hostname作为Salt target
         pillar_data: values.pillar_data || {},
       };
@@ -668,7 +746,7 @@ const FormulaDeployment: React.FC = () => {
               取消
             </Button>
           )}
-          {record.status === 'completed' && record.results && (
+          {(record.status === 'completed' || record.status === 'failed') && (
             <Button
               size="small"
               onClick={() => setCurrentDeployment(record)}
@@ -772,45 +850,28 @@ const FormulaDeployment: React.FC = () => {
             </Space>
           }>
             <Form form={form} layout="vertical">
-              <Row gutter={16}>
-                <Col span={12}>
-                  <Form.Item
-                    label="Formula选择"
-                    name="formula_id"
-                    rules={[{ required: true, message: '请选择Formula' }]}
-                  >
-                    <Select
-                      placeholder="选择要部署的Formula"
-                      onChange={handleFormulaChange}
-                      showSearch
-                      optionFilterProp="children"
-                    >
-                      {formulas.map(formula => (
-                        <Option key={formula.id} value={formula.id}>
-                          <div>
-                            <div style={{ fontWeight: 'bold' }}>{formula.name}</div>
-                            <div style={{ fontSize: '12px', color: '#666' }}>
-                              {formula.category} • {formula.description}
-                            </div>
-                          </div>
-                        </Option>
-                      ))}
-                    </Select>
-                  </Form.Item>
-                </Col>
-                <Col span={12}>
-                  <Form.Item
-                    label="部署名称"
-                    name="name"
-                    rules={[{ required: true, message: '请输入部署名称' }]}
-                  >
-                    <Input placeholder="为本次部署命名" />
-                  </Form.Item>
-                </Col>
-              </Row>
-
-              <Form.Item label="部署描述" name="description">
-                <TextArea rows={2} placeholder="可选：描述本次部署的目的和内容" />
+              <Form.Item
+                label="Formula选择"
+                name="formula_id"
+                rules={[{ required: true, message: '请选择Formula' }]}
+              >
+                <Select
+                  placeholder="选择要部署的Formula"
+                  onChange={handleFormulaChange}
+                  showSearch
+                  optionFilterProp="children"
+                >
+                  {formulas.map(formula => (
+                    <Option key={formula.id} value={formula.id}>
+                      <div>
+                        <div style={{ fontWeight: 'bold' }}>{formula.name}</div>
+                        <div style={{ fontSize: '12px', color: '#666' }}>
+                          {formula.category} • {formula.description}
+                        </div>
+                      </div>
+                    </Option>
+                  ))}
+                </Select>
               </Form.Item>
 
               {selectedFormula && formulaTemplates.length > 0 && (
@@ -866,19 +927,33 @@ const FormulaDeployment: React.FC = () => {
         {currentDeployment && (
           <Col span={24}>
             <Card
-              title={`当前部署: ${currentDeployment.name}`}
+              title={
+                <Space>
+                  {(currentDeployment.status === 'pending' || currentDeployment.status === 'running') && (
+                    <SyncOutlined spin style={{ color: '#1890ff' }} />
+                  )}
+                  <span>当前部署: {currentDeployment.name}</span>
+                </Space>
+              }
               extra={
-                currentDeployment.status === 'running' && (
-                  <Button
-                    danger
-                    onClick={() => handleCancelDeployment(currentDeployment.id)}
-                  >
-                    取消部署
-                  </Button>
-                )
+                <Space>
+                  {currentDeployment.status === 'running' && (
+                    <Button
+                      danger
+                      onClick={() => handleCancelDeployment(currentDeployment.id)}
+                    >
+                      取消部署
+                    </Button>
+                  )}
+                  {(currentDeployment.status === 'completed' || currentDeployment.status === 'failed') && (
+                    <Button onClick={() => setCurrentDeployment(undefined)}>
+                      关闭
+                    </Button>
+                  )}
+                </Space>
               }
             >
-              <FormulaResultViewer deployment={currentDeployment} />
+              <FormulaResultViewer deployment={currentDeployment} isLive={true} />
             </Card>
           </Col>
         )}

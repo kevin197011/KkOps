@@ -1,7 +1,23 @@
 # Project Context
 
 ## Purpose
-KkOps 是一个基于 Salt 的运维中台管理系统，旨在提供统一的主机管理、SSH 管理、发布管理、定时任务、日志管理、监控管理、权限管理和审计管理等核心功能，后续将扩展 K8s 相关管理能力。
+KkOps 是一个基于 SaltStack 的现代运维中台管理系统，已实现以下核心功能：
+
+### 已实现的核心功能
+- **用户认证与权限管理**: JWT认证、RBAC权限控制、用户角色管理
+- **主机资产管理**: 主机信息管理、分组管理、标签管理、环境管理
+- **SSH密钥与终端管理**: SSH密钥管理、WebSSH终端访问、连接管理
+- **批量操作执行**: 基于Salt的批量命令执行、操作模板、结果追踪
+- **Formula自动化部署**: Salt Formula仓库管理、参数配置、部署执行
+- **系统配置管理**: Salt API配置、系统参数管理、设置持久化
+- **审计日志系统**: 完整的操作审计、用户活动追踪、安全监控
+
+### 技术架构
+- **后端**: Go + Gin框架 + GORM ORM + PostgreSQL
+- **前端**: React + TypeScript + Ant Design + WebSocket
+- **配置管理**: SaltStack API集成
+- **安全**: JWT认证 + AES加密 + RBAC权限控制
+- **实时通信**: WebSocket终端访问 + 实时状态更新
 
 ## Tech Stack
 - **后端**: Go (推荐使用 Go 1.21+)
@@ -104,9 +120,10 @@ backend/
 │   ├── handler/                 # HTTP 请求处理器层（Controller）
 │   │   ├── audit_handler.go     # 审计日志处理器
 │   │   ├── auth_handler.go      # 认证处理器
+│   │   ├── batch_operation_handler.go  # 批量操作处理器
 │   │   ├── cloud_platform_handler.go  # 云平台处理器
-│   │   ├── deployment_handler.go      # 发布管理处理器
 │   │   ├── environment_handler.go     # 环境管理处理器
+│   │   ├── formula_handler.go         # Formula管理处理器
 │   │   ├── host_group_handler.go      # 主机分组处理器
 │   │   ├── host_handler.go            # 主机管理处理器
 │   │   ├── host_tag_handler.go        # 主机标签处理器

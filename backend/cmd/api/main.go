@@ -89,7 +89,7 @@ func main() {
 	auditService := service.NewAuditService(auditRepo)
 	batchOperationService := service.NewBatchOperationService(batchOperationRepo, hostRepo, saltManager.GetClient())
 	commandTemplateService := service.NewCommandTemplateService(commandTemplateRepo)
-	formulaService := service.NewFormulaService(formulaRepo, saltManager.GetClient())
+	formulaService := service.NewFormulaService(formulaRepo, hostRepo, sshKeyRepo, saltManager.GetClient())
 	sshKeyService := service.NewSSHKeyService(sshKeyRepo)
 	settingsService := service.NewSettingsService(settingsRepo, auditRepo)
 

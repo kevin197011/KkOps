@@ -189,6 +189,7 @@ func manualMigrateAllTables() error {
 					id BIGSERIAL PRIMARY KEY,
 					name VARCHAR(50) NOT NULL UNIQUE,
 					color VARCHAR(20),
+					description TEXT,
 					created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
 					updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
 					deleted_at TIMESTAMP
@@ -603,7 +604,7 @@ func manualMigrateAllTables() error {
 		"CREATE INDEX IF NOT EXISTS idx_hosts_salt_minion_id ON hosts(salt_minion_id)",
 		"CREATE INDEX IF NOT EXISTS idx_hosts_ssh_key_id ON hosts(ssh_key_id)",
 		"CREATE INDEX IF NOT EXISTS idx_hosts_deleted_at ON hosts(deleted_at)",
-		"DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'hosts_ip_address_key') THEN ALTER TABLE hosts ADD CONSTRAINT hosts_ip_address_key UNIQUE (ip_address); END IF; END $$",
+		"CREATE INDEX IF NOT EXISTS idx_hosts_ip_address ON hosts(ip_address)",
 		"CREATE INDEX IF NOT EXISTS idx_deployment_configs_project_id ON deployment_configs(project_id)",
 		"CREATE INDEX IF NOT EXISTS idx_deployment_configs_created_by ON deployment_configs(created_by)",
 		"CREATE INDEX IF NOT EXISTS idx_deployment_configs_deleted_at ON deployment_configs(deleted_at)",

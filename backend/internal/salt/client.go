@@ -40,6 +40,9 @@ func NewClient(cfg config.SaltConfig) *Client {
 		apiURL = apiURL[:len(apiURL)-1]
 	}
 
+	// HTTP 客户端超时设置为 5 分钟，用于长时间运行的请求
+	httpTimeout := 5 * time.Minute
+
 	return &Client{
 		apiURL:    apiURL,
 		username:  cfg.Username,
@@ -49,7 +52,7 @@ func NewClient(cfg config.SaltConfig) *Client {
 		verifySSL: cfg.VerifySSL,
 		httpClient: &http.Client{
 			Transport: tr,
-			Timeout:   time.Duration(cfg.Timeout) * time.Second,
+			Timeout:   httpTimeout,
 		},
 	}
 }
@@ -498,12 +501,19 @@ func (c *Client) extractMinionInfo(info *MinionInfo, grains map[string]interface
 }
 
 // ExecuteState 执行 Salt state.apply
+// 使用 local_async 客户端异步执行，然后轮询结果
 func (c *Client) ExecuteState(formulaName, target string, pillarData map[string]interface{}) (map[string]interface{}, error) {
 	cmdBody := map[string]interface{}{
-		"client": "local",
-		"tgt":    target,
-		"fun":    "state.apply",
-		"arg":    []interface{}{formulaName},
+		"client":  "local_async",
+		"tgt":     target,
+		"fun":     "state.apply",
+		"arg":     []interface{}{formulaName},
+		"timeout": 600, // 10 分钟超时
+	}
+
+	// 如果 target 包含逗号，说明是多个主机，使用 list 匹配类型
+	if strings.Contains(target, ",") {
+		cmdBody["tgt_type"] = "list"
 	}
 
 	// 添加 Pillar 数据
@@ -528,12 +538,105 @@ func (c *Client) ExecuteState(formulaName, target string, pillarData map[string]
 		return nil, fmt.Errorf("state execution failed: status %d, body: %s", resp.StatusCode, string(body))
 	}
 
-	var result map[string]interface{}
-	if err := json.Unmarshal(body, &result); err != nil {
-		return nil, fmt.Errorf("failed to decode response: %w", err)
+	// 解析异步响应获取 JID
+	var asyncResp struct {
+		Return []struct {
+			JID     string   `json:"jid"`
+			Minions []string `json:"minions"`
+		} `json:"return"`
+	}
+	if err := json.Unmarshal(body, &asyncResp); err != nil {
+		return nil, fmt.Errorf("failed to decode async response: %w", err)
 	}
 
-	return result, nil
+	if len(asyncResp.Return) == 0 || asyncResp.Return[0].JID == "" {
+		return nil, fmt.Errorf("no job ID returned from async execution")
+	}
+
+	jid := asyncResp.Return[0].JID
+	expectedMinions := asyncResp.Return[0].Minions
+
+	// 轮询等待结果，最多等待 10 分钟
+	maxWait := 600 * time.Second
+	pollInterval := 5 * time.Second
+	startTime := time.Now()
+
+	for time.Since(startTime) < maxWait {
+		result, err := c.GetJobResult(jid)
+		if err != nil {
+			time.Sleep(pollInterval)
+			continue
+		}
+
+		// 检查是否所有 minion 都返回了结果
+		if len(result) >= len(expectedMinions) || len(result) > 0 {
+			// 返回格式与同步执行一致: {"return": [{minion_id: result, ...}]}
+			return map[string]interface{}{"return": []interface{}{result}}, nil
+		}
+
+		time.Sleep(pollInterval)
+	}
+
+	return nil, fmt.Errorf("timeout waiting for job %s to complete", jid)
+}
+
+// GetJobResult 获取 Salt Job 结果（只返回 minion 结果数据）
+func (c *Client) GetJobResult(jobID string) (map[string]interface{}, error) {
+	cmdBody := map[string]interface{}{
+		"client": "runner",
+		"fun":    "jobs.lookup_jid",
+		"jid":    jobID,
+	}
+
+	resp, err := c.doRequest("POST", "/", cmdBody)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("failed to get job result: status %d, body: %s", resp.StatusCode, string(body))
+	}
+
+	var jobResp struct {
+		Return []map[string]interface{} `json:"return"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&jobResp); err != nil {
+		return nil, fmt.Errorf("failed to decode job result response: %w", err)
+	}
+
+	if len(jobResp.Return) == 0 {
+		return nil, fmt.Errorf("empty job result response")
+	}
+
+	result := jobResp.Return[0]
+
+	// jobs.lookup_jid 返回格式可能有两种:
+	// 1. 新格式（带 highstate outputter）: {"return": [{"outputter": "highstate", "data": {"minion_id": {...}}}]}
+	// 2. 旧格式: {"return": [{"minion_id": {...state results...}, ...}]}
+	
+	// 检查是否是新格式（带 data 字段）
+	if data, ok := result["data"].(map[string]interface{}); ok {
+		// 新格式：从 data 字段中提取 minion 结果
+		minionResults := make(map[string]interface{})
+		for key, value := range data {
+			minionResults[key] = value
+		}
+		return minionResults, nil
+	}
+
+	// 旧格式：过滤掉元数据字段，只保留 minion 结果
+	minionResults := make(map[string]interface{})
+	for key, value := range result {
+		// 跳过 jobs.lookup_jid 返回的元数据字段
+		if key == "outputter" || key == "retcode" {
+			continue
+		}
+		minionResults[key] = value
+	}
+
+	return minionResults, nil
 }
 
 // ExecuteStateWithArgs 执行 Salt state.apply 带额外参数

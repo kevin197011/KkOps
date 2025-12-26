@@ -66,11 +66,13 @@ func (HostGroup) TableName() string {
 
 // HostTag 主机标签模型
 type HostTag struct {
-	ID          uint64    `gorm:"primaryKey" json:"id"`
-	Name        string    `gorm:"uniqueIndex;size:50;not null" json:"name"`
-	Color       string    `gorm:"size:7" json:"color"`
-	Description string    `json:"description"`
-	CreatedAt   time.Time `json:"created_at"`
+	ID          uint64     `gorm:"primaryKey" json:"id"`
+	Name        string     `gorm:"uniqueIndex;size:50;not null" json:"name"`
+	Color       string     `gorm:"size:7" json:"color"`
+	Description string     `json:"description"`
+	CreatedAt   time.Time  `json:"created_at"`
+	UpdatedAt   time.Time  `json:"updated_at"`
+	DeletedAt   *time.Time `json:"deleted_at,omitempty" gorm:"index"`
 
 	// 关联
 	Hosts []Host `gorm:"many2many:host_tag_assignments;foreignKey:ID;joinForeignKey:TagID;References:ID;joinReferences:HostID" json:"hosts,omitempty"`
@@ -83,9 +85,8 @@ func (HostTag) TableName() string {
 
 // HostGroupMember 主机组成员关联模型
 type HostGroupMember struct {
-	ID        uint64    `gorm:"primaryKey"`
-	HostID    uint64    `gorm:"column:host_id;not null;index"`
-	GroupID   uint64    `gorm:"column:group_id;not null;index"`
+	HostID    uint64    `gorm:"column:host_id;primaryKey;not null"`
+	GroupID   uint64    `gorm:"column:group_id;primaryKey;not null"`
 	CreatedAt time.Time `gorm:"not null;default:now()"`
 }
 

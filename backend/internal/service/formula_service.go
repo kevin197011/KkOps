@@ -54,12 +54,16 @@ type FormulaService interface {
 
 type formulaService struct {
 	formulaRepo repository.FormulaRepository
+	hostRepo    repository.HostRepository
+	sshKeyRepo  repository.SSHKeyRepository
 	saltClient  *salt.Client
 }
 
-func NewFormulaService(formulaRepo repository.FormulaRepository, saltClient *salt.Client) FormulaService {
+func NewFormulaService(formulaRepo repository.FormulaRepository, hostRepo repository.HostRepository, sshKeyRepo repository.SSHKeyRepository, saltClient *salt.Client) FormulaService {
 	return &formulaService{
 		formulaRepo: formulaRepo,
+		hostRepo:    hostRepo,
+		sshKeyRepo:  sshKeyRepo,
 		saltClient:  saltClient,
 	}
 }
@@ -208,8 +212,16 @@ func (s *formulaService) executeDeploymentAsync(deployment *models.FormulaDeploy
 		}
 	}
 
+	// 使用 formula 的 path 作为 state 名称（如 runtime/java），如果 path 为空则使用 name
+	stateName := formula.Path
+	if stateName == "" {
+		stateName = formula.Name
+	}
+
+	log.Printf("Executing state.apply: state=%s, target=%s, pillar=%v", stateName, target, pillarData)
+
 	// 执行state.apply
-	result, err := s.saltClient.ExecuteState(formula.Name, target, pillarData)
+	result, err := s.saltClient.ExecuteState(stateName, target, pillarData)
 	if err != nil {
 		deployment.Status = "failed"
 		deployment.ErrorMessage = fmt.Sprintf("Failed to execute state: %v", err)
@@ -222,36 +234,58 @@ func (s *formulaService) executeDeploymentAsync(deployment *models.FormulaDeploy
 	successCount := 0
 	failedCount := 0
 
+	log.Printf("Salt API result: %+v", result)
+
 	if resultData, ok := result["return"].([]interface{}); ok && len(resultData) > 0 {
 		if minions, ok := resultData[0].(map[string]interface{}); ok {
 			for minionID, minionResult := range minions {
 				results[minionID] = minionResult
 
-				// 检查结果是否成功
+				// Salt state.apply 返回格式: {minion_id: {state_id: {result: bool, ...}, ...}}
 				if minionResultMap, ok := minionResult.(map[string]interface{}); ok {
-					if resultList, ok := minionResultMap["result"].([]interface{}); ok {
-						allSuccess := true
-						for _, r := range resultList {
-							if resultMap, ok := r.(map[string]interface{}); ok {
-								if success, ok := resultMap["result"].(bool); ok && !success {
-									allSuccess = false
-									break
-								}
+					allSuccess := true
+					hasStates := false
+
+					for stateID, stateResult := range minionResultMap {
+						// 跳过非 state 结果的字段
+						if stateID == "retcode" {
+							continue
+						}
+
+						hasStates = true
+						if stateResultMap, ok := stateResult.(map[string]interface{}); ok {
+							if success, ok := stateResultMap["result"].(bool); ok && !success {
+								allSuccess = false
+								log.Printf("State %s failed on %s", stateID, minionID)
 							}
 						}
+					}
+
+					if hasStates {
 						if allSuccess {
 							successCount++
+							log.Printf("Minion %s: all states succeeded", minionID)
 						} else {
 							failedCount++
+							log.Printf("Minion %s: some states failed", minionID)
 						}
 					} else {
+						// 没有 state 结果，可能是错误
 						failedCount++
+						log.Printf("Minion %s: no state results found", minionID)
 					}
+				} else if errStr, ok := minionResult.(string); ok {
+					// 错误信息是字符串
+					failedCount++
+					log.Printf("Minion %s error: %s", minionID, errStr)
 				} else {
 					failedCount++
+					log.Printf("Minion %s: unexpected result format", minionID)
 				}
 			}
 		}
+	} else {
+		log.Printf("No return data in Salt API result")
 	}
 
 	// 更新部署结果
@@ -322,7 +356,13 @@ func (s *formulaService) SyncRepository(repoID uint) error {
 
 	log.Printf("Syncing repository: ID=%d, Name=%s, CreatedBy=%d", repo.ID, repo.Name, repo.CreatedBy)
 
-	// 同步仓库（克隆或更新Git仓库）
+	// 1. 首先同步到 Salt Master 的 /srv/salt 目录
+	if err := s.syncToSaltMaster(repo); err != nil {
+		log.Printf("Warning: Failed to sync to Salt Master: %v", err)
+		// 不返回错误，继续本地同步
+	}
+
+	// 2. 同步仓库到本地（用于扫描 Formula）
 	repoPath := repo.LocalPath
 	if repoPath == "" {
 		repoPath = fmt.Sprintf("/tmp/salt-formulas-%d", repo.ID)
@@ -364,12 +404,17 @@ func (s *formulaService) SyncRepository(repoID uint) error {
 		}
 
 		existing, err := s.formulaRepo.GetByName(formulaCopy.Name)
-		if err != nil && err.Error() != "record not found" {
-			log.Printf("Error checking existing formula %s: %v", formulaCopy.Name, err)
-			continue
-		}
-
-		if existing != nil {
+		if err != nil {
+			if err.Error() != "record not found" {
+				log.Printf("Error checking existing formula %s: %v", formulaCopy.Name, err)
+				continue
+			}
+			// record not found - 创建新Formula
+			log.Printf("Creating new formula: %s (created_by=%d)", formulaCopy.Name, formulaCopy.CreatedBy)
+			if err := s.formulaRepo.Create(&formulaCopy); err != nil {
+				log.Printf("Failed to create formula %s: %v", formulaCopy.Name, err)
+			}
+		} else if existing != nil && existing.ID > 0 {
 			// 更新现有Formula
 			existing.Description = formulaCopy.Description
 			existing.Category = formulaCopy.Category
@@ -377,17 +422,15 @@ func (s *formulaService) SyncRepository(repoID uint) error {
 			existing.Path = formulaCopy.Path
 			existing.Metadata = formulaCopy.Metadata
 			existing.UpdatedAt = time.Now()
-			log.Printf("Updating existing formula: %s", formulaCopy.Name)
+			log.Printf("Updating existing formula: %s (id=%d)", formulaCopy.Name, existing.ID)
 			if err := s.formulaRepo.Update(existing); err != nil {
 				log.Printf("Failed to update formula %s: %v", formulaCopy.Name, err)
-				continue
 			}
 		} else {
-			// 创建新Formula
+			// existing 为 nil 或 ID 为 0 - 创建新Formula
 			log.Printf("Creating new formula: %s (created_by=%d)", formulaCopy.Name, formulaCopy.CreatedBy)
 			if err := s.formulaRepo.Create(&formulaCopy); err != nil {
 				log.Printf("Failed to create formula %s: %v", formulaCopy.Name, err)
-				continue // 继续处理其他Formula，不要因为一个失败而停止整个同步
 			}
 		}
 	}
@@ -398,7 +441,8 @@ func (s *formulaService) SyncRepository(repoID uint) error {
 	return s.formulaRepo.UpdateRepository(repo)
 }
 
-// Formula发现
+// Formula发现 - 扫描根目录下的一级目录（扁平结构）
+// 目录命名格式: {category}_{name}，如 app_webapp, base_users, runtime_java
 func (s *formulaService) DiscoverFormulas(repoPath string) ([]models.Formula, error) {
 	var formulas []models.Formula
 
@@ -409,94 +453,75 @@ func (s *formulaService) DiscoverFormulas(repoPath string) ([]models.Formula, er
 		return nil, fmt.Errorf("repository path does not exist: %s", repoPath)
 	}
 
-	// 扫描目录结构
-	log.Printf("Starting directory walk from: %s", repoPath)
-	err := filepath.Walk(repoPath, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			log.Printf("Error walking path %s: %v", path, err)
-			return err
+	// 只扫描根目录下的一级目录
+	entries, err := os.ReadDir(repoPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read directory: %v", err)
+	}
+
+	for _, entry := range entries {
+		// 跳过非目录和隐藏目录
+		if !entry.IsDir() || strings.HasPrefix(entry.Name(), ".") {
+			continue
 		}
 
-		// 跳过根目录本身
-		if path == repoPath {
-			return nil
-		}
+		dirName := entry.Name()
+		dirPath := filepath.Join(repoPath, dirName)
 
 		// 检查是否是Formula目录（包含init.sls）
-		if info.IsDir() {
-			initPath := filepath.Join(path, "init.sls")
-			if _, err := os.Stat(initPath); err == nil {
-				// 发现Formula
-				relPath, _ := filepath.Rel(repoPath, path)
-				formulaName := filepath.Base(path)
-
-				log.Printf("Processing potential formula - path: %s, base: %s, rel: %s", path, formulaName, relPath)
-
-				// 确保Formula名称不为空，且不包含特殊字符
-				if formulaName == "" || formulaName == "." || formulaName == ".." ||
-				   strings.Contains(formulaName, "/") || strings.Contains(formulaName, "\\") ||
-				   strings.HasPrefix(formulaName, ".") {
-					log.Printf("Skipping invalid formula path: %s (basename: '%s')", path, formulaName)
-					return nil
-				}
-
-				// 确保相对路径不为空
-				if relPath == "" || relPath == "." {
-					log.Printf("Skipping root formula path: %s", path)
-					return nil
-				}
-
-				formula := models.Formula{
-					Name:        formulaName,
-					Path:        relPath,
-					Description: fmt.Sprintf("Auto-discovered formula: %s", formulaName),
-					Category:    s.inferCategory(relPath),
-					IsActive:    true,
-				}
-
-				log.Printf("Discovered Formula: %s (category: %s, path: %s, full_path: %s)", formula.Name, formula.Category, formula.Path, path)
-
-				// 解析元数据
-				if metadata, err := s.parseFormulaMetadata(path); err == nil {
-					metadataJSON, _ := json.Marshal(metadata)
-					formula.Metadata = metadataJSON
-				}
-
-				// 最后验证Formula数据
-				if formula.Name == "" {
-					log.Printf("Warning: Formula name is empty for path: %s", path)
-					return nil
-				}
-
-				formulas = append(formulas, formula)
-			}
+		initPath := filepath.Join(dirPath, "init.sls")
+		if _, err := os.Stat(initPath); err != nil {
+			log.Printf("Skipping directory %s: no init.sls found", dirName)
+			continue
 		}
 
-		return nil
-	})
+		// 确保Formula名称有效
+		if dirName == "" || dirName == "." || dirName == ".." {
+			log.Printf("Skipping invalid formula directory: %s", dirName)
+			continue
+		}
+
+		formula := models.Formula{
+			Name:        dirName,
+			Path:        dirName, // 扁平结构，path 就是目录名
+			Description: fmt.Sprintf("Auto-discovered formula: %s", dirName),
+			Category:    s.inferCategory(dirName),
+			IsActive:    true,
+		}
+
+		log.Printf("Discovered Formula: %s (category: %s, path: %s)", formula.Name, formula.Category, formula.Path)
+
+		// 解析元数据
+		if metadata, err := s.parseFormulaMetadata(dirPath); err == nil {
+			metadataJSON, _ := json.Marshal(metadata)
+			formula.Metadata = metadataJSON
+		}
+
+		formulas = append(formulas, formula)
+	}
 
 	log.Printf("Formula discovery completed, found %d formulas", len(formulas))
-	return formulas, err
+	return formulas, nil
 }
 
-// 推断Formula分类
-func (s *formulaService) inferCategory(relPath string) string {
-	parts := strings.Split(relPath, string(filepath.Separator))
-	if len(parts) >= 2 {
-		parentDir := parts[0]
-		switch parentDir {
-		case "base":
-			return "base"
-		case "middleware":
-			return "middleware"
-		case "runtime":
-			return "runtime"
-		case "app":
-			return "app"
-		default:
-			return "custom"
+// 推断Formula分类 - 从目录名解析分类
+// 目录命名格式: {category}_{name}，如 app_webapp, base_users, runtime_java
+// 支持的分类前缀: app_, base_, middleware_, runtime_
+func (s *formulaService) inferCategory(dirName string) string {
+	// 检查是否以已知分类前缀开头
+	prefixes := map[string]string{
+		"app_":        "app",
+		"base_":       "base",
+		"middleware_": "middleware",
+		"runtime_":    "runtime",
+	}
+
+	for prefix, category := range prefixes {
+		if strings.HasPrefix(dirName, prefix) {
+			return category
 		}
 	}
+
 	return "custom"
 }
 
@@ -590,5 +615,104 @@ func (s *formulaService) gitPull(path, branch string) error {
 	}
 
 	log.Printf("Successfully pulled latest changes to %s", path)
+	return nil
+}
+
+// syncToSaltMaster 通过 rsync 同步仓库到 Salt Master
+func (s *formulaService) syncToSaltMaster(repo *models.FormulaRepository) error {
+	log.Printf("Syncing repository to Salt Master via rsync: %s", repo.URL)
+
+	// 查找 Salt Master 主机信息
+	saltMasterHost, err := s.hostRepo.GetByHostname("salt-master")
+	if err != nil {
+		return fmt.Errorf("failed to find salt-master host: %v", err)
+	}
+
+	if saltMasterHost == nil {
+		return fmt.Errorf("salt-master host not found in database")
+	}
+
+	// 获取 SSH 端口
+	sshPort := saltMasterHost.SSHPort
+	if sshPort == 0 {
+		sshPort = 22
+	}
+
+	// 获取 SSH 用户名（从 SSH Key 或默认 root）
+	sshUser := "root"
+	var sshKeyPath string
+
+	if saltMasterHost.SSHKeyID != nil && *saltMasterHost.SSHKeyID > 0 {
+		sshKey, err := s.sshKeyRepo.GetByID(*saltMasterHost.SSHKeyID)
+		if err != nil {
+			log.Printf("Warning: failed to get SSH key: %v, will try without key", err)
+		} else if sshKey != nil {
+			// 如果 SSH Key 有指定用户名，使用它
+			if sshKey.Username != "" {
+				sshUser = sshKey.Username
+			}
+
+			// 将私钥写入临时文件
+			tmpKeyFile, err := os.CreateTemp("", "ssh-key-*")
+			if err != nil {
+				return fmt.Errorf("failed to create temp key file: %v", err)
+			}
+			defer os.Remove(tmpKeyFile.Name())
+
+			if _, err := tmpKeyFile.WriteString(sshKey.PrivateKey); err != nil {
+				tmpKeyFile.Close()
+				return fmt.Errorf("failed to write private key: %v", err)
+			}
+			tmpKeyFile.Close()
+
+			// 设置正确的权限
+			if err := os.Chmod(tmpKeyFile.Name(), 0600); err != nil {
+				return fmt.Errorf("failed to set key file permissions: %v", err)
+			}
+
+			sshKeyPath = tmpKeyFile.Name()
+		}
+	}
+
+	// 本地仓库路径
+	localPath := repo.LocalPath
+	if localPath == "" {
+		localPath = fmt.Sprintf("/tmp/salt-formulas-%d", repo.ID)
+	}
+
+	// 确保本地仓库已同步
+	if err := s.syncGitRepository(repo, localPath); err != nil {
+		return fmt.Errorf("failed to sync local repository: %v", err)
+	}
+
+	// Salt Master 上的目标路径
+	saltPath := "/srv/salt/"
+
+	// 构建 rsync 命令
+	// rsync -avz --delete -e "ssh -p PORT -i KEYFILE -o StrictHostKeyChecking=no" LOCAL_PATH/ user@IP:/srv/salt/
+	sshCmd := fmt.Sprintf("ssh -p %d -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null", sshPort)
+	if sshKeyPath != "" {
+		sshCmd = fmt.Sprintf("%s -i %s", sshCmd, sshKeyPath)
+	}
+
+	rsyncArgs := []string{
+		"-avz",
+		"--delete",
+		"--exclude", ".git",
+		"-e", sshCmd,
+		localPath + "/",
+		fmt.Sprintf("%s@%s:%s", sshUser, saltMasterHost.IPAddress, saltPath),
+	}
+
+	log.Printf("Executing rsync command: rsync %v", rsyncArgs)
+
+	cmd := exec.Command("rsync", rsyncArgs...)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("rsync failed: %v, output: %s", err, string(output))
+	}
+
+	log.Printf("Rsync output: %s", string(output))
+	log.Printf("Successfully synced repository to Salt Master via rsync")
 	return nil
 }
