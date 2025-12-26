@@ -270,40 +270,15 @@ const HostTags: React.FC = () => {
     {
       title: '序号',
       key: 'index',
-      width: 80,
+      width: 60,
       render: (_: any, __: any, index: number) => (page - 1) * pageSize + index + 1,
     },
     {
       title: '标签',
       key: 'tag',
-      width: 200,
+      width: 120,
       render: (_: any, record: HostTag) => (
         <Tag color={record.color || '#1890ff'}>{record.name}</Tag>
-      ),
-    },
-    {
-      title: '名称',
-      dataIndex: 'name',
-      key: 'name',
-    },
-    {
-      title: '颜色',
-      dataIndex: 'color',
-      key: 'color',
-      width: 120,
-      render: (color: string) => (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <div
-            style={{
-              width: 20,
-              height: 20,
-              backgroundColor: color || '#1890ff',
-              borderRadius: 4,
-              border: '1px solid #d9d9d9',
-            }}
-          />
-          <span>{color || '#1890ff'}</span>
-        </div>
       ),
     },
     {
@@ -314,14 +289,14 @@ const HostTags: React.FC = () => {
       render: (text: string) => text || '-',
     },
     {
-      title: '使用数量',
+      title: '使用',
       key: 'host_count',
-      width: 100,
+      width: 80,
       render: (_: any, record: HostTag) => {
         const count = record.hosts?.length || 0;
         return count > 0 ? (
           <Button type="link" size="small" onClick={() => handleViewHosts(record)} style={{ padding: 0 }}>
-            {count} 台主机
+            {count}
           </Button>
         ) : (
           <span style={{ color: '#999' }}>0</span>
@@ -332,31 +307,24 @@ const HostTags: React.FC = () => {
       title: '创建时间',
       dataIndex: 'created_at',
       key: 'created_at',
-      width: 180,
+      width: 160,
       render: (text: string) => new Date(text).toLocaleString(),
     },
     {
       title: '操作',
       key: 'action',
-      width: 200,
-      fixed: 'right' as const,
+      width: 120,
       render: (_: any, record: HostTag) => (
-        <Space>
-          <Button type="link" size="small" icon={<EyeOutlined />} onClick={() => handleViewDetail(record)}>
-            详情
-          </Button>
-          <Button type="link" size="small" icon={<EditOutlined />} onClick={() => handleEdit(record)}>
-            编辑
-          </Button>
+        <Space size={0}>
+          <Button type="link" size="small" icon={<EyeOutlined />} onClick={() => handleViewDetail(record)} />
+          <Button type="link" size="small" icon={<EditOutlined />} onClick={() => handleEdit(record)} />
           <Popconfirm
             title="确定要删除这个主机标签吗？"
             onConfirm={() => handleDelete(record.id)}
             okText="确定"
             cancelText="取消"
           >
-            <Button type="link" danger size="small" icon={<DeleteOutlined />}>
-              删除
-            </Button>
+            <Button type="link" danger size="small" icon={<DeleteOutlined />} />
           </Popconfirm>
         </Space>
       ),
@@ -401,6 +369,7 @@ const HostTags: React.FC = () => {
           rowKey="id"
           loading={loading}
           rowSelection={rowSelection}
+          scroll={{ x: 'max-content' }}
           pagination={{
             current: page,
             pageSize: pageSize,

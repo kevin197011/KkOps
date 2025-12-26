@@ -6,7 +6,6 @@ import {
   Modal,
   Form,
   Input,
-  InputNumber,
   message,
   Popconfirm,
   Tag,
@@ -102,36 +101,25 @@ const CloudPlatforms: React.FC = () => {
 
   const columns: ColumnsType<CloudPlatform> = [
     {
+      title: '序号',
+      key: 'index',
+      width: 60,
+      render: (_: any, __: any, index: number) => index + 1,
+    },
+    {
       title: '名称',
       dataIndex: 'name',
       key: 'name',
-      width: 120,
+      width: 100,
     },
     {
       title: '显示名称',
       dataIndex: 'display_name',
       key: 'display_name',
-      width: 150,
+      width: 120,
       render: (text, record) => (
-        <Space>
-          {record.color && (
-            <Tag color={record.color}>{text}</Tag>
-          )}
-          {!record.color && text}
-        </Space>
+        record.color ? <Tag color={record.color}>{text}</Tag> : text
       ),
-    },
-    {
-      title: '图标',
-      dataIndex: 'icon',
-      key: 'icon',
-      width: 100,
-    },
-    {
-      title: '排序',
-      dataIndex: 'sort_order',
-      key: 'sort_order',
-      width: 80,
     },
     {
       title: '描述',
@@ -142,34 +130,28 @@ const CloudPlatforms: React.FC = () => {
     {
       title: '操作',
       key: 'action',
-      width: 200,
+      width: 120,
       render: (_, record) => (
         <Space size="small">
           <Button
-            type="link"
+            type="text"
             size="small"
             icon={<EyeOutlined />}
             onClick={() => handleView(record)}
-          >
-            详情
-          </Button>
+          />
           <Button
-            type="link"
+            type="text"
             size="small"
             icon={<EditOutlined />}
             onClick={() => handleEdit(record)}
-          >
-            编辑
-          </Button>
+          />
           <Popconfirm
             title="确定要删除这个云平台吗？"
             onConfirm={() => handleDelete(record.id)}
             okText="确定"
             cancelText="取消"
           >
-            <Button type="link" size="small" danger icon={<DeleteOutlined />}>
-              删除
-            </Button>
+            <Button type="text" size="small" danger icon={<DeleteOutlined />} />
           </Popconfirm>
         </Space>
       ),
@@ -196,6 +178,7 @@ const CloudPlatforms: React.FC = () => {
         rowKey="id"
         loading={loading}
         pagination={false}
+        scroll={{ x: 'max-content' }}
       />
 
       <Modal
@@ -220,14 +203,8 @@ const CloudPlatforms: React.FC = () => {
           >
             <Input placeholder="如: AWS, 阿里云, Azure" />
           </Form.Item>
-          <Form.Item name="icon" label="图标">
-            <Input placeholder="图标名称（可选）" />
-          </Form.Item>
           <Form.Item name="color" label="颜色">
             <ColorPicker showText />
-          </Form.Item>
-          <Form.Item name="sort_order" label="排序">
-            <InputNumber min={0} style={{ width: '100%' }} />
           </Form.Item>
           <Form.Item name="description" label="描述">
             <Input.TextArea rows={3} placeholder="云平台描述（可选）" />
@@ -263,13 +240,11 @@ const CloudPlatforms: React.FC = () => {
                 viewingPlatform.display_name
               )}
             </p>
-            <p><strong>图标：</strong>{viewingPlatform.icon || '-'}</p>
             <p><strong>颜色：</strong>
               {viewingPlatform.color ? (
                 <Tag color={viewingPlatform.color}>{viewingPlatform.color}</Tag>
               ) : '-'}
             </p>
-            <p><strong>排序：</strong>{viewingPlatform.sort_order}</p>
             <p><strong>描述：</strong>{viewingPlatform.description || '-'}</p>
             <p><strong>创建时间：</strong>{new Date(viewingPlatform.created_at).toLocaleString()}</p>
             <p><strong>更新时间：</strong>{new Date(viewingPlatform.updated_at).toLocaleString()}</p>

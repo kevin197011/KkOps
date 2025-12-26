@@ -7,10 +7,8 @@ import {
   Modal,
   Form,
   Input,
-  Select,
   message,
   Popconfirm,
-  Tag,
   Descriptions,
 } from 'antd';
 import {
@@ -20,14 +18,10 @@ import {
   ReloadOutlined,
   EyeOutlined,
 } from '@ant-design/icons';
-import { hostGroupService, HostGroup, CreateHostGroupRequest } from '../services/hostGroup';
-import { projectService, Project } from '../services/project';
-
-const { Option } = Select;
+import { hostGroupService, HostGroup } from '../services/hostGroup';
 
 const HostGroups: React.FC = () => {
   const [groups, setGroups] = useState<HostGroup[]>([]);
-  const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(false);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -36,33 +30,17 @@ const HostGroups: React.FC = () => {
   const [detailModalVisible, setDetailModalVisible] = useState(false);
   const [editingGroup, setEditingGroup] = useState<HostGroup | null>(null);
   const [detailGroup, setDetailGroup] = useState<HostGroup | null>(null);
-  const [selectedProjectId, setSelectedProjectId] = useState<number | undefined>(undefined);
   const [form] = Form.useForm();
-
-  useEffect(() => {
-    loadProjects();
-  }, []);
 
   useEffect(() => {
     loadGroups();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, pageSize, selectedProjectId]);
-
-  const loadProjects = async () => {
-    try {
-      const response = await projectService.list(1, 100);
-      setProjects(response.projects);
-    } catch (error: any) {
-      message.error('加载项目列表失败');
-    }
-  };
+  }, [page, pageSize]);
 
   const loadGroups = async () => {
     setLoading(true);
     try {
-      const response = await hostGroupService.list(page, pageSize, {
-        project_id: selectedProjectId,
-      });
+      const response = await hostGroupService.list(page, pageSize);
       setGroups(response.groups);
       setTotal(response.total);
     } catch (error: any) {
@@ -95,7 +73,6 @@ const HostGroups: React.FC = () => {
       form.setFieldsValue({
         name: response.group.name,
         description: response.group.description,
-        project_id: response.group.project_id,
       });
       setModalVisible(true);
     } catch (error: any) {
@@ -124,7 +101,6 @@ const HostGroups: React.FC = () => {
         message.success('更新成功');
       } else {
         await hostGroupService.create({
-          project_id: values.project_id,
           name: values.name,
           description: values.description,
         });
@@ -144,21 +120,14 @@ const HostGroups: React.FC = () => {
     {
       title: '序号',
       key: 'index',
-      width: 80,
+      width: 60,
       render: (_: any, __: any, index: number) => (page - 1) * pageSize + index + 1,
     },
     {
       title: '名称',
       dataIndex: 'name',
       key: 'name',
-    },
-    {
-      title: '项目',
-      key: 'project',
       width: 150,
-      render: (_: any, record: HostGroup) => (
-        <span>{record.project?.name || '-'}</span>
-      ),
     },
     {
       title: '描述',
@@ -168,9 +137,9 @@ const HostGroups: React.FC = () => {
       render: (text: string) => text || '-',
     },
     {
-      title: '主机数量',
+      title: '主机数',
       key: 'host_count',
-      width: 100,
+      width: 80,
       render: (_: any, record: HostGroup) => (
         <span>{record.hosts?.length || 0}</span>
       ),
@@ -179,32 +148,27 @@ const HostGroups: React.FC = () => {
       title: '创建时间',
       dataIndex: 'created_at',
       key: 'created_at',
-      width: 180,
+      width: 160,
       render: (text: string) => new Date(text).toLocaleString(),
     },
     {
       title: '操作',
       key: 'action',
-      width: 200,
-      fixed: 'right' as const,
+      width: 120,
       render: (_: any, record: HostGroup) => (
-        <Space>
+        <Space size={0}>
           <Button
             type="link"
             size="small"
             icon={<EyeOutlined />}
             onClick={() => handleViewDetail(record)}
-          >
-            详情
-          </Button>
+          />
           <Button
             type="link"
             size="small"
             icon={<EditOutlined />}
             onClick={() => handleEdit(record)}
-          >
-            编辑
-          </Button>
+          />
           <Popconfirm
             title="确定要删除这个主机组吗？"
             onConfirm={() => handleDelete(record.id)}
@@ -216,9 +180,7 @@ const HostGroups: React.FC = () => {
               danger
               size="small"
               icon={<DeleteOutlined />}
-            >
-              删除
-            </Button>
+            />
           </Popconfirm>
         </Space>
       ),
@@ -231,19 +193,6 @@ const HostGroups: React.FC = () => {
         <div style={{ marginBottom: '16px', display: 'flex', justifyContent: 'space-between' }}>
           <h2 style={{ margin: 0 }}>主机组管理</h2>
           <Space>
-            <Select
-              placeholder="筛选项目"
-              style={{ width: 200 }}
-              value={selectedProjectId}
-              onChange={(value) => setSelectedProjectId(value)}
-              allowClear
-            >
-              {projects.map((project) => (
-                <Option key={project.id} value={project.id}>
-                  {project.name}
-                </Option>
-              ))}
-            </Select>
             <Button icon={<ReloadOutlined />} onClick={loadGroups}>
               刷新
             </Button>
@@ -258,6 +207,7 @@ const HostGroups: React.FC = () => {
           dataSource={groups}
           rowKey="id"
           loading={loading}
+          scroll={{ x: 'max-content' }}
           pagination={{
             current: page,
             pageSize: pageSize,
@@ -284,27 +234,12 @@ const HostGroups: React.FC = () => {
         cancelText="取消"
       >
         <Form form={form} layout="vertical">
-          {!editingGroup && (
-            <Form.Item
-              name="project_id"
-              label="项目"
-              rules={[{ required: true, message: '请选择项目' }]}
-            >
-              <Select placeholder="请选择项目">
-                {projects.map((project) => (
-                  <Option key={project.id} value={project.id}>
-                    {project.name}
-                  </Option>
-                ))}
-              </Select>
-            </Form.Item>
-          )}
           <Form.Item
             name="name"
             label="名称"
             rules={[{ required: true, message: '请输入主机组名称' }]}
           >
-            <Input placeholder="请输入主机组名称" />
+            <Input placeholder="如：运维组、数据库组、Web服务组" />
           </Form.Item>
           <Form.Item name="description" label="描述">
             <Input.TextArea
@@ -320,13 +255,12 @@ const HostGroups: React.FC = () => {
         title="主机组详情"
         open={detailModalVisible}
         onCancel={() => setDetailModalVisible(false)}
-        footer={null}
-        width={600}
+        footer={<Button onClick={() => setDetailModalVisible(false)}>关闭</Button>}
+        width={500}
       >
         {detailGroup && (
           <Descriptions bordered column={1} size="small">
             <Descriptions.Item label="名称">{detailGroup.name}</Descriptions.Item>
-            <Descriptions.Item label="项目">{detailGroup.project?.name || '-'}</Descriptions.Item>
             <Descriptions.Item label="描述">{detailGroup.description || '-'}</Descriptions.Item>
             <Descriptions.Item label="主机数量">{detailGroup.hosts?.length || 0}</Descriptions.Item>
             <Descriptions.Item label="创建时间">
@@ -343,4 +277,3 @@ const HostGroups: React.FC = () => {
 };
 
 export default HostGroups;
-

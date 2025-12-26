@@ -11,17 +11,19 @@ import {
   Tag,
   Card,
   Select,
-  Transfer,
   Descriptions,
+  Divider,
+  Row,
+  Col,
+  Checkbox,
+  Switch,
 } from 'antd';
 import {
   PlusOutlined,
   EditOutlined,
   DeleteOutlined,
   ReloadOutlined,
-  UserOutlined,
   EyeOutlined,
-  LockOutlined,
 } from '@ant-design/icons';
 import { userService, CreateUserRequest, UpdateUserRequest } from '../services/user';
 import { User } from '../services/auth';
@@ -43,16 +45,12 @@ const Users: React.FC = () => {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [modalVisible, setModalVisible] = useState(false);
-  const [roleModalVisible, setRoleModalVisible] = useState(false);
   const [detailModalVisible, setDetailModalVisible] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
-  const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [detailUser, setDetailUser] = useState<User | null>(null);
-  const [userRoles, setUserRoles] = useState<number[]>([]);
-  const [passwordModalVisible, setPasswordModalVisible] = useState(false);
-  const [passwordUser, setPasswordUser] = useState<User | null>(null);
+  const [selectedRoles, setSelectedRoles] = useState<number[]>([]);
+  const [changePassword, setChangePassword] = useState(false);
   const [form] = Form.useForm();
-  const [passwordForm] = Form.useForm();
 
   useEffect(() => {
     loadUsers();
@@ -82,16 +80,6 @@ const Users: React.FC = () => {
     }
   };
 
-  const loadUserRoles = async (userId: number) => {
-    try {
-      const response = await api.get(`/users/${userId}`);
-      const user = response.data.user;
-      setUserRoles(user.roles?.map((r: Role) => r.id) || []);
-    } catch (error: any) {
-      message.error('加载用户角色失败');
-    }
-  };
-
   const handleViewDetail = async (user: User) => {
     try {
       const response = await api.get(`/users/${user.id}`);
@@ -104,18 +92,29 @@ const Users: React.FC = () => {
 
   const handleCreate = () => {
     setEditingUser(null);
+    setSelectedRoles([]);
+    setChangePassword(false);
     form.resetFields();
     setModalVisible(true);
   };
 
-  const handleEdit = (user: User) => {
-    setEditingUser(user);
-    form.setFieldsValue({
-      username: user.username,
-      email: user.email,
-      display_name: user.display_name,
-    });
-    setModalVisible(true);
+  const handleEdit = async (user: User) => {
+    try {
+      const response = await api.get(`/users/${user.id}`);
+      const userData = response.data.user;
+      setEditingUser(userData);
+      setSelectedRoles(userData.roles?.map((r: Role) => r.id) || []);
+      setChangePassword(false);
+      form.setFieldsValue({
+        username: userData.username,
+        email: userData.email,
+        display_name: userData.display_name,
+        status: userData.status || 'active',
+      });
+      setModalVisible(true);
+    } catch (error: any) {
+      message.error('获取用户详情失败');
+    }
   };
 
   const handleDelete = async (id: number) => {
@@ -128,73 +127,55 @@ const Users: React.FC = () => {
     }
   };
 
-  const handleAssignRole = async (user: User) => {
-    setSelectedUser(user);
-    await loadUserRoles(user.id);
-    setRoleModalVisible(true);
-  };
-
-  const handleRoleSubmit = async () => {
-    if (!selectedUser) return;
-
-    try {
-      // 获取当前用户角色
-      const currentResponse = await api.get(`/users/${selectedUser.id}`);
-      const currentRoles = currentResponse.data.user.roles?.map((r: Role) => r.id) || [];
-
-      // 找出需要添加和删除的角色
-      const toAdd = userRoles.filter((id: number) => !currentRoles.includes(id));
-      const toRemove = currentRoles.filter((id: number) => !userRoles.includes(id));
-
-      // 添加新角色
-      for (const roleId of toAdd) {
-        await userService.assignRole(selectedUser.id, roleId);
-      }
-
-      // 删除旧角色
-      for (const roleId of toRemove) {
-        await userService.removeRole(selectedUser.id, roleId);
-      }
-
-      message.success('角色分配成功');
-      setRoleModalVisible(false);
-      loadUsers();
-    } catch (error: any) {
-      message.error(error.response?.data?.error || '角色分配失败');
-    }
-  };
-
-  const handleResetPassword = (user: User) => {
-    setPasswordUser(user);
-    passwordForm.resetFields();
-    setPasswordModalVisible(true);
-  };
-
-  const handlePasswordSubmit = async () => {
-    if (!passwordUser) return;
-
-    try {
-      const values = await passwordForm.validateFields();
-      await userService.resetPassword(passwordUser.id, values.new_password);
-      message.success('密码重置成功');
-      setPasswordModalVisible(false);
-      passwordForm.resetFields();
-    } catch (error: any) {
-      if (error.errorFields) {
-        return;
-      }
-      message.error(error.response?.data?.error || '密码重置失败');
-    }
-  };
-
   const handleSubmit = async () => {
     try {
       const values = await form.validateFields();
+      
       if (editingUser) {
-        await userService.update(editingUser.id, values as UpdateUserRequest);
+        // 更新用户基本信息
+        const updateData: UpdateUserRequest = {
+          email: values.email,
+          display_name: values.display_name,
+          status: values.status,
+        };
+        await userService.update(editingUser.id, updateData);
+        
+        // 更新角色：计算差异
+        const currentRoles = editingUser.roles?.map((r: Role) => r.id) || [];
+        const toAdd = selectedRoles.filter(id => !currentRoles.includes(id));
+        const toRemove = currentRoles.filter(id => !selectedRoles.includes(id));
+        
+        // 添加新角色
+        for (const roleId of toAdd) {
+          await userService.assignRole(editingUser.id, roleId);
+        }
+        // 移除角色
+        for (const roleId of toRemove) {
+          await userService.removeRole(editingUser.id, roleId);
+        }
+        
+        // 如果需要修改密码
+        if (changePassword && values.new_password) {
+          await userService.resetPassword(editingUser.id, values.new_password);
+        }
+        
         message.success('更新成功');
       } else {
-        await userService.create(values as CreateUserRequest);
+        // 创建用户
+        const createData: CreateUserRequest = {
+          username: values.username,
+          password: values.password,
+          email: values.email,
+          display_name: values.display_name,
+        };
+        const response = await userService.create(createData);
+        const newUserId = response.user.id;
+        
+        // 分配角色
+        for (const roleId of selectedRoles) {
+          await userService.assignRole(newUserId, roleId);
+        }
+        
         message.success('创建成功');
       }
       setModalVisible(false);
@@ -204,6 +185,14 @@ const Users: React.FC = () => {
         return;
       }
       message.error(error.response?.data?.error || '操作失败');
+    }
+  };
+
+  const handleRoleToggle = (roleId: number, checked: boolean) => {
+    if (checked) {
+      setSelectedRoles([...selectedRoles, roleId]);
+    } else {
+      setSelectedRoles(selectedRoles.filter(id => id !== roleId));
     }
   };
 
@@ -244,7 +233,7 @@ const Users: React.FC = () => {
       title: '角色',
       key: 'roles',
       render: (_: any, record: User) => (
-        <Space>
+        <Space wrap size={[4, 4]}>
           {record.roles?.map((role: Role) => (
             <Tag key={role.id} color="blue">
               {role.name}
@@ -268,11 +257,12 @@ const Users: React.FC = () => {
     {
       title: '操作',
       key: 'action',
-      width: 320,
+      width: 180,
       render: (_: any, record: User) => (
         <Space>
           <Button
             type="link"
+            size="small"
             icon={<EyeOutlined />}
             onClick={() => handleViewDetail(record)}
           >
@@ -280,24 +270,11 @@ const Users: React.FC = () => {
           </Button>
           <Button
             type="link"
+            size="small"
             icon={<EditOutlined />}
             onClick={() => handleEdit(record)}
           >
             编辑
-          </Button>
-          <Button
-            type="link"
-            icon={<LockOutlined />}
-            onClick={() => handleResetPassword(record)}
-          >
-            密码
-          </Button>
-          <Button
-            type="link"
-            icon={<UserOutlined />}
-            onClick={() => handleAssignRole(record)}
-          >
-            角色
           </Button>
           <Popconfirm
             title="确定要删除这个用户吗？"
@@ -305,7 +282,7 @@ const Users: React.FC = () => {
             okText="确定"
             cancelText="取消"
           >
-            <Button type="link" danger icon={<DeleteOutlined />}>
+            <Button type="link" danger size="small" icon={<DeleteOutlined />}>
               删除
             </Button>
           </Popconfirm>
@@ -358,69 +335,158 @@ const Users: React.FC = () => {
         onCancel={() => setModalVisible(false)}
         okText="确定"
         cancelText="取消"
-        width={600}
+        width={700}
       >
         <Form form={form} layout="vertical">
-          {!editingUser && (
-            <>
+          <Row gutter={16}>
+            <Col span={12}>
               <Form.Item
                 name="username"
                 label="用户名"
                 rules={[{ required: true, message: '请输入用户名' }]}
               >
-                <Input placeholder="请输入用户名" />
+                <Input placeholder="请输入用户名" disabled={!!editingUser} />
               </Form.Item>
+            </Col>
+            <Col span={12}>
               <Form.Item
-                name="password"
-                label="密码"
-                rules={[{ required: true, message: '请输入密码' }]}
+                name="display_name"
+                label="显示名称"
               >
-                <Input.Password placeholder="请输入密码" />
+                <Input placeholder="请输入显示名称" />
               </Form.Item>
-            </>
-          )}
-          <Form.Item
-            name="email"
-            label="邮箱"
-            rules={[
-              { required: true, message: '请输入邮箱' },
-              { type: 'email', message: '请输入有效的邮箱地址' },
-            ]}
-          >
-            <Input placeholder="请输入邮箱" />
-          </Form.Item>
-          <Form.Item
-            name="display_name"
-            label="显示名称"
-          >
-            <Input placeholder="请输入显示名称" />
-          </Form.Item>
+            </Col>
+          </Row>
+          
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item
+                name="email"
+                label="邮箱"
+                rules={[
+                  { required: true, message: '请输入邮箱' },
+                  { type: 'email', message: '请输入有效的邮箱地址' },
+                ]}
+              >
+                <Input placeholder="请输入邮箱" />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              {editingUser ? (
+                <Form.Item
+                  name="status"
+                  label="状态"
+                  rules={[{ required: true, message: '请选择状态' }]}
+                >
+                  <Select placeholder="请选择状态">
+                    <Option value="active">活跃</Option>
+                    <Option value="inactive">未激活</Option>
+                    <Option value="suspended">已暂停</Option>
+                  </Select>
+                </Form.Item>
+              ) : (
+                <Form.Item
+                  name="password"
+                  label="密码"
+                  rules={[
+                    { required: true, message: '请输入密码' },
+                    { min: 6, message: '密码长度至少6位' },
+                  ]}
+                >
+                  <Input.Password placeholder="请输入密码" />
+                </Form.Item>
+              )}
+            </Col>
+          </Row>
         </Form>
-      </Modal>
-
-      {/* 角色分配模态框 */}
-      <Modal
-        title={`分配角色 - ${selectedUser?.username || ''}`}
-        open={roleModalVisible}
-        onOk={handleRoleSubmit}
-        onCancel={() => setRoleModalVisible(false)}
-        okText="确定"
-        cancelText="取消"
-        width={500}
-      >
-        <Select
-          mode="multiple"
-          style={{ width: '100%' }}
-          placeholder="选择角色"
-          value={userRoles}
-          onChange={setUserRoles}
-        >
-          {roles.map((role) => (
-            <Option key={role.id} value={role.id}>
-              {role.name} - {role.description}
-            </Option>
-          ))}
-        </Select>
+        
+        {/* 角色配置 */}
+        <Divider style={{ marginTop: 8 }}>
+          <span>角色配置</span>
+          <span style={{ fontSize: 12, color: '#999', marginLeft: 8 }}>
+            (已选 {selectedRoles.length} 项)
+          </span>
+        </Divider>
+        
+        <Card size="small" style={{ marginBottom: 16 }}>
+          <Row gutter={[8, 8]}>
+            {roles.map((role) => (
+              <Col span={8} key={role.id}>
+                <Checkbox
+                  checked={selectedRoles.includes(role.id)}
+                  onChange={(e) => handleRoleToggle(role.id, e.target.checked)}
+                >
+                  <span>{role.name}</span>
+                  {role.description && (
+                    <span style={{ color: '#999', fontSize: 12, marginLeft: 4 }}>
+                      ({role.description})
+                    </span>
+                  )}
+                </Checkbox>
+              </Col>
+            ))}
+            {roles.length === 0 && (
+              <Col span={24}>
+                <span style={{ color: '#999' }}>暂无可用角色</span>
+              </Col>
+            )}
+          </Row>
+        </Card>
+        
+        {/* 修改密码（仅编辑时显示） */}
+        {editingUser && (
+          <>
+            <Divider style={{ marginTop: 8 }}>
+              <Space>
+                <span>修改密码</span>
+                <Switch
+                  size="small"
+                  checked={changePassword}
+                  onChange={setChangePassword}
+                />
+              </Space>
+            </Divider>
+            
+            {changePassword && (
+              <Form form={form} layout="vertical">
+                <Row gutter={16}>
+                  <Col span={12}>
+                    <Form.Item
+                      name="new_password"
+                      label="新密码"
+                      rules={[
+                        { required: changePassword, message: '请输入新密码' },
+                        { min: 6, message: '密码长度至少6位' },
+                      ]}
+                    >
+                      <Input.Password placeholder="请输入新密码" />
+                    </Form.Item>
+                  </Col>
+                  <Col span={12}>
+                    <Form.Item
+                      name="confirm_password"
+                      label="确认密码"
+                      dependencies={['new_password']}
+                      rules={[
+                        { required: changePassword, message: '请确认新密码' },
+                        ({ getFieldValue }) => ({
+                          validator(_, value) {
+                            if (!value || getFieldValue('new_password') === value) {
+                              return Promise.resolve();
+                            }
+                            return Promise.reject(new Error('两次输入的密码不一致'));
+                          },
+                        }),
+                      ]}
+                    >
+                      <Input.Password placeholder="请再次输入新密码" />
+                    </Form.Item>
+                  </Col>
+                </Row>
+              </Form>
+            )}
+          </>
+        )}
       </Modal>
 
       {/* 用户详情模态框 */}
@@ -428,7 +494,7 @@ const Users: React.FC = () => {
         title="用户详情"
         open={detailModalVisible}
         onCancel={() => setDetailModalVisible(false)}
-        footer={null}
+        footer={<Button onClick={() => setDetailModalVisible(false)}>关闭</Button>}
         width={600}
       >
         {detailUser && (
@@ -436,7 +502,7 @@ const Users: React.FC = () => {
             <Descriptions.Item label="用户名">{detailUser.username}</Descriptions.Item>
             <Descriptions.Item label="显示名称">{detailUser.display_name || '-'}</Descriptions.Item>
             <Descriptions.Item label="邮箱">{detailUser.email}</Descriptions.Item>
-            <Descriptions.Item label="状态" span={2}>
+            <Descriptions.Item label="状态">
               {getStatusTag(detailUser.status || 'active')}
             </Descriptions.Item>
             <Descriptions.Item label="角色" span={2}>
@@ -458,54 +524,8 @@ const Users: React.FC = () => {
           </Descriptions>
         )}
       </Modal>
-
-      {/* 重置密码模态框 */}
-      <Modal
-        title={`重置密码 - ${passwordUser?.username || ''}`}
-        open={passwordModalVisible}
-        onOk={handlePasswordSubmit}
-        onCancel={() => {
-          setPasswordModalVisible(false);
-          passwordForm.resetFields();
-        }}
-        okText="确定"
-        cancelText="取消"
-        width={400}
-      >
-        <Form form={passwordForm} layout="vertical">
-          <Form.Item
-            name="new_password"
-            label="新密码"
-            rules={[
-              { required: true, message: '请输入新密码' },
-              { min: 6, message: '密码长度至少6位' },
-            ]}
-          >
-            <Input.Password placeholder="请输入新密码" />
-          </Form.Item>
-          <Form.Item
-            name="confirm_password"
-            label="确认密码"
-            dependencies={['new_password']}
-            rules={[
-              { required: true, message: '请确认新密码' },
-              ({ getFieldValue }) => ({
-                validator(_, value) {
-                  if (!value || getFieldValue('new_password') === value) {
-                    return Promise.resolve();
-                  }
-                  return Promise.reject(new Error('两次输入的密码不一致'));
-                },
-              }),
-            ]}
-          >
-            <Input.Password placeholder="请再次输入新密码" />
-          </Form.Item>
-        </Form>
-      </Modal>
     </>
   );
 };
 
 export default Users;
-

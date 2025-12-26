@@ -6,7 +6,6 @@ import {
   Modal,
   Form,
   Input,
-  InputNumber,
   message,
   Popconfirm,
   Tag,
@@ -124,11 +123,6 @@ const Environments: React.FC = () => {
       ),
     },
     {
-      title: '显示名称',
-      dataIndex: 'display_name',
-      key: 'display_name',
-    },
-    {
       title: '颜色',
       dataIndex: 'color',
       key: 'color',
@@ -144,12 +138,6 @@ const Environments: React.FC = () => {
           }}
         />
       ),
-    },
-    {
-      title: '排序',
-      dataIndex: 'sort_order',
-      key: 'sort_order',
-      width: 80,
     },
     {
       title: '描述',
@@ -259,23 +247,8 @@ const Environments: React.FC = () => {
           >
             <Input placeholder="例如: dev, test, staging, prod" />
           </Form.Item>
-          <Form.Item
-            name="display_name"
-            label="显示名称"
-            rules={[{ required: true, message: '请输入显示名称' }]}
-          >
-            <Input placeholder="例如: 开发环境, 测试环境, 生产环境" />
-          </Form.Item>
           <Form.Item name="color" label="颜色" initialValue="#1890ff">
             <ColorPicker showText />
-          </Form.Item>
-          <Form.Item
-            name="sort_order"
-            label="排序"
-            initialValue={0}
-            tooltip="数字越小越靠前"
-          >
-            <InputNumber min={0} style={{ width: '100%' }} />
           </Form.Item>
           <Form.Item name="description" label="描述">
             <Input.TextArea rows={3} placeholder="环境描述信息" />
@@ -296,7 +269,6 @@ const Environments: React.FC = () => {
             <Descriptions.Item label="环境名称">
               <Tag color={detailEnv.color || 'default'}>{detailEnv.name.toUpperCase()}</Tag>
             </Descriptions.Item>
-            <Descriptions.Item label="显示名称">{detailEnv.display_name}</Descriptions.Item>
             <Descriptions.Item label="颜色">
               <Space>
                 <div
@@ -311,7 +283,6 @@ const Environments: React.FC = () => {
                 <span>{detailEnv.color || '#1890ff'}</span>
               </Space>
             </Descriptions.Item>
-            <Descriptions.Item label="排序">{detailEnv.sort_order}</Descriptions.Item>
             <Descriptions.Item label="描述">{detailEnv.description || '-'}</Descriptions.Item>
             <Descriptions.Item label="创建时间">
               {detailEnv.created_at ? new Date(detailEnv.created_at).toLocaleString() : '-'}

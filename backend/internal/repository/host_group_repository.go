@@ -27,7 +27,7 @@ func (r *hostGroupRepository) Create(group *models.HostGroup) error {
 
 func (r *hostGroupRepository) GetByID(id uint64) (*models.HostGroup, error) {
 	var group models.HostGroup
-	err := r.db.Preload("Project").Preload("Hosts").First(&group, id).Error
+	err := r.db.Preload("Hosts").First(&group, id).Error
 	return &group, err
 }
 
@@ -38,9 +38,6 @@ func (r *hostGroupRepository) List(offset, limit int, filters map[string]interfa
 	query := r.db.Model(&models.HostGroup{})
 
 	// 应用过滤器
-	if projectID, ok := filters["project_id"].(uint64); ok && projectID > 0 {
-		query = query.Where("project_id = ?", projectID)
-	}
 	if name, ok := filters["name"].(string); ok && name != "" {
 		query = query.Where("name LIKE ?", "%"+name+"%")
 	}
@@ -50,7 +47,7 @@ func (r *hostGroupRepository) List(offset, limit int, filters map[string]interfa
 		return nil, 0, err
 	}
 
-	err = query.Preload("Project").Preload("Hosts").Offset(offset).Limit(limit).Find(&groups).Error
+	err = query.Preload("Hosts").Offset(offset).Limit(limit).Order("id DESC").Find(&groups).Error
 	return groups, total, err
 }
 

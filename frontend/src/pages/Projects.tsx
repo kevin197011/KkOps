@@ -103,12 +103,6 @@ const Projects: React.FC = () => {
       key: 'description',
     },
     {
-      title: '状态',
-      dataIndex: 'status',
-      key: 'status',
-      render: (status: string) => status === 'active' ? '启用' : '禁用',
-    },
-    {
       title: '创建人',
       dataIndex: ['creator', 'display_name'],
       key: 'creator',
@@ -209,14 +203,6 @@ const Projects: React.FC = () => {
           >
             <Input.TextArea rows={4} placeholder="请输入项目描述" />
           </Form.Item>
-          {editingProject && (
-            <Form.Item
-              name="status"
-              label="状态"
-            >
-              <Input placeholder="active 或 disabled" />
-            </Form.Item>
-          )}
         </Form>
       </Modal>
 
@@ -232,7 +218,6 @@ const Projects: React.FC = () => {
           <Descriptions bordered column={1} size="small">
             <Descriptions.Item label="项目名称">{detailProject.name}</Descriptions.Item>
             <Descriptions.Item label="描述">{detailProject.description || '-'}</Descriptions.Item>
-            <Descriptions.Item label="状态">{detailProject.status === 'active' ? '启用' : '禁用'}</Descriptions.Item>
             <Descriptions.Item label="创建人">
               {detailProject.creator?.display_name || detailProject.creator?.username || '-'}
             </Descriptions.Item>

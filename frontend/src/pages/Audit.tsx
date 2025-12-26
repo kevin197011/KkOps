@@ -6,22 +6,37 @@ import {
   Button,
   Select,
   DatePicker,
-  Input,
   Tag,
   Modal,
   Descriptions,
   message,
   Tooltip,
+  Typography,
+  Divider,
+  Row,
+  Col,
 } from 'antd';
 import {
   ReloadOutlined,
   EyeOutlined,
   SearchOutlined,
+  UserOutlined,
+  ClockCircleOutlined,
+  GlobalOutlined,
+  CheckCircleOutlined,
+  CloseCircleOutlined,
+  FieldTimeOutlined,
+  LaptopOutlined,
+  FileTextOutlined,
+  SwapOutlined,
 } from '@ant-design/icons';
 import { auditService, AuditLog, AuditLogFilters } from '../services/audit';
+import { userService } from '../services/user';
+import { User } from '../services/auth';
 
 const { Option } = Select;
 const { RangePicker } = DatePicker;
+const { Text, Title } = Typography;
 
 // 安全解析 JSON 并格式化显示
 const formatJsonData = (data: string | null | undefined): string => {
@@ -68,11 +83,25 @@ const Audit: React.FC = () => {
   const [filters, setFilters] = useState<AuditLogFilters>({});
   const [detailModalVisible, setDetailModalVisible] = useState(false);
   const [selectedLog, setSelectedLog] = useState<AuditLog | null>(null);
+  const [users, setUsers] = useState<User[]>([]);
+
+  useEffect(() => {
+    loadUsers();
+  }, []);
 
   useEffect(() => {
     loadLogs();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, pageSize, filters]);
+
+  const loadUsers = async () => {
+    try {
+      const response = await userService.list(1, 1000);
+      setUsers(response.users || []);
+    } catch (error) {
+      console.error('加载用户列表失败:', error);
+    }
+  };
 
   const loadLogs = async () => {
     setLoading(true);
@@ -152,6 +181,7 @@ const Audit: React.FC = () => {
       dataIndex: 'username',
       key: 'username',
       width: 120,
+      render: (text: string) => text || 'system',
     },
     {
       title: '操作',
@@ -165,13 +195,6 @@ const Audit: React.FC = () => {
       dataIndex: 'resource_type',
       key: 'resource_type',
       width: 120,
-      render: (text: string) => text || '-',
-    },
-    {
-      title: '资源名称',
-      dataIndex: 'resource_name',
-      key: 'resource_name',
-      ellipsis: true,
       render: (text: string) => text || '-',
     },
     {
@@ -219,13 +242,22 @@ const Audit: React.FC = () => {
           <h2 style={{ margin: 0, marginBottom: '16px' }}>审计日志</h2>
           
           <Space wrap style={{ marginBottom: '16px' }}>
-            <Input
-              placeholder="用户名"
+            <Select
+              placeholder="选择用户"
               style={{ width: 150 }}
               value={filters.username}
-              onChange={(e) => handleFilterChange('username', e.target.value || undefined)}
+              onChange={(value) => handleFilterChange('username', value)}
               allowClear
-            />
+              showSearch
+              optionFilterProp="children"
+            >
+              <Option value="system">system</Option>
+              {users.map((user) => (
+                <Option key={user.id} value={user.username}>
+                  {user.username}
+                </Option>
+              ))}
+            </Select>
             <Select
               placeholder="操作类型"
               style={{ width: 150 }}
@@ -314,119 +346,213 @@ const Audit: React.FC = () => {
 
       {/* 详情模态框 */}
       <Modal
-        title="审计日志详情"
+        title={
+          <Space>
+            <FileTextOutlined />
+            <span>审计日志详情</span>
+          </Space>
+        }
         open={detailModalVisible}
         onCancel={() => setDetailModalVisible(false)}
-        footer={null}
-        width={800}
+        footer={
+          <Button onClick={() => setDetailModalVisible(false)}>关闭</Button>
+        }
+        width={720}
       >
         {selectedLog && (
-          <Descriptions bordered column={2} size="small">
-            <Descriptions.Item label="时间" span={1}>
-              {new Date(selectedLog.created_at).toLocaleString()}
-            </Descriptions.Item>
-            <Descriptions.Item label="用户" span={1}>
-              {selectedLog.username || '-'}
-            </Descriptions.Item>
-            <Descriptions.Item label="操作" span={1}>
-              {getActionTag(selectedLog.action)}
-            </Descriptions.Item>
-            <Descriptions.Item label="状态" span={1}>
-              {getStatusTag(selectedLog.status)}
-            </Descriptions.Item>
-            <Descriptions.Item label="资源类型" span={1}>
-              {selectedLog.resource_type || '-'}
-            </Descriptions.Item>
-            <Descriptions.Item label="资源名称" span={1}>
-              {selectedLog.resource_name || '-'}
-            </Descriptions.Item>
-            <Descriptions.Item label="IP地址" span={1}>
-              {selectedLog.ip_address || '-'}
-            </Descriptions.Item>
-            <Descriptions.Item label="耗时" span={1}>
-              {selectedLog.duration_ms ? `${selectedLog.duration_ms}ms` : '-'}
-            </Descriptions.Item>
-            <Descriptions.Item label="User Agent" span={2}>
-              <Tooltip title={selectedLog.user_agent}>
-                <div style={{ maxWidth: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {selectedLog.user_agent || '-'}
-                </div>
-              </Tooltip>
-            </Descriptions.Item>
+          <div>
+            {/* 基本信息卡片 */}
+            <Card size="small" style={{ marginBottom: 16 }}>
+              <Row gutter={[16, 12]}>
+                <Col span={12}>
+                  <Space>
+                    <ClockCircleOutlined style={{ color: '#1890ff' }} />
+                    <Text type="secondary">时间：</Text>
+                    <Text strong>{new Date(selectedLog.created_at).toLocaleString()}</Text>
+                  </Space>
+                </Col>
+                <Col span={12}>
+                  <Space>
+                    <UserOutlined style={{ color: '#52c41a' }} />
+                    <Text type="secondary">用户：</Text>
+                    <Text strong>{selectedLog.username || 'system'}</Text>
+                  </Space>
+                </Col>
+                <Col span={12}>
+                  <Space>
+                    <SwapOutlined style={{ color: '#722ed1' }} />
+                    <Text type="secondary">操作：</Text>
+                    {getActionTag(selectedLog.action)}
+                  </Space>
+                </Col>
+                <Col span={12}>
+                  <Space>
+                    {selectedLog.status === 'success' ? (
+                      <CheckCircleOutlined style={{ color: '#52c41a' }} />
+                    ) : (
+                      <CloseCircleOutlined style={{ color: '#ff4d4f' }} />
+                    )}
+                    <Text type="secondary">状态：</Text>
+                    {getStatusTag(selectedLog.status)}
+                  </Space>
+                </Col>
+                <Col span={12}>
+                  <Space>
+                    <FileTextOutlined style={{ color: '#fa8c16' }} />
+                    <Text type="secondary">资源类型：</Text>
+                    <Text>{selectedLog.resource_type || '-'}</Text>
+                  </Space>
+                </Col>
+                <Col span={12}>
+                  <Space>
+                    <FieldTimeOutlined style={{ color: '#13c2c2' }} />
+                    <Text type="secondary">耗时：</Text>
+                    <Text>{selectedLog.duration_ms ? `${selectedLog.duration_ms}ms` : '-'}</Text>
+                  </Space>
+                </Col>
+                <Col span={24}>
+                  <Space>
+                    <GlobalOutlined style={{ color: '#eb2f96' }} />
+                    <Text type="secondary">IP地址：</Text>
+                    <Text code>{selectedLog.ip_address || '-'}</Text>
+                  </Space>
+                </Col>
+                {selectedLog.user_agent && (
+                  <Col span={24}>
+                    <Space align="start">
+                      <LaptopOutlined style={{ color: '#595959' }} />
+                      <Text type="secondary">客户端：</Text>
+                      <Tooltip title={selectedLog.user_agent}>
+                        <Text 
+                          style={{ 
+                            maxWidth: 500, 
+                            display: 'inline-block',
+                            overflow: 'hidden', 
+                            textOverflow: 'ellipsis', 
+                            whiteSpace: 'nowrap',
+                            verticalAlign: 'middle'
+                          }}
+                          type="secondary"
+                        >
+                          {selectedLog.user_agent}
+                        </Text>
+                      </Tooltip>
+                    </Space>
+                  </Col>
+                )}
+              </Row>
+            </Card>
+
+            {/* 错误信息 */}
             {selectedLog.error_message && (
-              <Descriptions.Item label="错误信息" span={2}>
-                <div style={{ color: 'red', wordBreak: 'break-all' }}>{selectedLog.error_message}</div>
-              </Descriptions.Item>
+              <Card 
+                size="small" 
+                title={<Text type="danger">错误信息</Text>}
+                style={{ marginBottom: 16, borderColor: '#ffccc7' }}
+                styles={{ body: { background: '#fff2f0' } }}
+              >
+                <Text type="danger">{selectedLog.error_message}</Text>
+              </Card>
             )}
+
+            {/* 请求数据 */}
             {hasValidData(selectedLog.request_data) && (
-              <Descriptions.Item label="请求数据" span={2}>
+              <Card 
+                size="small" 
+                title="请求数据"
+                style={{ marginBottom: 16 }}
+              >
                 <pre style={{ 
-                  maxHeight: 200, 
+                  maxHeight: 180, 
                   overflow: 'auto', 
-                  background: '#f5f5f5', 
-                  padding: 8, 
-                  borderRadius: 4,
+                  background: '#fafafa', 
+                  padding: 12, 
+                  borderRadius: 6,
                   margin: 0,
                   fontSize: 12,
-                  whiteSpace: 'pre-wrap',
-                  wordBreak: 'break-all'
+                  border: '1px solid #f0f0f0'
                 }}>
                   {formatJsonData(selectedLog.request_data)}
                 </pre>
-              </Descriptions.Item>
+              </Card>
             )}
+
+            {/* 响应数据 */}
             {hasValidData(selectedLog.response_data) && (
-              <Descriptions.Item label="响应数据" span={2}>
+              <Card 
+                size="small" 
+                title="响应数据"
+                style={{ marginBottom: 16 }}
+              >
                 <pre style={{ 
-                  maxHeight: 200, 
+                  maxHeight: 180, 
                   overflow: 'auto', 
-                  background: '#f5f5f5', 
-                  padding: 8, 
-                  borderRadius: 4,
+                  background: '#fafafa', 
+                  padding: 12, 
+                  borderRadius: 6,
                   margin: 0,
                   fontSize: 12,
-                  whiteSpace: 'pre-wrap',
-                  wordBreak: 'break-all'
+                  border: '1px solid #f0f0f0'
                 }}>
                   {formatJsonData(selectedLog.response_data)}
                 </pre>
-              </Descriptions.Item>
+              </Card>
             )}
-            {hasValidData(selectedLog.before_data) && (
-              <Descriptions.Item label="变更前数据" span={2}>
-                <pre style={{ 
-                  maxHeight: 200, 
-                  overflow: 'auto', 
-                  background: '#f5f5f5', 
-                  padding: 8, 
-                  borderRadius: 4,
-                  margin: 0,
-                  fontSize: 12,
-                  whiteSpace: 'pre-wrap',
-                  wordBreak: 'break-all'
-                }}>
-                  {formatJsonData(selectedLog.before_data)}
-                </pre>
-              </Descriptions.Item>
+
+            {/* 数据变更对比 */}
+            {(hasValidData(selectedLog.before_data) || hasValidData(selectedLog.after_data)) && (
+              <Card 
+                size="small" 
+                title={
+                  <Space>
+                    <SwapOutlined />
+                    <span>数据变更</span>
+                  </Space>
+                }
+              >
+                <Row gutter={16}>
+                  {hasValidData(selectedLog.before_data) && (
+                    <Col span={hasValidData(selectedLog.after_data) ? 12 : 24}>
+                      <div style={{ marginBottom: 8 }}>
+                        <Tag color="orange">变更前</Tag>
+                      </div>
+                      <pre style={{ 
+                        maxHeight: 200, 
+                        overflow: 'auto', 
+                        background: '#fffbe6', 
+                        padding: 12, 
+                        borderRadius: 6,
+                        margin: 0,
+                        fontSize: 11,
+                        border: '1px solid #ffe58f'
+                      }}>
+                        {formatJsonData(selectedLog.before_data)}
+                      </pre>
+                    </Col>
+                  )}
+                  {hasValidData(selectedLog.after_data) && (
+                    <Col span={hasValidData(selectedLog.before_data) ? 12 : 24}>
+                      <div style={{ marginBottom: 8 }}>
+                        <Tag color="green">变更后</Tag>
+                      </div>
+                      <pre style={{ 
+                        maxHeight: 200, 
+                        overflow: 'auto', 
+                        background: '#f6ffed', 
+                        padding: 12, 
+                        borderRadius: 6,
+                        margin: 0,
+                        fontSize: 11,
+                        border: '1px solid #b7eb8f'
+                      }}>
+                        {formatJsonData(selectedLog.after_data)}
+                      </pre>
+                    </Col>
+                  )}
+                </Row>
+              </Card>
             )}
-            {hasValidData(selectedLog.after_data) && (
-              <Descriptions.Item label="变更后数据" span={2}>
-                <pre style={{ 
-                  maxHeight: 200, 
-                  overflow: 'auto', 
-                  background: '#f5f5f5', 
-                  padding: 8, 
-                  borderRadius: 4,
-                  margin: 0,
-                  fontSize: 12,
-                  whiteSpace: 'pre-wrap',
-                  wordBreak: 'break-all'
-                }}>
-                  {formatJsonData(selectedLog.after_data)}
-                </pre>
-              </Descriptions.Item>
-            )}
-          </Descriptions>
+          </div>
         )}
       </Modal>
     </>

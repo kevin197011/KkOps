@@ -11,6 +11,7 @@ export interface CreateUserRequest {
 export interface UpdateUserRequest {
   display_name?: string;
   email?: string;
+  status?: string;
 }
 
 export interface ListUsersResponse {

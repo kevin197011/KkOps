@@ -2,15 +2,10 @@ import api from '../config/api';
 
 export interface HostGroup {
   id: number;
-  project_id: number;
   name: string;
   description?: string;
   created_at: string;
   updated_at: string;
-  project?: {
-    id: number;
-    name: string;
-  };
   hosts?: Array<{
     id: number;
     hostname: string;
@@ -25,7 +20,6 @@ export interface ListHostGroupsResponse {
 }
 
 export interface CreateHostGroupRequest {
-  project_id: number;
   name: string;
   description?: string;
 }
@@ -39,7 +33,7 @@ export const hostGroupService = {
   list: async (
     page: number = 1,
     pageSize: number = 10,
-    filters?: { project_id?: number; name?: string }
+    filters?: { name?: string }
   ): Promise<ListHostGroupsResponse> => {
     const response = await api.get('/host-groups', {
       params: { page, page_size: pageSize, ...filters },
@@ -65,4 +59,3 @@ export const hostGroupService = {
     await api.delete(`/host-groups/${id}`);
   },
 };
-

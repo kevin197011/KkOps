@@ -335,7 +335,21 @@ const FormulaDeployment: React.FC = () => {
     try {
       const response = await formulaService.getFormula(formulaId);
       const formula = response.formula;
-      const parameters = response.parameters || [];
+      let parameters = response.parameters || [];
+
+      // 如果没有从 formula_parameters 表获取到参数，尝试从 metadata 中提取
+      if (parameters.length === 0 && formula.metadata?.parameters) {
+        parameters = formula.metadata.parameters.map((p: any, index: number) => ({
+          id: index,
+          name: p.name,
+          type: p.type || 'string',
+          default: p.default,
+          required: p.required || false,
+          label: p.label || p.name,
+          description: p.description || '',
+          order: index,
+        }));
+      }
 
       setSelectedFormula(formula);
       setFormulaParameters(parameters);

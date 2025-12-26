@@ -11,3 +11,14 @@ code {
   font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
     monospace;
 }
+
+/* Hide scrollbar for sidebar while keeping scroll functionality */
+.sidebar-scroll-hidden::-webkit-scrollbar {
+  display: none;
+  width: 0;
+}
+
+.sidebar-scroll-hidden {
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
+}

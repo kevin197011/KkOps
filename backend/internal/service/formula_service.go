@@ -384,21 +384,29 @@ func (s *formulaService) SyncRepository(repoID uint) error {
 		return fmt.Errorf("failed to discover formulas: %v", err)
 	}
 
-	// 先删除该仓库的所有旧 Formula
+	// 先删除该仓库的所有旧 Formula（跳过有部署记录的）
 	existingFormulas, err := s.formulaRepo.GetByRepository(repo.URL)
 	if err != nil {
 		log.Printf("Warning: Failed to get existing formulas: %v", err)
 	} else {
-		log.Printf("Deleting all %d existing formulas for repository: %s", len(existingFormulas), repo.URL)
+		log.Printf("Found %d existing formulas for repository: %s", len(existingFormulas), repo.URL)
 		for _, existing := range existingFormulas {
 			log.Printf("Deleting formula: %s (id=%d)", existing.Name, existing.ID)
 			if err := s.formulaRepo.Delete(existing.ID); err != nil {
-				log.Printf("Failed to delete formula %s: %v", existing.Name, err)
+				log.Printf("Failed to delete formula %s (may have deployments): %v", existing.Name, err)
+				// 如果删除失败（可能有部署记录），标记为需要更新
 			}
 		}
 	}
 
-	// 保存发现的Formula到数据库（全部新建）
+	// 创建一个 map 来跟踪现有的 formula（用于更新而非创建）
+	existingFormulaMap := make(map[string]*models.Formula)
+	existingFormulas, _ = s.formulaRepo.GetByRepository(repo.URL)
+	for i := range existingFormulas {
+		existingFormulaMap[existingFormulas[i].Name] = &existingFormulas[i]
+	}
+
+	// 保存发现的Formula到数据库（新建或更新）
 	for _, formula := range formulas {
 		// 最后验证：确保Formula name不为空
 		if formula.Name == "" {
@@ -417,42 +425,39 @@ func (s *formulaService) SyncRepository(repoID uint) error {
 			formulaCopy.CreatedBy = repo.CreatedBy
 		}
 
-		// 创建新 Formula
-		log.Printf("Creating formula: %s (created_by=%d)", formulaCopy.Name, formulaCopy.CreatedBy)
-		if err := s.formulaRepo.Create(&formulaCopy); err != nil {
-			log.Printf("Failed to create formula %s: %v", formulaCopy.Name, err)
-			continue
-		}
+		// 检查是否存在现有记录
+		if existing, exists := existingFormulaMap[formulaCopy.Name]; exists {
+			// 更新现有记录
+			existing.Description = formulaCopy.Description
+			existing.Category = formulaCopy.Category
+			existing.Path = formulaCopy.Path
+			existing.Metadata = formulaCopy.Metadata
+			existing.IsActive = formulaCopy.IsActive
 
-		// 从 metadata 中提取参数并创建参数记录
-		if formulaCopy.Metadata != nil {
-			var metadata map[string]interface{}
-			if err := json.Unmarshal(formulaCopy.Metadata, &metadata); err == nil {
-				if params, ok := metadata["parameters"].([]interface{}); ok {
-					log.Printf("Creating %d parameters for formula %s", len(params), formulaCopy.Name)
-					for i, p := range params {
-						if paramMap, ok := p.(map[string]interface{}); ok {
-							param := models.FormulaParameter{
-								FormulaID:   formulaCopy.ID,
-								Name:        getString(paramMap, "name"),
-								Type:        getString(paramMap, "type"),
-								Label:       getString(paramMap, "label"),
-								Description: getString(paramMap, "description"),
-								Required:    getBool(paramMap, "required"),
-								Order:       i,
-							}
-							// 设置默认值
-							if defaultVal, exists := paramMap["default"]; exists {
-								defaultJSON, _ := json.Marshal(defaultVal)
-								param.Default = defaultJSON
-							}
-							if err := s.formulaRepo.CreateParameter(&param); err != nil {
-								log.Printf("Failed to create parameter %s for formula %s: %v", param.Name, formulaCopy.Name, err)
-							}
-						}
-					}
-				}
+			log.Printf("Updating formula: %s (id=%d)", existing.Name, existing.ID)
+			if err := s.formulaRepo.Update(existing); err != nil {
+				log.Printf("Failed to update formula %s: %v", existing.Name, err)
+				continue
 			}
+
+			// 删除旧参数并创建新参数
+			oldParams, _ := s.formulaRepo.GetParameters(existing.ID)
+			for _, p := range oldParams {
+				s.formulaRepo.DeleteParameter(p.ID)
+			}
+
+			// 从 metadata 中提取参数并创建参数记录
+			s.createParametersFromMetadata(existing.ID, existing.Name, formulaCopy.Metadata)
+		} else {
+			// 创建新 Formula
+			log.Printf("Creating formula: %s (created_by=%d)", formulaCopy.Name, formulaCopy.CreatedBy)
+			if err := s.formulaRepo.Create(&formulaCopy); err != nil {
+				log.Printf("Failed to create formula %s: %v", formulaCopy.Name, err)
+				continue
+			}
+
+			// 从 metadata 中提取参数并创建参数记录
+			s.createParametersFromMetadata(formulaCopy.ID, formulaCopy.Name, formulaCopy.Metadata)
 		}
 	}
 
@@ -584,11 +589,14 @@ func (s *formulaService) parseFormulaMetadata(formulaPath string) (map[string]in
 // {% set config = salt['pillar.get']('motd', {}) %}
 // {% set message = config.get('message', 'default value') %}
 // {% set port = salt['pillar.get']('mysql:port', 3306) %}
+// {{ pillar.get('timezone', 'Asia/Shanghai') }}
 func (s *formulaService) parsePillarParameters(initPath string) ([]map[string]interface{}, error) {
 	content, err := os.ReadFile(initPath)
 	if err != nil {
 		return nil, err
 	}
+
+	log.Printf("Parsing pillar parameters from: %s", initPath)
 
 	var params []map[string]interface{}
 	lines := strings.Split(string(content), "\n")
@@ -615,6 +623,7 @@ func (s *formulaService) parsePillarParameters(initPath string) ([]map[string]in
 				}
 				if end != -1 {
 					pillarRoot = line[start : start+end]
+					log.Printf("Found pillar root: %s", pillarRoot)
 					// 如果包含冒号，说明是嵌套路径，如 'mysql:port'
 					if strings.Contains(pillarRoot, ":") {
 						parts := strings.Split(pillarRoot, ":")
@@ -628,11 +637,22 @@ func (s *formulaService) parsePillarParameters(initPath string) ([]map[string]in
 		if strings.Contains(line, ".get('") || strings.Contains(line, ".get(\"") {
 			param := s.parseConfigGetLine(line, pillarRoot)
 			if param != nil {
+				log.Printf("Parsed parameter: %v", param)
+				params = append(params, param)
+			}
+		}
+
+		// 匹配直接的 pillar.get: {{ pillar.get('timezone', 'Asia/Shanghai') }}
+		if strings.Contains(line, "pillar.get('") || strings.Contains(line, "pillar.get(\"") {
+			param := s.parseDirectPillarGet(line)
+			if param != nil {
+				log.Printf("Parsed direct pillar parameter: %v", param)
 				params = append(params, param)
 			}
 		}
 	}
 
+	log.Printf("Total parameters found: %d", len(params))
 	return params, nil
 }
 
@@ -911,6 +931,152 @@ func (s *formulaService) syncToSaltMaster(repo *models.FormulaRepository) error 
 	log.Printf("Rsync output: %s", string(output))
 	log.Printf("Successfully synced repository to Salt Master via rsync")
 	return nil
+}
+
+// createParametersFromMetadata 从 metadata 中提取参数并创建参数记录
+func (s *formulaService) createParametersFromMetadata(formulaID uint, formulaName string, metadata []byte) {
+	if metadata == nil {
+		return
+	}
+
+	var metadataMap map[string]interface{}
+	if err := json.Unmarshal(metadata, &metadataMap); err != nil {
+		return
+	}
+
+	params, ok := metadataMap["parameters"].([]interface{})
+	if !ok || len(params) == 0 {
+		return
+	}
+
+	log.Printf("Creating %d parameters for formula %s", len(params), formulaName)
+	for i, p := range params {
+		paramMap, ok := p.(map[string]interface{})
+		if !ok {
+			continue
+		}
+
+		param := models.FormulaParameter{
+			FormulaID:   formulaID,
+			Name:        getString(paramMap, "name"),
+			Type:        getString(paramMap, "type"),
+			Label:       getString(paramMap, "label"),
+			Description: getString(paramMap, "description"),
+			Required:    getBool(paramMap, "required"),
+			Order:       i,
+		}
+
+		// 设置默认值
+		if defaultVal, exists := paramMap["default"]; exists {
+			defaultJSON, _ := json.Marshal(defaultVal)
+			param.Default = defaultJSON
+		}
+
+		if err := s.formulaRepo.CreateParameter(&param); err != nil {
+			log.Printf("Failed to create parameter %s for formula %s: %v", param.Name, formulaName, err)
+		} else {
+			log.Printf("Created parameter %s for formula %s", param.Name, formulaName)
+		}
+	}
+}
+
+// parseDirectPillarGet 解析直接的 pillar.get() 调用
+// 格式: {{ pillar.get('timezone', 'Asia/Shanghai') }}
+func (s *formulaService) parseDirectPillarGet(line string) map[string]interface{} {
+	// 查找 pillar.get('
+	start := strings.Index(line, "pillar.get('")
+	quote := "'"
+	if start == -1 {
+		start = strings.Index(line, "pillar.get(\"")
+		quote = "\""
+	}
+	if start == -1 {
+		return nil
+	}
+
+	start += len("pillar.get('")
+
+	// 找到参数名结束位置
+	paramEnd := strings.Index(line[start:], quote)
+	if paramEnd == -1 {
+		return nil
+	}
+	paramName := line[start : start+paramEnd]
+
+	// 跳过已经处理过的 salt['pillar.get'] 格式（这些会被 parseConfigGetLine 处理）
+	if strings.Contains(line, "salt['pillar.get']") || strings.Contains(line, "salt[\"pillar.get\"]") {
+		return nil
+	}
+
+	// 提取默认值
+	defaultStart := start + paramEnd + len(quote) + 2 // 跳过 ', '
+	// 找到结束括号
+	remaining := line[defaultStart:]
+	parenDepth := 1
+	defaultEnd := -1
+	for i, ch := range remaining {
+		if ch == '(' {
+			parenDepth++
+		} else if ch == ')' {
+			parenDepth--
+			if parenDepth == 0 {
+				defaultEnd = i
+				break
+			}
+		}
+	}
+
+	if defaultEnd == -1 {
+		return nil
+	}
+
+	defaultStr := strings.TrimSpace(remaining[:defaultEnd])
+
+	// 解析默认值和类型
+	paramType := "string"
+	var defaultValue interface{}
+
+	defaultStr = strings.TrimSpace(defaultStr)
+	if defaultStr == "true" || defaultStr == "True" {
+		paramType = "boolean"
+		defaultValue = true
+	} else if defaultStr == "false" || defaultStr == "False" {
+		paramType = "boolean"
+		defaultValue = false
+	} else if strings.HasPrefix(defaultStr, "'") || strings.HasPrefix(defaultStr, "\"") {
+		paramType = "string"
+		defaultValue = strings.Trim(defaultStr, "'\"")
+	} else if strings.HasPrefix(defaultStr, "[") {
+		paramType = "array"
+		defaultValue = defaultStr
+	} else if strings.HasPrefix(defaultStr, "{") {
+		paramType = "object"
+		defaultValue = defaultStr
+	} else if _, err := fmt.Sscanf(defaultStr, "%d", new(int)); err == nil {
+		paramType = "number"
+		var num int
+		fmt.Sscanf(defaultStr, "%d", &num)
+		defaultValue = num
+	} else {
+		defaultValue = defaultStr
+	}
+
+	// 处理带点号的参数名，如 'timezone.utc'
+	displayName := paramName
+	if strings.Contains(paramName, ".") {
+		parts := strings.Split(paramName, ".")
+		displayName = parts[len(parts)-1]
+	}
+
+	return map[string]interface{}{
+		"name":        displayName,
+		"pillar_path": paramName,
+		"type":        paramType,
+		"default":     defaultValue,
+		"label":       displayName,
+		"description": fmt.Sprintf("Pillar parameter: %s", paramName),
+		"required":    false,
+	}
 }
 
 // 辅助函数：从 map 中获取字符串

@@ -27,18 +27,18 @@ type Formula struct {
 
 // FormulaParameter Formula 参数定义
 type FormulaParameter struct {
-	ID         uint           `json:"id" gorm:"primarykey"`
-	FormulaID  uint           `json:"formula_id" gorm:"not null;index"`
-	Name       string         `json:"name" gorm:"not null"`                    // 参数名称
-	Type       string         `json:"type" gorm:"not null"`                   // 参数类型 (string, number, boolean, array, object)
-	Default    datatypes.JSON `json:"default" gorm:"type:jsonb"`              // 默认值
-	Required   bool           `json:"required" gorm:"default:false"`          // 是否必填
-	Label      string         `json:"label"`                                  // 显示标签
-	Description string        `json:"description"`                            // 参数描述
-	Validation datatypes.JSON `json:"validation" gorm:"type:jsonb"`           // 验证规则
-	Order      int            `json:"order" gorm:"default:0"`                 // 显示顺序
-	CreatedAt  time.Time      `json:"created_at"`
-	UpdatedAt  time.Time      `json:"updated_at"`
+	ID          uint           `json:"id" gorm:"primarykey"`
+	FormulaID   uint           `json:"formula_id" gorm:"not null;index"`
+	Name        string         `json:"name" gorm:"not null"`                              // 参数名称
+	Type        string         `json:"type" gorm:"not null"`                              // 参数类型 (string, number, boolean, array, object)
+	Default     datatypes.JSON `json:"default" gorm:"column:default_value;type:jsonb"`    // 默认值
+	Required    bool           `json:"required" gorm:"default:false"`                     // 是否必填
+	Label       string         `json:"label"`                                             // 显示标签
+	Description string         `json:"description"`                                       // 参数描述
+	Validation  datatypes.JSON `json:"validation" gorm:"type:jsonb"`                      // 验证规则
+	Order       int            `json:"order" gorm:"column:order_index;default:0"`         // 显示顺序
+	CreatedAt   time.Time      `json:"created_at"`
+	UpdatedAt   time.Time      `json:"updated_at"`
 }
 
 // FormulaDeployment Formula 部署记录

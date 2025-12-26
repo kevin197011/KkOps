@@ -26,6 +26,7 @@ type CreateUserRequest struct {
 type UpdateUserRequest struct {
 	DisplayName string `json:"display_name"`
 	Email       string `json:"email" binding:"omitempty,email"`
+	Status      string `json:"status" binding:"omitempty,oneof=active inactive suspended"`
 }
 
 type ChangePasswordRequest struct {
@@ -100,7 +101,7 @@ func (h *UserHandler) UpdateUser(c *gin.Context) {
 		return
 	}
 
-	user, err := h.userService.UpdateUser(id, req.DisplayName, req.Email)
+	user, err := h.userService.UpdateUser(id, req.DisplayName, req.Email, req.Status)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return

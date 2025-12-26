@@ -10,9 +10,11 @@ import {
   message,
   Popconfirm,
   Tag,
-  Tree,
   Checkbox,
   Descriptions,
+  Divider,
+  Row,
+  Col,
 } from 'antd';
 import {
   PlusOutlined,
@@ -31,15 +33,12 @@ const Roles: React.FC = () => {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [modalVisible, setModalVisible] = useState(false);
-  const [permissionModalVisible, setPermissionModalVisible] = useState(false);
   const [detailModalVisible, setDetailModalVisible] = useState(false);
   const [editingRole, setEditingRole] = useState<Role | null>(null);
   const [detailRole, setDetailRole] = useState<Role | null>(null);
   const [allPermissions, setAllPermissions] = useState<Permission[]>([]);
-  const [rolePermissions, setRolePermissions] = useState<number[]>([]);
-  const [currentRoleId, setCurrentRoleId] = useState<number | null>(null);
+  const [selectedPermissions, setSelectedPermissions] = useState<number[]>([]);
   const [form] = Form.useForm();
-  const [permissionForm] = Form.useForm();
 
   useEffect(() => {
     loadRoles();
@@ -81,6 +80,7 @@ const Roles: React.FC = () => {
 
   const handleCreate = () => {
     setEditingRole(null);
+    setSelectedPermissions([]);
     form.resetFields();
     setModalVisible(true);
   };
@@ -88,10 +88,12 @@ const Roles: React.FC = () => {
   const handleEdit = async (role: Role) => {
     try {
       const response = await roleService.get(role.id);
-      setEditingRole(response.role);
+      const roleData = response.role;
+      setEditingRole(roleData);
+      setSelectedPermissions(roleData.permissions?.map((p: Permission) => p.id) || []);
       form.setFieldsValue({
-        name: response.role.name,
-        description: response.role.description,
+        name: roleData.name,
+        description: roleData.description,
       });
       setModalVisible(true);
     } catch (error: any) {
@@ -112,11 +114,36 @@ const Roles: React.FC = () => {
   const handleSubmit = async () => {
     try {
       const values = await form.validateFields();
+      
       if (editingRole) {
+        // 更新角色基本信息
         await roleService.update(editingRole.id, values);
+        
+        // 更新权限：先获取当前权限，计算差异
+        const currentPermissions = editingRole.permissions?.map((p: Permission) => p.id) || [];
+        const toAdd = selectedPermissions.filter(id => !currentPermissions.includes(id));
+        const toRemove = currentPermissions.filter(id => !selectedPermissions.includes(id));
+        
+        // 添加新权限
+        for (const permId of toAdd) {
+          await roleService.assignPermission(editingRole.id, permId);
+        }
+        // 移除权限
+        for (const permId of toRemove) {
+          await roleService.removePermission(editingRole.id, permId);
+        }
+        
         message.success('更新成功');
       } else {
-        await roleService.create(values);
+        // 创建角色
+        const response = await roleService.create(values);
+        const newRoleId = response.role.id;
+        
+        // 分配权限
+        for (const permId of selectedPermissions) {
+          await roleService.assignPermission(newRoleId, permId);
+        }
+        
         message.success('创建成功');
       }
       setModalVisible(false);
@@ -129,39 +156,21 @@ const Roles: React.FC = () => {
     }
   };
 
-  const handleManagePermissions = async (role: Role) => {
-    try {
-      const response = await roleService.get(role.id);
-      const roleWithPermissions = response.role;
-      setCurrentRoleId(role.id);
-      setRolePermissions(
-        roleWithPermissions.permissions?.map((p) => p.id) || []
-      );
-      // 确保权限列表已加载
-      if (allPermissions.length === 0) {
-        await loadAllPermissions();
-      }
-      setPermissionModalVisible(true);
-    } catch (error: any) {
-      message.error('获取角色权限失败');
+  const handlePermissionToggle = (permissionId: number, checked: boolean) => {
+    if (checked) {
+      setSelectedPermissions([...selectedPermissions, permissionId]);
+    } else {
+      setSelectedPermissions(selectedPermissions.filter(id => id !== permissionId));
     }
   };
 
-  const handlePermissionChange = async (checked: boolean, permissionId: number) => {
-    if (!currentRoleId) return;
-
-    try {
-      if (checked) {
-        await roleService.assignPermission(currentRoleId, permissionId);
-        setRolePermissions([...rolePermissions, permissionId]);
-        message.success('权限分配成功');
-      } else {
-        await roleService.removePermission(currentRoleId, permissionId);
-        setRolePermissions(rolePermissions.filter((id) => id !== permissionId));
-        message.success('权限移除成功');
-      }
-    } catch (error: any) {
-      message.error(error.response?.data?.error || '操作失败');
+  const handleSelectAllInGroup = (permissions: Permission[], checked: boolean) => {
+    const permIds = permissions.map(p => p.id);
+    if (checked) {
+      const newSelected = Array.from(new Set([...selectedPermissions, ...permIds]));
+      setSelectedPermissions(newSelected);
+    } else {
+      setSelectedPermissions(selectedPermissions.filter(id => !permIds.includes(id)));
     }
   };
 
@@ -174,17 +183,32 @@ const Roles: React.FC = () => {
     return acc;
   }, {} as Record<string, Permission[]>);
 
+  // 资源类型中文映射
+  const resourceTypeMap: Record<string, string> = {
+    host: '主机管理',
+    deployment: '部署管理',
+    task: '任务管理',
+    log: '日志管理',
+    monitoring: '监控管理',
+    audit: '审计管理',
+    user: '用户管理',
+    project: '项目管理',
+    webssh: 'WebSSH',
+    batch_operation: '批量操作',
+  };
+
   const columns = [
     {
       title: '序号',
       key: 'index',
-      width: 80,
+      width: 60,
       render: (_: any, __: any, index: number) => (page - 1) * pageSize + index + 1,
     },
     {
       title: '角色名称',
       dataIndex: 'name',
       key: 'name',
+      width: 120,
     },
     {
       title: '描述',
@@ -194,50 +218,38 @@ const Roles: React.FC = () => {
       render: (text: string) => text || '-',
     },
     {
-      title: '权限数量',
+      title: '权限',
       key: 'permission_count',
-      width: 100,
+      width: 70,
       render: (_: any, record: Role) => (
-        <span>{record.permissions?.length || 0}</span>
+        <Tag color="blue">{record.permissions?.length || 0}</Tag>
       ),
     },
     {
       title: '创建时间',
       dataIndex: 'created_at',
       key: 'created_at',
-      width: 180,
+      width: 160,
       render: (text: string) => new Date(text).toLocaleString(),
     },
     {
       title: '操作',
       key: 'action',
-      width: 250,
-      fixed: 'right' as const,
+      width: 150,
       render: (_: any, record: Role) => (
-        <Space>
+        <Space size={0}>
           <Button
             type="link"
             size="small"
             icon={<EyeOutlined />}
             onClick={() => handleViewDetail(record)}
-          >
-            详情
-          </Button>
-          <Button
-            type="link"
-            size="small"
-            onClick={() => handleManagePermissions(record)}
-          >
-            权限管理
-          </Button>
+          />
           <Button
             type="link"
             size="small"
             icon={<EditOutlined />}
             onClick={() => handleEdit(record)}
-          >
-            编辑
-          </Button>
+          />
           <Popconfirm
             title="确定要删除这个角色吗？"
             onConfirm={() => handleDelete(record.id)}
@@ -249,9 +261,7 @@ const Roles: React.FC = () => {
               danger
               size="small"
               icon={<DeleteOutlined />}
-            >
-              删除
-            </Button>
+            />
           </Popconfirm>
         </Space>
       ),
@@ -278,6 +288,7 @@ const Roles: React.FC = () => {
           dataSource={roles}
           rowKey="id"
           loading={loading}
+          scroll={{ x: 'max-content' }}
           pagination={{
             current: page,
             pageSize: pageSize,
@@ -302,61 +313,77 @@ const Roles: React.FC = () => {
         onCancel={() => setModalVisible(false)}
         okText="确定"
         cancelText="取消"
+        width={700}
       >
         <Form form={form} layout="vertical">
-          <Form.Item
-            name="name"
-            label="角色名称"
-            rules={[{ required: true, message: '请输入角色名称' }]}
-          >
-            <Input placeholder="请输入角色名称" />
-          </Form.Item>
-          <Form.Item name="description" label="描述">
-            <Input.TextArea
-              placeholder="请输入角色描述"
-              rows={4}
-            />
-          </Form.Item>
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item
+                name="name"
+                label="角色名称"
+                rules={[{ required: true, message: '请输入角色名称' }]}
+              >
+                <Input placeholder="请输入角色名称" />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item name="description" label="描述">
+                <Input placeholder="请输入角色描述" />
+              </Form.Item>
+            </Col>
+          </Row>
         </Form>
-      </Modal>
-
-      {/* 权限管理模态框 */}
-      <Modal
-        title="权限管理"
-        open={permissionModalVisible}
-        onCancel={() => setPermissionModalVisible(false)}
-        footer={null}
-        width={600}
-      >
-        <div style={{ maxHeight: 500, overflowY: 'auto' }}>
-          {Object.entries(groupedPermissions).map(([resourceType, permissions]) => (
-            <div key={resourceType} style={{ marginBottom: 24 }}>
-              <h4 style={{ marginBottom: 12, fontWeight: 'bold' }}>
-                {resourceType}
-              </h4>
-              <Space direction="vertical" style={{ width: '100%' }}>
-                {permissions.map((permission) => (
-                  <div key={permission.id} style={{ display: 'flex', alignItems: 'center' }}>
-                    <Checkbox
-                      checked={rolePermissions.includes(permission.id)}
-                      onChange={(e) =>
-                        handlePermissionChange(e.target.checked, permission.id)
-                      }
-                    >
-                      <span style={{ marginLeft: 8 }}>
-                        {permission.name} ({permission.action})
-                      </span>
-                    </Checkbox>
-                    {permission.description && (
-                      <span style={{ marginLeft: 8, color: '#999', fontSize: 12 }}>
-                        - {permission.description}
-                      </span>
-                    )}
-                  </div>
-                ))}
-              </Space>
-            </div>
-          ))}
+        
+        <Divider style={{ marginTop: 8 }}>
+          <span>权限配置</span>
+          <span style={{ fontSize: 12, color: '#999', marginLeft: 8 }}>
+            (已选 {selectedPermissions.length} 项)
+          </span>
+        </Divider>
+        
+        <div style={{ maxHeight: 400, overflowY: 'auto', paddingRight: 8 }}>
+          {Object.entries(groupedPermissions).map(([resourceType, permissions]) => {
+            const allSelected = permissions.every(p => selectedPermissions.includes(p.id));
+            const someSelected = permissions.some(p => selectedPermissions.includes(p.id));
+            
+            return (
+              <Card 
+                key={resourceType} 
+                size="small" 
+                style={{ marginBottom: 12 }}
+                title={
+                  <Checkbox
+                    checked={allSelected}
+                    indeterminate={someSelected && !allSelected}
+                    onChange={(e) => handleSelectAllInGroup(permissions, e.target.checked)}
+                  >
+                    <span style={{ fontWeight: 500 }}>
+                      {resourceTypeMap[resourceType] || resourceType}
+                    </span>
+                    <span style={{ color: '#999', marginLeft: 8, fontSize: 12 }}>
+                      ({permissions.filter(p => selectedPermissions.includes(p.id)).length}/{permissions.length})
+                    </span>
+                  </Checkbox>
+                }
+              >
+                <Row gutter={[8, 8]}>
+                  {permissions.map((permission) => (
+                    <Col span={12} key={permission.id}>
+                      <Checkbox
+                        checked={selectedPermissions.includes(permission.id)}
+                        onChange={(e) => handlePermissionToggle(permission.id, e.target.checked)}
+                      >
+                        <span>{permission.name}</span>
+                        <span style={{ color: '#999', fontSize: 12, marginLeft: 4 }}>
+                          ({permission.action})
+                        </span>
+                      </Checkbox>
+                    </Col>
+                  ))}
+                </Row>
+              </Card>
+            );
+          })}
         </div>
       </Modal>
 
@@ -365,20 +392,22 @@ const Roles: React.FC = () => {
         title="角色详情"
         open={detailModalVisible}
         onCancel={() => setDetailModalVisible(false)}
-        footer={null}
+        footer={<Button onClick={() => setDetailModalVisible(false)}>关闭</Button>}
         width={600}
       >
         {detailRole && (
           <Descriptions bordered column={1} size="small">
             <Descriptions.Item label="角色名称">{detailRole.name}</Descriptions.Item>
             <Descriptions.Item label="描述">{detailRole.description || '-'}</Descriptions.Item>
-            <Descriptions.Item label="权限数量">{detailRole.permissions?.length || 0}</Descriptions.Item>
+            <Descriptions.Item label="权限数量">
+              <Tag color="blue">{detailRole.permissions?.length || 0}</Tag>
+            </Descriptions.Item>
             <Descriptions.Item label="权限列表">
               <div style={{ maxHeight: 200, overflowY: 'auto' }}>
-                <Space wrap>
+                <Space wrap size={[4, 8]}>
                   {detailRole.permissions?.map((p) => (
                     <Tag key={p.id} color="blue">{p.name}</Tag>
-                  )) || <span>无</span>}
+                  )) || <span style={{ color: '#999' }}>无</span>}
                 </Space>
               </div>
             </Descriptions.Item>

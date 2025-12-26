@@ -12,7 +12,7 @@ type UserService interface {
 	CreateUser(username, email, password, displayName string) (*models.User, error)
 	GetUser(id uint64) (*models.User, error)
 	ListUsers(page, pageSize int) ([]models.User, int64, error)
-	UpdateUser(id uint64, displayName, email string) (*models.User, error)
+	UpdateUser(id uint64, displayName, email, status string) (*models.User, error)
 	DeleteUser(id uint64) error
 	ChangePassword(id uint64, oldPassword, newPassword string) error
 	ResetPassword(id uint64, newPassword string) error
@@ -72,7 +72,7 @@ func (s *userService) ListUsers(page, pageSize int) ([]models.User, int64, error
 	return s.userRepo.List(offset, pageSize)
 }
 
-func (s *userService) UpdateUser(id uint64, displayName, email string) (*models.User, error) {
+func (s *userService) UpdateUser(id uint64, displayName, email, status string) (*models.User, error) {
 	user, err := s.userRepo.GetByID(id)
 	if err != nil {
 		return nil, err
@@ -89,6 +89,10 @@ func (s *userService) UpdateUser(id uint64, displayName, email string) (*models.
 
 	if displayName != "" {
 		user.DisplayName = displayName
+	}
+
+	if status != "" {
+		user.Status = status
 	}
 
 	err = s.userRepo.Update(user)

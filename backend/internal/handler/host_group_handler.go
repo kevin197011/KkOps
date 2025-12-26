@@ -53,11 +53,6 @@ func (h *HostGroupHandler) ListGroups(c *gin.Context) {
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "10"))
 
 	filters := make(map[string]interface{})
-	if projectID := c.Query("project_id"); projectID != "" {
-		if id, err := strconv.ParseUint(projectID, 10, 64); err == nil {
-			filters["project_id"] = id
-		}
-	}
 	if name := c.Query("name"); name != "" {
 		filters["name"] = name
 	}
