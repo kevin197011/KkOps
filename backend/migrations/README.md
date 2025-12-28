@@ -2,16 +2,31 @@
 
 ## 自动迁移
 
-KkOps 使用 GORM 的 AutoMigrate 功能，在应用启动时自动执行数据库迁移。
+KkOps 使用基于 SQL 文件的迁移系统，在应用启动时自动执行数据库迁移。
 
 ### 迁移时机
 
-- **应用启动时自动执行**：每次应用启动时，会自动检查并创建/更新数据库表结构
+- **应用启动时自动执行**：每次应用启动时，会自动从 `backend/migrations` 目录读取并执行所有 `.up.sql` 迁移文件
+- **按时间戳顺序执行**：迁移文件按文件名（时间戳）排序执行，确保迁移顺序正确
 - **无需手动执行**：不需要单独运行迁移脚本
+
+### 迁移文件格式
+
+迁移文件命名格式：`{timestamp}_{description}.up.sql`
+
+- `{timestamp}`: Unix 时间戳（如 `1766942491`）
+- `{description}`: 迁移描述（如 `create_initial_tables`）
+- `.up.sql`: 升级迁移文件
+- `.down.sql`: 回滚迁移文件（可选）
+
+示例：
+- `1766942491_create_initial_tables.up.sql` - 创建初始表结构
+- `1766942492_create_initial_indexes.up.sql` - 创建初始索引
+- `1766942493_fix_formula_created_by_fields.up.sql` - 修复数据
 
 ### 迁移内容
 
-自动迁移会创建以下表：
+迁移文件包含所有数据库表结构的创建和修改：
 
 #### 用户和权限管理
 - `users` - 用户表
@@ -79,13 +94,40 @@ Database migration completed
 3. **数据库存在**：确认数据库已创建
 4. **端口和网络**：确认可以连接到数据库服务器
 
+### 迁移文件位置
+
+所有迁移文件位于 `backend/migrations/` 目录：
+
+```
+backend/migrations/
+├── 1766942491_create_initial_tables.up.sql
+├── 1766942492_create_initial_indexes.up.sql
+├── 1766942493_fix_formula_created_by_fields.up.sql
+├── 1766942493_fix_formula_created_by_fields.down.sql
+├── fix_formula_cascade_delete.sql
+├── fix_host_tag_assignments.sql
+└── ...
+```
+
+### 添加新迁移
+
+1. 创建新的迁移文件，文件名格式：`{timestamp}_{description}.up.sql`
+2. 在文件中编写 SQL 语句（使用 `IF NOT EXISTS` 确保幂等性）
+3. 可选：创建对应的 `.down.sql` 回滚文件
+4. 重启应用，迁移会自动执行
+
 ### 手动迁移（可选）
 
 如果需要手动执行 SQL 迁移脚本，可以使用：
 
 ```bash
-psql -U postgres -d kkops -f openspec/changes/add-ops-platform/database-schema.sql
+# 执行单个迁移文件
+psql -U postgres -d kkops -f backend/migrations/1766942491_create_initial_tables.up.sql
+
+# 或使用 psql 交互式执行
+psql -U postgres -d kkops
+\i backend/migrations/1766942491_create_initial_tables.up.sql
 ```
 
-但通常不需要，因为 AutoMigrate 会自动处理。
+但通常不需要，因为应用启动时会自动执行所有迁移。
 

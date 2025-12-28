@@ -4,6 +4,10 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/kkops/backend/internal/config"
@@ -15,655 +19,8 @@ import (
 	"gorm.io/gorm/logger"
 )
 
-// manualMigrateUser 手动迁移 User 表，避免 GORM AutoMigrate 的 pgx/v5 兼容性问题
-func manualMigrateUser() error {
-	log.Println("Manually migrating User table...")
-
-	// 检查表是否已存在
-	var exists bool
-	err := DB.Raw(`
-		SELECT EXISTS (
-			SELECT 1 FROM information_schema.tables
-			WHERE table_schema = CURRENT_SCHEMA()
-			AND table_name = 'users'
-		)
-	`).Scan(&exists).Error
-
-	if err != nil {
-		return fmt.Errorf("failed to check if users table exists: %w", err)
-	}
-
-	if exists {
-		log.Println("Users table already exists, skipping manual migration")
-		return nil
-	}
-
-	// 手动创建 users 表
-	err = DB.Exec(`
-		CREATE TABLE users (
-			id BIGSERIAL PRIMARY KEY,
-			username VARCHAR(50) NOT NULL UNIQUE,
-			email VARCHAR(100) NOT NULL UNIQUE,
-			password_hash VARCHAR(255) NOT NULL,
-			display_name VARCHAR(100),
-			status VARCHAR(20) NOT NULL DEFAULT 'active',
-			last_login_at TIMESTAMP,
-			last_login_ip VARCHAR(45),
-			created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-			updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-			deleted_at TIMESTAMP
-		)
-	`).Error
-
-	if err != nil {
-		return fmt.Errorf("failed to create users table: %w", err)
-	}
-
-	// 创建索引
-	err = DB.Exec(`
-		CREATE UNIQUE INDEX idx_users_username ON users(username);
-		CREATE UNIQUE INDEX idx_users_email ON users(email);
-		CREATE INDEX idx_users_deleted_at ON users(deleted_at);
-	`).Error
-
-	if err != nil {
-		return fmt.Errorf("failed to create indexes for users table: %w", err)
-	}
-
-	log.Println("User table manually migrated successfully")
-	return nil
-}
-
-// manualMigrateAllTables 手动迁移所有表，使用纯SQL避免pgx/v5兼容性问题
-func manualMigrateAllTables() error {
-	log.Println("Starting manual migration of all tables...")
-
-	tables := []struct {
-		name string
-		sql  string
-	}{
-		{
-			name: "users",
-			sql: `
-				CREATE TABLE IF NOT EXISTS users (
-					id BIGSERIAL PRIMARY KEY,
-					username VARCHAR(50) NOT NULL UNIQUE,
-					email VARCHAR(100) NOT NULL UNIQUE,
-					password_hash VARCHAR(255) NOT NULL,
-					display_name VARCHAR(100),
-					status VARCHAR(20) NOT NULL DEFAULT 'active',
-					last_login_at TIMESTAMP,
-					last_login_ip VARCHAR(45),
-					created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-					updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-					deleted_at TIMESTAMP
-				)`,
-		},
-		{
-			name: "roles",
-			sql: `
-				CREATE TABLE IF NOT EXISTS roles (
-					id BIGSERIAL PRIMARY KEY,
-					name VARCHAR(50) NOT NULL UNIQUE,
-					display_name VARCHAR(100),
-					description TEXT,
-					created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-					updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-					deleted_at TIMESTAMP
-				)`,
-		},
-		{
-			name: "permissions",
-			sql: `
-				CREATE TABLE IF NOT EXISTS permissions (
-					id BIGSERIAL PRIMARY KEY,
-					code VARCHAR(100) NOT NULL UNIQUE,
-					name VARCHAR(100) NOT NULL,
-					resource_type VARCHAR(50) NOT NULL,
-					action VARCHAR(50) NOT NULL,
-					description TEXT,
-					created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-					updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-					deleted_at TIMESTAMP
-				)`,
-		},
-		{
-			name: "user_roles",
-			sql: `
-				CREATE TABLE IF NOT EXISTS user_roles (
-					user_id BIGINT NOT NULL,
-					role_id BIGINT NOT NULL,
-					created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-					PRIMARY KEY (user_id, role_id),
-					FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-					FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE CASCADE
-				)`,
-		},
-		{
-			name: "role_permissions",
-			sql: `
-				CREATE TABLE IF NOT EXISTS role_permissions (
-					role_id BIGINT NOT NULL,
-					permission_id BIGINT NOT NULL,
-					created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-					PRIMARY KEY (role_id, permission_id),
-					FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE CASCADE,
-					FOREIGN KEY (permission_id) REFERENCES permissions(id) ON DELETE CASCADE
-				)`,
-		},
-		{
-			name: "environments",
-			sql: `
-				CREATE TABLE IF NOT EXISTS environments (
-					id BIGSERIAL PRIMARY KEY,
-					name VARCHAR(50) NOT NULL UNIQUE,
-					display_name VARCHAR(100),
-					description TEXT,
-					color VARCHAR(20),
-					sort_order INTEGER DEFAULT 0,
-					created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-					updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-					deleted_at TIMESTAMP
-				)`,
-		},
-		{
-			name: "cloud_platforms",
-			sql: `
-				CREATE TABLE IF NOT EXISTS cloud_platforms (
-					id BIGSERIAL PRIMARY KEY,
-					name VARCHAR(50) NOT NULL UNIQUE,
-					display_name VARCHAR(100),
-					description TEXT,
-					icon VARCHAR(100),
-					color VARCHAR(20),
-					sort_order INTEGER DEFAULT 0,
-					created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-					updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-					deleted_at TIMESTAMP
-				)`,
-		},
-		{
-			name: "host_tags",
-			sql: `
-				CREATE TABLE IF NOT EXISTS host_tags (
-					id BIGSERIAL PRIMARY KEY,
-					name VARCHAR(50) NOT NULL UNIQUE,
-					color VARCHAR(20),
-					description TEXT,
-					created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-					updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-					deleted_at TIMESTAMP
-				)`,
-		},
-		{
-			name: "projects",
-			sql: `
-				CREATE TABLE IF NOT EXISTS projects (
-					id BIGSERIAL PRIMARY KEY,
-					name VARCHAR(100) NOT NULL UNIQUE,
-					description TEXT,
-					status VARCHAR(20) NOT NULL DEFAULT 'active',
-					created_by BIGINT NOT NULL,
-					created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-					updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-					deleted_at TIMESTAMP,
-					FOREIGN KEY (created_by) REFERENCES users(id)
-				)`,
-		},
-		{
-			name: "ssh_keys",
-			sql: `
-				CREATE TABLE IF NOT EXISTS ssh_keys (
-					id BIGSERIAL PRIMARY KEY,
-					user_id BIGINT NOT NULL,
-					name VARCHAR(100) NOT NULL,
-					username VARCHAR(100),
-					key_type VARCHAR(20) NOT NULL,
-					public_key TEXT,
-					private_key TEXT NOT NULL,
-					fingerprint VARCHAR(100),
-					created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-					updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-					deleted_at TIMESTAMP,
-					FOREIGN KEY (user_id) REFERENCES users(id)
-				)`,
-		},
-		{
-			name: "host_groups",
-			sql: `
-				CREATE TABLE IF NOT EXISTS host_groups (
-					id BIGSERIAL PRIMARY KEY,
-					name VARCHAR(100) NOT NULL UNIQUE,
-					display_name VARCHAR(200),
-					description TEXT,
-					created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-					updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-					deleted_at TIMESTAMP
-				)`,
-		},
-		{
-			name: "hosts",
-			sql: `
-				CREATE TABLE IF NOT EXISTS hosts (
-					id BIGSERIAL PRIMARY KEY,
-					project_id BIGINT NOT NULL,
-					hostname VARCHAR(255) NOT NULL,
-					ip_address VARCHAR(45) NOT NULL UNIQUE,
-					salt_minion_id VARCHAR(255),
-					os_type VARCHAR(50),
-					os_version VARCHAR(100),
-					cpu_cores INTEGER,
-					memory_gb DECIMAL(10,2),
-					disk_gb DECIMAL(10,2),
-					status VARCHAR(20) NOT NULL DEFAULT 'unknown',
-					environment VARCHAR(20),
-					cloud_platform_id BIGINT,
-					ssh_port INTEGER NOT NULL DEFAULT 22,
-					ssh_key_id BIGINT,
-					last_seen_at TIMESTAMP,
-					salt_version VARCHAR(50),
-					metadata JSONB,
-					description TEXT,
-					created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-					updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-					deleted_at TIMESTAMP,
-					FOREIGN KEY (project_id) REFERENCES projects(id),
-					FOREIGN KEY (cloud_platform_id) REFERENCES cloud_platforms(id),
-					FOREIGN KEY (ssh_key_id) REFERENCES ssh_keys(id)
-				)`,
-		},
-		{
-			name: "host_group_members",
-			sql: `
-				CREATE TABLE IF NOT EXISTS host_group_members (
-					host_id BIGINT NOT NULL,
-					group_id BIGINT NOT NULL,
-					created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-					PRIMARY KEY (host_id, group_id),
-					FOREIGN KEY (host_id) REFERENCES hosts(id) ON DELETE CASCADE,
-					FOREIGN KEY (group_id) REFERENCES host_groups(id) ON DELETE CASCADE
-				)`,
-		},
-		{
-			name: "host_tag_assignments",
-			sql: `
-				CREATE TABLE IF NOT EXISTS host_tag_assignments (
-					host_id BIGINT NOT NULL,
-					tag_id BIGINT NOT NULL,
-					created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-					PRIMARY KEY (host_id, tag_id),
-					FOREIGN KEY (host_id) REFERENCES hosts(id) ON DELETE CASCADE,
-					FOREIGN KEY (tag_id) REFERENCES host_tags(id) ON DELETE CASCADE
-				)`,
-		},
-		{
-			name: "project_members",
-			sql: `
-				CREATE TABLE IF NOT EXISTS project_members (
-					id BIGSERIAL PRIMARY KEY,
-					project_id BIGINT NOT NULL,
-					user_id BIGINT NOT NULL,
-					role VARCHAR(50) DEFAULT 'member',
-					created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-					FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
-					FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-				)`,
-		},
-		{
-			name: "deployment_configs",
-			sql: `
-				CREATE TABLE IF NOT EXISTS deployment_configs (
-					id BIGSERIAL PRIMARY KEY,
-					name VARCHAR(100) NOT NULL,
-					project_id BIGINT NOT NULL,
-					description TEXT,
-					config_type VARCHAR(50) NOT NULL,
-					config_data JSONB,
-					created_by BIGINT NOT NULL,
-					created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-					updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-					deleted_at TIMESTAMP,
-					FOREIGN KEY (project_id) REFERENCES projects(id),
-					FOREIGN KEY (created_by) REFERENCES users(id)
-				)`,
-		},
-		{
-			name: "deployments",
-			sql: `
-				CREATE TABLE IF NOT EXISTS deployments (
-					id BIGSERIAL PRIMARY KEY,
-					name VARCHAR(100) NOT NULL,
-					project_id BIGINT NOT NULL,
-					config_id BIGINT NOT NULL,
-					status VARCHAR(50) NOT NULL DEFAULT 'pending',
-					version VARCHAR(100),
-					deployed_by BIGINT NOT NULL,
-					deployed_at TIMESTAMP,
-					completed_at TIMESTAMP,
-					error_message TEXT,
-					logs TEXT,
-					created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-					updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-					deleted_at TIMESTAMP,
-					FOREIGN KEY (project_id) REFERENCES projects(id),
-					FOREIGN KEY (config_id) REFERENCES deployment_configs(id),
-					FOREIGN KEY (deployed_by) REFERENCES users(id)
-				)`,
-		},
-		{
-			name: "deployment_versions",
-			sql: `
-				CREATE TABLE IF NOT EXISTS deployment_versions (
-					id BIGSERIAL PRIMARY KEY,
-					deployment_id BIGINT NOT NULL,
-					version VARCHAR(100) NOT NULL,
-					config_snapshot JSONB,
-					status VARCHAR(50) NOT NULL,
-					deployed_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-					FOREIGN KEY (deployment_id) REFERENCES deployments(id) ON DELETE CASCADE
-				)`,
-		},
-		{
-			name: "audit_logs",
-			sql: `
-				CREATE TABLE IF NOT EXISTS audit_logs (
-					id BIGSERIAL PRIMARY KEY,
-					user_id BIGINT,
-					username VARCHAR(100),
-					action VARCHAR(100) NOT NULL,
-					resource_type VARCHAR(100) NOT NULL,
-					resource_id BIGINT,
-					resource_name VARCHAR(255),
-					ip_address VARCHAR(45),
-					user_agent TEXT,
-					request_data JSONB,
-					response_data JSONB,
-					before_data JSONB,
-					after_data JSONB,
-					status VARCHAR(20) NOT NULL DEFAULT 'success',
-					error_message TEXT,
-					duration_ms INTEGER,
-					created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-					updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-					deleted_at TIMESTAMP,
-					FOREIGN KEY (user_id) REFERENCES users(id)
-				)`,
-		},
-		{
-			name: "system_settings",
-			sql: `
-				CREATE TABLE IF NOT EXISTS system_settings (
-					id BIGSERIAL PRIMARY KEY,
-					key VARCHAR(100) NOT NULL UNIQUE,
-					value TEXT NOT NULL,
-					category VARCHAR(50) NOT NULL,
-					description TEXT,
-					updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-					updated_by BIGINT,
-					FOREIGN KEY (updated_by) REFERENCES users(id)
-				)`,
-		},
-		{
-			name: "batch_operations",
-			sql: `
-				CREATE TABLE IF NOT EXISTS batch_operations (
-					id BIGSERIAL PRIMARY KEY,
-					name VARCHAR(255) NOT NULL,
-					description TEXT,
-					command_type VARCHAR(50) NOT NULL,
-					command_function VARCHAR(255) NOT NULL,
-					command_args JSONB,
-					target_hosts JSONB NOT NULL,
-					target_count INTEGER NOT NULL,
-					status VARCHAR(20) NOT NULL DEFAULT 'pending',
-					salt_job_id VARCHAR(255),
-					started_by BIGINT NOT NULL,
-					started_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-					completed_at TIMESTAMP,
-					duration_seconds INTEGER,
-					results JSONB,
-					success_count INTEGER DEFAULT 0,
-					failed_count INTEGER DEFAULT 0,
-					error_message TEXT,
-					created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-					updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-					deleted_at TIMESTAMP,
-					FOREIGN KEY (started_by) REFERENCES users(id)
-				)`,
-		},
-		{
-			name: "command_templates",
-			sql: `
-				CREATE TABLE IF NOT EXISTS command_templates (
-					id BIGSERIAL PRIMARY KEY,
-					name VARCHAR(255) NOT NULL,
-					description TEXT,
-					category VARCHAR(100),
-					command_function VARCHAR(100) NOT NULL,
-					command_args JSONB,
-					icon VARCHAR(100),
-					created_by BIGINT NOT NULL,
-					is_public BOOLEAN DEFAULT false,
-					usage_count INTEGER DEFAULT 0,
-					created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-					updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-					deleted_at TIMESTAMP,
-					FOREIGN KEY (created_by) REFERENCES users(id)
-				)`,
-		},
-		{
-			name: "formula_repositories",
-			sql: `
-				CREATE TABLE IF NOT EXISTS formula_repositories (
-					id BIGSERIAL PRIMARY KEY,
-					name VARCHAR(255) NOT NULL UNIQUE,
-					url VARCHAR(500) NOT NULL,
-					branch VARCHAR(100) DEFAULT 'master',
-					local_path VARCHAR(500),
-					is_active BOOLEAN DEFAULT true,
-					last_sync_at TIMESTAMP,
-					created_by BIGINT NOT NULL DEFAULT 1,
-					created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-					updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-					deleted_at TIMESTAMP,
-					FOREIGN KEY (created_by) REFERENCES users(id)
-				)`,
-		},
-		{
-			name: "formulas",
-			sql: `
-				CREATE TABLE IF NOT EXISTS formulas (
-					id BIGSERIAL PRIMARY KEY,
-					name VARCHAR(255) NOT NULL UNIQUE,
-					description TEXT,
-					category VARCHAR(100),
-					version VARCHAR(50),
-					path VARCHAR(500) NOT NULL,
-					repository VARCHAR(500) NOT NULL,
-					icon VARCHAR(100),
-					tags JSONB,
-					metadata JSONB,
-					is_active BOOLEAN DEFAULT true,
-					created_by BIGINT NOT NULL DEFAULT 1,
-					created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-					updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-					deleted_at TIMESTAMP,
-					FOREIGN KEY (created_by) REFERENCES users(id)
-				)`,
-		},
-		{
-			name: "formula_parameters",
-			sql: `
-				CREATE TABLE IF NOT EXISTS formula_parameters (
-					id BIGSERIAL PRIMARY KEY,
-					formula_id BIGINT NOT NULL,
-					name VARCHAR(255) NOT NULL,
-					type VARCHAR(50) NOT NULL,
-					default_value JSONB,
-					required BOOLEAN DEFAULT false,
-					label VARCHAR(255),
-					description TEXT,
-					validation JSONB,
-					order_index INTEGER DEFAULT 0,
-					created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-					updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-					FOREIGN KEY (formula_id) REFERENCES formulas(id) ON DELETE CASCADE
-				)`,
-		},
-		{
-			name: "formula_templates",
-			sql: `
-				CREATE TABLE IF NOT EXISTS formula_templates (
-					id BIGSERIAL PRIMARY KEY,
-					formula_id BIGINT NOT NULL,
-					name VARCHAR(255) NOT NULL,
-					description TEXT,
-					pillar_data JSONB,
-					is_public BOOLEAN DEFAULT false,
-					created_by BIGINT NOT NULL DEFAULT 1,
-					created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-					updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-					deleted_at TIMESTAMP,
-					FOREIGN KEY (formula_id) REFERENCES formulas(id) ON DELETE CASCADE,
-					FOREIGN KEY (created_by) REFERENCES users(id)
-				)`,
-		},
-		{
-			name: "formula_deployments",
-			sql: `
-				CREATE TABLE IF NOT EXISTS formula_deployments (
-					id BIGSERIAL PRIMARY KEY,
-					formula_id BIGINT NOT NULL,
-					name VARCHAR(255) NOT NULL,
-					description TEXT,
-					target_hosts JSONB,
-					pillar_data JSONB,
-					status VARCHAR(20) DEFAULT 'pending',
-					salt_job_id VARCHAR(100),
-					results JSONB,
-					success_count INTEGER DEFAULT 0,
-					failed_count INTEGER DEFAULT 0,
-					error_message TEXT,
-					started_by BIGINT NOT NULL DEFAULT 1,
-					started_at TIMESTAMP,
-					completed_at TIMESTAMP,
-					duration_seconds INTEGER,
-					created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-					updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-					deleted_at TIMESTAMP,
-					FOREIGN KEY (formula_id) REFERENCES formulas(id),
-					FOREIGN KEY (started_by) REFERENCES users(id)
-				)`,
-		},
-	}
-
-	// 执行所有表的创建
-	for _, table := range tables {
-		log.Printf("Creating table: %s", table.name)
-		if err := DB.Exec(table.sql).Error; err != nil {
-			return fmt.Errorf("failed to create table %s: %w", table.name, err)
-		}
-		log.Printf("Table %s created successfully", table.name)
-	}
-
-	// 创建索引
-	indexes := []string{
-		"CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)",
-		"CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)",
-		"CREATE INDEX IF NOT EXISTS idx_users_deleted_at ON users(deleted_at)",
-		"CREATE INDEX IF NOT EXISTS idx_roles_name ON roles(name)",
-		"CREATE INDEX IF NOT EXISTS idx_roles_deleted_at ON roles(deleted_at)",
-		"CREATE INDEX IF NOT EXISTS idx_permissions_code ON permissions(code)",
-		"CREATE INDEX IF NOT EXISTS idx_permissions_name ON permissions(name)",
-		"CREATE INDEX IF NOT EXISTS idx_permissions_resource_type_action ON permissions(resource_type, action)",
-		"CREATE INDEX IF NOT EXISTS idx_permissions_deleted_at ON permissions(deleted_at)",
-		"CREATE INDEX IF NOT EXISTS idx_environments_name ON environments(name)",
-		"CREATE INDEX IF NOT EXISTS idx_environments_deleted_at ON environments(deleted_at)",
-		"CREATE INDEX IF NOT EXISTS idx_environments_sort_order ON environments(sort_order)",
-		"CREATE INDEX IF NOT EXISTS idx_cloud_platforms_name ON cloud_platforms(name)",
-		"CREATE INDEX IF NOT EXISTS idx_cloud_platforms_deleted_at ON cloud_platforms(deleted_at)",
-		"CREATE INDEX IF NOT EXISTS idx_cloud_platforms_sort_order ON cloud_platforms(sort_order)",
-		"CREATE INDEX IF NOT EXISTS idx_host_tags_name ON host_tags(name)",
-		"CREATE INDEX IF NOT EXISTS idx_host_tags_deleted_at ON host_tags(deleted_at)",
-		"CREATE INDEX IF NOT EXISTS idx_projects_name ON projects(name)",
-		"CREATE INDEX IF NOT EXISTS idx_projects_status ON projects(status)",
-		"CREATE INDEX IF NOT EXISTS idx_projects_created_by ON projects(created_by)",
-		"CREATE INDEX IF NOT EXISTS idx_projects_deleted_at ON projects(deleted_at)",
-		"CREATE INDEX IF NOT EXISTS idx_project_members_project_id ON project_members(project_id)",
-		"CREATE INDEX IF NOT EXISTS idx_project_members_user_id ON project_members(user_id)",
-		"CREATE INDEX IF NOT EXISTS idx_ssh_keys_user_id ON ssh_keys(user_id)",
-		"CREATE INDEX IF NOT EXISTS idx_ssh_keys_deleted_at ON ssh_keys(deleted_at)",
-		"CREATE INDEX IF NOT EXISTS idx_host_groups_name ON host_groups(name)",
-		"CREATE INDEX IF NOT EXISTS idx_host_groups_deleted_at ON host_groups(deleted_at)",
-		"CREATE INDEX IF NOT EXISTS idx_hosts_hostname ON hosts(hostname)",
-		"CREATE INDEX IF NOT EXISTS idx_hosts_ip_address ON hosts(ip_address)",
-		"CREATE INDEX IF NOT EXISTS idx_hosts_environment ON hosts(environment)",
-		"CREATE INDEX IF NOT EXISTS idx_hosts_cloud_platform_id ON hosts(cloud_platform_id)",
-		"CREATE INDEX IF NOT EXISTS idx_hosts_project_id ON hosts(project_id)",
-		"CREATE INDEX IF NOT EXISTS idx_hosts_status ON hosts(status)",
-		"CREATE INDEX IF NOT EXISTS idx_hosts_salt_minion_id ON hosts(salt_minion_id)",
-		"CREATE INDEX IF NOT EXISTS idx_hosts_ssh_key_id ON hosts(ssh_key_id)",
-		"CREATE INDEX IF NOT EXISTS idx_hosts_deleted_at ON hosts(deleted_at)",
-		"CREATE INDEX IF NOT EXISTS idx_hosts_ip_address ON hosts(ip_address)",
-		"CREATE INDEX IF NOT EXISTS idx_deployment_configs_project_id ON deployment_configs(project_id)",
-		"CREATE INDEX IF NOT EXISTS idx_deployment_configs_created_by ON deployment_configs(created_by)",
-		"CREATE INDEX IF NOT EXISTS idx_deployment_configs_deleted_at ON deployment_configs(deleted_at)",
-		"CREATE INDEX IF NOT EXISTS idx_deployments_project_id ON deployments(project_id)",
-		"CREATE INDEX IF NOT EXISTS idx_deployments_config_id ON deployments(config_id)",
-		"CREATE INDEX IF NOT EXISTS idx_deployments_deployed_by ON deployments(deployed_by)",
-		"CREATE INDEX IF NOT EXISTS idx_deployments_status ON deployments(status)",
-		"CREATE INDEX IF NOT EXISTS idx_deployments_deleted_at ON deployments(deleted_at)",
-		"CREATE INDEX IF NOT EXISTS idx_deployment_versions_deployment_id ON deployment_versions(deployment_id)",
-		"CREATE INDEX IF NOT EXISTS idx_audit_logs_user_id ON audit_logs(user_id)",
-		"CREATE INDEX IF NOT EXISTS idx_audit_logs_action ON audit_logs(action)",
-		"CREATE INDEX IF NOT EXISTS idx_audit_logs_resource_type ON audit_logs(resource_type)",
-		"CREATE INDEX IF NOT EXISTS idx_audit_logs_resource_id ON audit_logs(resource_id)",
-		"CREATE INDEX IF NOT EXISTS idx_audit_logs_status ON audit_logs(status)",
-		"CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs(created_at)",
-		"CREATE INDEX IF NOT EXISTS idx_audit_logs_deleted_at ON audit_logs(deleted_at)",
-		"CREATE INDEX IF NOT EXISTS idx_system_settings_key ON system_settings(key)",
-		"CREATE INDEX IF NOT EXISTS idx_system_settings_category ON system_settings(category)",
-		"CREATE INDEX IF NOT EXISTS idx_system_settings_updated_by ON system_settings(updated_by)",
-		"CREATE INDEX IF NOT EXISTS idx_batch_operations_started_by ON batch_operations(started_by)",
-		"CREATE INDEX IF NOT EXISTS idx_batch_operations_status ON batch_operations(status)",
-		"CREATE INDEX IF NOT EXISTS idx_batch_operations_started_at ON batch_operations(started_at)",
-		"CREATE INDEX IF NOT EXISTS idx_batch_operations_created_at ON batch_operations(created_at)",
-		"CREATE INDEX IF NOT EXISTS idx_batch_operations_deleted_at ON batch_operations(deleted_at)",
-		"CREATE INDEX IF NOT EXISTS idx_command_templates_created_by ON command_templates(created_by)",
-		"CREATE INDEX IF NOT EXISTS idx_command_templates_category ON command_templates(category)",
-		"CREATE INDEX IF NOT EXISTS idx_command_templates_is_public ON command_templates(is_public)",
-		"CREATE INDEX IF NOT EXISTS idx_command_templates_deleted_at ON command_templates(deleted_at)",
-		"CREATE INDEX IF NOT EXISTS idx_formula_repositories_name ON formula_repositories(name)",
-		"CREATE INDEX IF NOT EXISTS idx_formula_repositories_is_active ON formula_repositories(is_active)",
-		"CREATE INDEX IF NOT EXISTS idx_formula_repositories_deleted_at ON formula_repositories(deleted_at)",
-		"CREATE INDEX IF NOT EXISTS idx_formulas_name ON formulas(name)",
-		"CREATE INDEX IF NOT EXISTS idx_formulas_category ON formulas(category)",
-		"CREATE INDEX IF NOT EXISTS idx_formulas_repository ON formulas(repository)",
-		"CREATE INDEX IF NOT EXISTS idx_formulas_is_active ON formulas(is_active)",
-		"CREATE INDEX IF NOT EXISTS idx_formulas_deleted_at ON formulas(deleted_at)",
-		"CREATE INDEX IF NOT EXISTS idx_formula_parameters_formula_id ON formula_parameters(formula_id)",
-		"CREATE INDEX IF NOT EXISTS idx_formula_templates_formula_id ON formula_templates(formula_id)",
-		"CREATE INDEX IF NOT EXISTS idx_formula_templates_created_by ON formula_templates(created_by)",
-		"CREATE INDEX IF NOT EXISTS idx_formula_templates_is_public ON formula_templates(is_public)",
-		"CREATE INDEX IF NOT EXISTS idx_formula_templates_deleted_at ON formula_templates(deleted_at)",
-		"CREATE INDEX IF NOT EXISTS idx_formula_deployments_formula_id ON formula_deployments(formula_id)",
-		"CREATE INDEX IF NOT EXISTS idx_formula_deployments_status ON formula_deployments(status)",
-		"CREATE INDEX IF NOT EXISTS idx_formula_deployments_started_by ON formula_deployments(started_by)",
-		"CREATE INDEX IF NOT EXISTS idx_formula_deployments_started_at ON formula_deployments(started_at)",
-		"CREATE INDEX IF NOT EXISTS idx_formula_deployments_deleted_at ON formula_deployments(deleted_at)",
-	}
-
-	log.Println("Creating indexes...")
-	for _, indexSQL := range indexes {
-		if err := DB.Exec(indexSQL).Error; err != nil {
-			log.Printf("Warning: Failed to create index: %s, error: %v", indexSQL, err)
-			// 不返回错误，因为索引创建失败不应该阻止整个迁移
-		}
-	}
-
-	log.Println("All tables and indexes created successfully")
-	return nil
-}
+// 注意：所有建表和建索引的 SQL 语句已迁移到 backend/migrations/ 目录
+// 请使用迁移文件来管理数据库结构变更，而不是在代码中硬编码 SQL
 
 var DB *gorm.DB
 
@@ -700,10 +57,10 @@ func AutoMigrate() error {
 
 	log.Println("Starting database migration...")
 
-	// 使用纯SQL手动迁移所有表，避免 GORM AutoMigrate 的 pgx/v5 兼容性问题
-	log.Println("Using manual SQL migration to avoid pgx/v5 compatibility issues")
-	if err := manualMigrateAllTables(); err != nil {
-		return fmt.Errorf("failed to manually migrate all tables: %w", err)
+	// 从 migrations 目录读取并执行 SQL 文件
+	log.Println("Executing migrations from migrations directory...")
+	if err := executeMigrations(); err != nil {
+		return fmt.Errorf("failed to execute migrations: %w", err)
 	}
 
 	log.Println("Database migration completed successfully")
@@ -712,6 +69,106 @@ func AutoMigrate() error {
 	if err := initDefaultData(); err != nil {
 		log.Printf("Warning: Failed to initialize default data: %v", err)
 		// 不返回错误，因为迁移已经成功
+	}
+
+	return nil
+}
+
+// executeMigrations 从 migrations 目录读取并执行所有 .up.sql 文件
+func executeMigrations() error {
+	// 获取 migrations 目录路径（相对于项目根目录）
+	migrationsDir := "backend/migrations"
+	if _, err := os.Stat(migrationsDir); os.IsNotExist(err) {
+		// 如果 backend/migrations 不存在，尝试 migrations（可能在 backend 目录内运行）
+		migrationsDir = "migrations"
+		if _, err := os.Stat(migrationsDir); os.IsNotExist(err) {
+			return fmt.Errorf("migrations directory not found. Please ensure backend/migrations/ directory exists with migration files")
+		}
+	}
+
+	// 读取所有 .up.sql 文件
+	files, err := filepath.Glob(filepath.Join(migrationsDir, "*_*.up.sql"))
+	if err != nil {
+		return fmt.Errorf("failed to read migration files: %w", err)
+	}
+
+	// 按文件名排序（时间戳顺序）
+	sort.Strings(files)
+
+	log.Printf("Found %d migration files", len(files))
+
+	// 执行每个迁移文件
+	for _, file := range files {
+		log.Printf("Executing migration: %s", filepath.Base(file))
+
+		// 读取 SQL 文件内容
+		sqlContent, err := os.ReadFile(file)
+		if err != nil {
+			return fmt.Errorf("failed to read migration file %s: %w", file, err)
+		}
+
+		// 执行 SQL（按分号分割，逐条执行）
+		statements := strings.Split(string(sqlContent), ";")
+		for _, stmt := range statements {
+			stmt = strings.TrimSpace(stmt)
+			// 跳过空语句和注释
+			if stmt == "" || strings.HasPrefix(stmt, "--") {
+				continue
+			}
+
+			// 执行 SQL 语句
+			if err := DB.Exec(stmt).Error; err != nil {
+				// 对于某些错误（如表已存在），只记录警告而不中断
+				if strings.Contains(err.Error(), "already exists") ||
+					strings.Contains(err.Error(), "duplicate") {
+					log.Printf("Warning: %s (this is usually safe to ignore)", err)
+				} else {
+					return fmt.Errorf("failed to execute migration %s: %w\nSQL: %s", file, err, stmt)
+				}
+			}
+		}
+
+		log.Printf("Migration %s executed successfully", filepath.Base(file))
+	}
+
+	// 执行非时间戳格式的迁移文件（如 fix_*.sql）
+	legacyFiles, err := filepath.Glob(filepath.Join(migrationsDir, "*.sql"))
+	if err == nil {
+		for _, file := range legacyFiles {
+			// 跳过已经处理过的 .up.sql 文件
+			if strings.HasSuffix(file, ".up.sql") {
+				continue
+			}
+			// 跳过 .down.sql 文件
+			if strings.HasSuffix(file, ".down.sql") {
+				continue
+			}
+
+			log.Printf("Executing legacy migration: %s", filepath.Base(file))
+
+			sqlContent, err := os.ReadFile(file)
+			if err != nil {
+				log.Printf("Warning: Failed to read legacy migration file %s: %v", file, err)
+				continue
+			}
+
+			statements := strings.Split(string(sqlContent), ";")
+			for _, stmt := range statements {
+				stmt = strings.TrimSpace(stmt)
+				if stmt == "" || strings.HasPrefix(stmt, "--") {
+					continue
+				}
+
+				if err := DB.Exec(stmt).Error; err != nil {
+					if strings.Contains(err.Error(), "already exists") ||
+						strings.Contains(err.Error(), "duplicate") {
+						log.Printf("Warning: %s (this is usually safe to ignore)", err)
+					} else {
+						log.Printf("Warning: Failed to execute legacy migration %s: %v\nSQL: %s", file, err, stmt)
+					}
+				}
+			}
+		}
 	}
 
 	return nil
