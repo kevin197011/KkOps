@@ -1,0 +1,90 @@
+# Guacamole 服务配置
+# 可以合并到主 docker-compose.yml 或作为独立文件使用
+
+services:
+  # Guacamole 数据库（MySQL）
+  guacamole-db:
+    image: mysql:8.0
+    container_name: kkops-guacamole-db
+    environment:
+      MYSQL_ROOT_PASSWORD: ${GUACAMOLE_DB_ROOT_PASSWORD:-guacamole_root}
+      MYSQL_DATABASE: guacamole_db
+      MYSQL_USER: guacamole
+      MYSQL_PASSWORD: ${GUACAMOLE_DB_PASSWORD:-guacamole_password}
+      TZ: Asia/Shanghai
+    ports:
+      - "3307:3306"  # 避免与现有 MySQL 冲突（如果有）
+    volumes:
+      - guacamole_db_data:/var/lib/mysql
+      # 注意：需要手动下载 Guacamole schema SQL 文件
+      # 或使用初始化脚本
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - kkops-network
+    restart: unless-stopped
+
+  # Guacamole daemon (协议网关)
+  guacd:
+    image: guacamole/guacd:latest
+    container_name: kkops-guacd
+    volumes:
+      - guacd_drive:/drive
+      - guacd_record:/record
+    networks:
+      - kkops-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "pgrep", "-f", "guacd"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Guacamole webapp
+  guacamole:
+    image: guacamole/guacamole:latest
+    container_name: kkops-guacamole
+    environment:
+      GUACD_HOSTNAME: guacd
+      GUACD_PORT: 4822
+      MYSQL_HOSTNAME: guacamole-db
+      MYSQL_PORT: 3306
+      MYSQL_DATABASE: guacamole_db
+      MYSQL_USERNAME: guacamole
+      MYSQL_PASSWORD: ${GUACAMOLE_DB_PASSWORD:-guacamole_password}
+      MYSQL_AUTO_CREATE_ACCOUNTS: "true"
+      TZ: Asia/Shanghai
+    ports:
+      - "8080:8080"
+    depends_on:
+      guacd:
+        condition: service_started
+      guacamole-db:
+        condition: service_healthy
+    networks:
+      - kkops-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/guacamole/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+volumes:
+  guacamole_db_data:
+    driver: local
+  guacd_drive:
+    driver: local
+  guacd_record:
+    driver: local
+
+networks:
+  kkops-network:
+    external: true  # 使用现有网络
+    # 或者改为: driver: bridge (如果不存在)
+
