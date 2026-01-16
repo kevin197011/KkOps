@@ -1,0 +1,38 @@
+# Copyright (c) 2025 kk
+#
+# This software is released under the MIT License.
+# https://opensource.org/licenses/MIT
+
+server:
+  host: "0.0.0.0"
+  port: 8080
+  mode: "debug" # debug, release, test
+
+database:
+  host: "localhost"
+  port: 5432
+  user: "kkops"
+  password: "kkops_dev"
+  dbname: "kkops"
+  sslmode: "disable"
+  max_open_conns: 100
+  max_idle_conns: 10
+
+redis:
+  host: "localhost"
+  port: 6379
+  password: ""
+  db: 0
+
+jwt:
+  secret: "your-secret-key-change-in-production"
+  expires_in: 7200 # seconds (2 hours)
+  refresh_expires_in: 604800 # seconds (7 days)
+
+encryption:
+  key: "your-encryption-key-change-in-production" # Used for SSH key encryption (AES-256)
+
+log:
+  level: "info" # debug, info, warn, error
+  format: "json" # json, text
+  output: "stdout" # stdout, file path

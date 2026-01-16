@@ -1,0 +1,511 @@
+/* Copyright (c) 2025 kk */
+
+@import url('https://fonts.googleapis.com/css2?family=Open+Sans:wght@300;400;500;600;700&family=Poppins:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: 'Open Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: 'Poppins', sans-serif;
+  font-weight: 600;
+}
+
+@keyframes login-pulse {
+  0%, 100% {
+    opacity: 0.5;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.8;
+    transform: scale(1.1);
+  }
+}
+
+@keyframes login-fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes login-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes login-shimmer {
+  0% {
+    background-position: -1000px 0;
+  }
+  100% {
+    background-position: 1000px 0;
+  }
+}
+
+@keyframes login-grid-move {
+  0% {
+    transform: translate(0, 0);
+  }
+  100% {
+    transform: translate(40px, 40px);
+  }
+}
+
+@keyframes login-float {
+  0%, 100% {
+    transform: translateY(0) translateX(0);
+  }
+  33% {
+    transform: translateY(-20px) translateX(10px);
+  }
+  66% {
+    transform: translateY(10px) translateX(-15px);
+  }
+}
+
+@keyframes login-glow-pulse {
+  0%, 100% {
+    opacity: 0.3;
+    filter: blur(60px);
+  }
+  50% {
+    opacity: 0.5;
+    filter: blur(80px);
+  }
+}
+
+@keyframes login-particle-float {
+  0%, 100% {
+    transform: translate(0, 0) scale(1);
+    opacity: 0.3;
+  }
+  50% {
+    transform: translate(var(--dx, 20px), var(--dy, -30px)) scale(1.2);
+    opacity: 0.6;
+  }
+}
+
+@keyframes login-scanline {
+  0% {
+    transform: translateY(-100%);
+  }
+  100% {
+    transform: translateY(100vh);
+  }
+}
+
+@keyframes login-data-flow {
+  0% {
+    transform: translateX(-100%);
+    opacity: 0;
+  }
+  10% {
+    opacity: 1;
+  }
+  90% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateX(100vw);
+    opacity: 0;
+  }
+}
+
+@keyframes login-node-pulse {
+  0%, 100% {
+    box-shadow: 0 0 5px rgba(37, 99, 235, 0.5), 0 0 10px rgba(37, 99, 235, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 15px rgba(59, 130, 246, 0.8), 0 0 25px rgba(59, 130, 246, 0.5);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Terminal styles - Ensure xterm.js renders correctly */
+/* NOTE: Do NOT use display: block !important here - it will override React inline styles */
+/* The display property is managed by React based on active connection state */
+.xterm-container {
+  position: relative !important;
+  width: 100% !important;
+  height: 100% !important;
+  /* display is controlled by React inline styles */
+  overflow: hidden !important;
+}
+
+/* Terminal text colors - ensure visibility on dark terminal background */
+/* xterm.js uses canvas or DOM rendering. For DOM rendering, it applies colors via inline styles. */
+/* We set a base color that can be overridden by inline styles from xterm.js */
+.xterm-container .xterm,
+.xterm-container .terminal {
+  /* Base terminal text color - this won't override xterm.js theme colors */
+  /* because xterm.js sets colors on the .xterm element via its theme configuration */
+  color: #E6EDF3;
+}
+
+/* Don't set color on xterm-rows or spans - let xterm.js handle it completely */
+/* xterm.js canvas renderer handles colors internally */
+/* xterm.js DOM renderer uses inline styles which have highest priority */
+
+/* Ensure xterm.js elements are visible and properly sized */
+.xterm-container .xterm {
+  width: 100% !important;
+  height: 100% !important;
+  display: block !important;
+  position: relative !important;
+  /* Let xterm.js handle background color from theme */
+  background-color: transparent !important;
+}
+
+/* Ensure xterm.js background comes from theme, not CSS */
+/* CRITICAL: xterm-screen MUST be position: absolute to overlay on xterm-viewport */
+/* This is required for xterm.js DOM renderer to work correctly */
+.xterm-container .xterm .xterm-screen {
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  /* Don't override background - let theme handle it */
+}
+
+.xterm-container .xterm .xterm-viewport {
+  width: 100% !important;
+  height: 100% !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  position: relative !important;
+  /* Ensure viewport background is transparent so theme background shows */
+  background-color: transparent !important;
+}
+
+/* Ensure xterm.js canvas layers are visible and properly positioned */
+.xterm-container .xterm .xterm-text-layer,
+.xterm-container .xterm .xterm-cursor-layer {
+  position: absolute !important;
+  left: 0 !important;
+  top: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.xterm-container .xterm .xterm-text-layer {
+  z-index: 1 !important;
+}
+
+.xterm-container .xterm .xterm-cursor-layer {
+  z-index: 2 !important;
+}
+
+/* Ensure terminal canvas is visible and uses theme background */
+.xterm-container .xterm canvas {
+  display: block !important;
+  position: absolute !important;
+  left: 0 !important;
+  top: 0 !important;
+}
+
+/* Fix for xterm.js focus */
+.xterm-container .xterm:focus {
+  outline: none !important;
+}
+
+/* Ensure terminal rows are visible */
+.xterm-container .xterm .xterm-rows {
+  color: inherit !important;
+}
+
+.xterm-container .xterm .xterm-viewport::-webkit-scrollbar {
+  width: 8px;
+}
+
+.xterm-container .xterm .xterm-viewport::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.xterm-container .xterm .xterm-viewport::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+}
+
+.xterm-container .xterm .xterm-viewport::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+/* Compact Tree Component Styles */
+.ant-tree {
+  background: transparent !important;
+}
+
+.ant-tree-node-content-wrapper {
+  border-radius: 4px !important;
+  transition: background-color 0.15s ease !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  min-height: 24px !important;
+  height: 24px !important;
+  line-height: 24px !important;
+  display: flex !important;
+  align-items: center !important;
+  vertical-align: middle !important;
+}
+
+.ant-tree-node-content-wrapper * {
+  vertical-align: middle !important;
+}
+
+.ant-tree-node-content-wrapper:hover {
+  background-color: transparent !important;
+}
+
+.ant-tree-node-selected {
+  background-color: transparent !important;
+}
+
+.ant-tree-switcher {
+  width: 16px !important;
+  height: 24px !important;
+  min-height: 24px !important;
+  line-height: 24px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  margin-right: 4px !important;
+  vertical-align: middle !important;
+}
+
+.ant-tree-switcher-icon {
+  font-size: 10px !important;
+  transition: transform 0.15s ease !important;
+  vertical-align: middle !important;
+}
+
+.ant-tree-child-tree {
+  margin-left: 0 !important;
+}
+
+.ant-tree-treenode {
+  padding: 0 !important;
+  margin: 0 !important;
+  position: relative !important;
+  display: flex !important;
+  align-items: center !important;
+}
+
+.ant-tree-treenode-leaf-last {
+  padding-bottom: 0 !important;
+}
+
+.ant-tree-treenode-leaf-last::before {
+  display: none !important;
+}
+
+.ant-tree-iconEle {
+  margin-right: 6px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 14px !important;
+  min-width: 14px !important;
+  height: 24px !important;
+  min-height: 24px !important;
+  font-size: 12px !important;
+  vertical-align: middle !important;
+  flex-shrink: 0 !important;
+  line-height: 24px !important;
+}
+
+.ant-tree-iconEle .anticon {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  vertical-align: middle !important;
+  line-height: 1 !important;
+}
+
+.ant-tree-iconEle .anticon svg {
+  vertical-align: middle !important;
+}
+
+.ant-tree-title {
+  flex: 1 !important;
+  min-width: 0 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  vertical-align: middle !important;
+  line-height: 24px !important;
+  height: 24px !important;
+}
+
+.ant-tree-title > * {
+  vertical-align: middle !important;
+  line-height: 24px !important;
+}
+
+/* Tree indent - 每层缩进 16px (两个空格) - 使用全局样式强制覆盖 */
+.ant-tree .ant-tree-indent-unit {
+  width: 16px !important; /* 每层缩进 16px = 两个空格 */
+  min-width: 16px !important;
+  max-width: 16px !important;
+  display: inline-block !important;
+  flex: 0 0 16px !important;
+  box-sizing: border-box !important;
+}
+
+/* 使用属性选择器覆盖内联样式（更高优先级） */
+.ant-tree .ant-tree-indent-unit[style] {
+  width: 16px !important;
+  min-width: 16px !important;
+  max-width: 16px !important;
+}
+
+/* Classic tree structure connection lines - File browser style */
+/* Vertical line through child tree (from parent node) */
+/* Level 1: Project -> Environment (缩进 16px = 2个空格) */
+.ant-tree-child-tree {
+  position: relative;
+}
+
+.ant-tree-child-tree::before {
+  content: '' !important;
+  position: absolute !important;
+  left: 8px !important; /* 调整到缩进单元的一半位置 (16px / 2 = 8px) */
+  top: 0 !important;
+  bottom: 0 !important;
+  width: 1px !important;
+  background-color: rgba(148, 163, 184, 0.5) !important;
+  z-index: 0 !important;
+  pointer-events: none !important;
+}
+
+/* Stop vertical line at last child */
+.ant-tree-child-tree > .ant-tree-treenode:last-child::after {
+  content: '' !important;
+  position: absolute !important;
+  left: 8px !important;
+  top: 12px !important;
+  bottom: 0 !important;
+  width: 1px !important;
+  background-color: transparent !important;
+  z-index: 1 !important;
+  pointer-events: none !important;
+}
+
+/* Horizontal connector for each child node (except first) */
+.ant-tree-child-tree > .ant-tree-treenode:not(:first-child) > .ant-tree-node-content-wrapper::before {
+  content: '' !important;
+  position: absolute !important;
+  left: -16px !important; /* 调整到缩进单元的宽度 */
+  top: 12px !important;
+  width: 10px !important;
+  height: 1px !important;
+  background-color: rgba(148, 163, 184, 0.5) !important;
+  z-index: 1 !important;
+  pointer-events: none !important;
+}
+
+/* Level 2: Environment -> Asset (缩进 32px = 4个空格) */
+.ant-tree-child-tree .ant-tree-child-tree::before {
+  left: 24px !important; /* 16px (第一层) + 8px (第二层的一半) */
+}
+
+.ant-tree-child-tree .ant-tree-child-tree > .ant-tree-treenode:last-child::after {
+  left: 24px !important;
+}
+
+.ant-tree-child-tree .ant-tree-child-tree > .ant-tree-treenode:not(:first-child) > .ant-tree-node-content-wrapper::before {
+  left: -16px !important; /* 保持缩进单元宽度 */
+  width: 10px !important;
+  height: 1px !important;
+  background-color: rgba(148, 163, 184, 0.5) !important;
+  content: '' !important;
+  position: absolute !important;
+  top: 12px !important;
+  z-index: 1 !important;
+  pointer-events: none !important;
+}
+
+/* Level 3: 如果有更深层级 (缩进 48px = 6个空格) */
+.ant-tree-child-tree .ant-tree-child-tree .ant-tree-child-tree::before {
+  left: 40px !important; /* 32px (前两层) + 8px (第三层的一半) */
+}
+
+.ant-tree-child-tree .ant-tree-child-tree .ant-tree-child-tree > .ant-tree-treenode:last-child::after {
+  left: 40px !important;
+}
+
+.ant-tree-child-tree .ant-tree-child-tree .ant-tree-child-tree > .ant-tree-treenode:not(:first-child) > .ant-tree-node-content-wrapper::before {
+  left: -16px !important; /* 保持缩进单元宽度 */
+  width: 10px !important;
+  height: 1px !important;
+  background-color: rgba(148, 163, 184, 0.5) !important;
+  content: '' !important;
+  position: absolute !important;
+  top: 12px !important;
+  z-index: 1 !important;
+  pointer-events: none !important;
+}
+
+/* Ensure content is above lines */
+.ant-tree-node-content-wrapper {
+  position: relative;
+  z-index: 2;
+  background: transparent;
+}
+
+.ant-tree-switcher,
+.ant-tree-iconEle {
+  position: relative;
+  z-index: 2;
+  background: transparent;
+}
+
+/* Default line color (fallback) - More visible */
+.ant-tree-child-tree::before,
+.ant-tree-node-content-wrapper::before {
+  background-color: rgba(148, 163, 184, 0.5) !important;
+}
+
+/* Light mode - Much more visible for white background */
+.ant-theme-light .ant-tree-child-tree::before,
+.ant-theme-light .ant-tree-node-content-wrapper::before,
+.ant-theme-light .ant-tree-child-tree > .ant-tree-treenode:last-child::after,
+body:not(.ant-theme-dark) .ant-tree-child-tree::before,
+body:not(.ant-theme-dark) .ant-tree-node-content-wrapper::before,
+body:not(.ant-theme-dark) .ant-tree-child-tree > .ant-tree-treenode:last-child::after {
+  background-color: rgba(71, 85, 105, 0.5) !important;
+}
+
+/* Dark mode - adjust tree line color */
+.ant-theme-dark .ant-tree-child-tree::before,
+.ant-theme-dark .ant-tree-node-content-wrapper::before,
+.ant-theme-dark .ant-tree-child-tree > .ant-tree-treenode:last-child::after,
+body.ant-theme-dark .ant-tree-child-tree::before,
+body.ant-theme-dark .ant-tree-node-content-wrapper::before,
+body.ant-theme-dark .ant-tree-child-tree > .ant-tree-treenode:last-child::after {
+  background-color: rgba(148, 163, 184, 0.45) !important;
+}
