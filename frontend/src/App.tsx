@@ -22,7 +22,7 @@ const CloudPlatformList = lazy(() => import('./pages/cloudPlatforms/CloudPlatfor
 const CategoryList = lazy(() => import('./pages/categories/CategoryList'))
 const TagList = lazy(() => import('./pages/tags/TagList'))
 const TemplateList = lazy(() => import('./pages/executions/TemplateList'))
-const ExecutionManagementPage = lazy(() => import('./pages/executions/TaskManagementPage'))
+const ExecutionOperatorPage = lazy(() => import('./pages/executions/ExecutionOperatorPage'))
 const ExecutionHistoryPage = lazy(() => import('./pages/executions/TaskExecutionList'))
 const ExecutionLogsPage = lazy(() => import('./pages/executions/TaskExecutionLogs'))
 const DeploymentModuleList = lazy(() => import('./pages/deployments/DeploymentModuleList'))
@@ -186,7 +186,7 @@ function App() {
             <ProtectedRoute>
               <MainLayout>
                 <Suspense fallback={<PageLoading />}>
-                  <ExecutionManagementPage />
+                  <ExecutionOperatorPage />
                 </Suspense>
               </MainLayout>
             </ProtectedRoute>

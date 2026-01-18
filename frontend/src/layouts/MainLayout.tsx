@@ -27,6 +27,10 @@ import {
   ScheduleOutlined,
   FileTextOutlined,
   AuditOutlined,
+  ThunderboltOutlined,
+  SafetyOutlined,
+  SettingOutlined,
+  ApartmentOutlined,
 } from '@ant-design/icons'
 import { useThemeStore } from '@/stores/theme'
 import { useAuthStore } from '@/stores/auth'
@@ -44,6 +48,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
   const [passwordModalVisible, setPasswordModalVisible] = useState(false)
   const [passwordLoading, setPasswordLoading] = useState(false)
   const [passwordForm] = Form.useForm()
+  const [openKeys, setOpenKeys] = useState<string[]>(['infrastructure', 'operations', 'security', 'system'])
   const navigate = useNavigate()
   const location = useLocation()
   const { mode, toggleMode } = useThemeStore()
@@ -65,76 +70,110 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
     return () => window.removeEventListener('resize', checkMobile)
   }, [])
 
-  const menuItems = [
+  const menuItems: MenuProps['items'] = [
     {
       key: '/dashboard',
       icon: <DashboardOutlined />,
       label: '仪表板',
     },
     {
-      key: '/projects',
-      icon: <FolderOutlined />,
-      label: '项目管理',
+      type: 'divider',
     },
     {
-      key: '/environments',
-      icon: <GlobalOutlined />,
-      label: '环境管理',
+      key: 'infrastructure',
+      icon: <ApartmentOutlined />,
+      label: '基础设施',
+      children: [
+        {
+          key: '/projects',
+          icon: <FolderOutlined />,
+          label: '项目管理',
+        },
+        {
+          key: '/environments',
+          icon: <GlobalOutlined />,
+          label: '环境管理',
+        },
+        {
+          key: '/cloud-platforms',
+          icon: <CloudOutlined />,
+          label: '云平台管理',
+        },
+        {
+          key: '/assets',
+          icon: <DatabaseOutlined />,
+          label: '资产管理',
+        },
+      ],
     },
     {
-      key: '/cloud-platforms',
-      icon: <CloudOutlined />,
-      label: '云平台管理',
+      key: 'operations',
+      icon: <ThunderboltOutlined />,
+      label: '任务管理',
+      children: [
+        {
+          key: '/executions',
+          icon: <PlayCircleOutlined />,
+          label: '运维执行',
+        },
+        {
+          key: '/templates',
+          icon: <FileTextOutlined />,
+          label: '任务模板',
+        },
+        {
+          key: '/tasks',
+          icon: <ScheduleOutlined />,
+          label: '任务执行',
+        },
+        {
+          key: '/deployments',
+          icon: <RocketOutlined />,
+          label: '部署管理',
+        },
+      ],
     },
     {
-      key: '/assets',
-      icon: <DatabaseOutlined />,
-      label: '资产管理',
+      key: 'security',
+      icon: <SafetyOutlined />,
+      label: '安全管理',
+      children: [
+        {
+          key: '/ssh/keys',
+          icon: <ConsoleSqlOutlined />,
+          label: 'SSH 密钥',
+        },
+      ],
     },
     {
-      key: '/executions',
-      icon: <PlayCircleOutlined />,
-      label: '运维执行',
-    },
-    {
-      key: '/templates',
-      icon: <FileTextOutlined />,
-      label: '任务模板',
-    },
-    {
-      key: '/tasks',
-      icon: <ScheduleOutlined />,
-      label: '任务执行',
-    },
-    {
-      key: '/deployments',
-      icon: <RocketOutlined />,
-      label: '部署管理',
-    },
-    {
-      key: '/ssh/keys',
-      icon: <ConsoleSqlOutlined />,
-      label: 'SSH 密钥',
-    },
-    {
-      key: '/users',
-      icon: <UserOutlined />,
-      label: '用户管理',
-    },
-    {
-      key: '/roles',
-      icon: <TeamOutlined />,
-      label: '角色权限',
-    },
-    {
-      key: '/audit-logs',
-      icon: <AuditOutlined />,
-      label: '审计日志',
+      key: 'system',
+      icon: <SettingOutlined />,
+      label: '系统管理',
+      children: [
+        {
+          key: '/users',
+          icon: <UserOutlined />,
+          label: '用户管理',
+        },
+        {
+          key: '/roles',
+          icon: <TeamOutlined />,
+          label: '角色权限',
+        },
+        {
+          key: '/audit-logs',
+          icon: <AuditOutlined />,
+          label: '审计日志',
+        },
+      ],
     },
   ]
 
   const handleMenuClick = ({ key }: { key: string }) => {
-    navigate(key)
+    // 只导航到具体的路由，忽略分类键（如 'infrastructure', 'operations' 等）
+    if (key.startsWith('/')) {
+      navigate(key)
+    }
   }
 
   const handleLogout = async () => {
@@ -240,6 +279,8 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
           theme={mode}
           mode="inline"
           selectedKeys={[location.pathname]}
+          openKeys={openKeys}
+          onOpenChange={setOpenKeys}
           items={menuItems}
           onClick={handleMenuClick}
           style={{
