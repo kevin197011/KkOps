@@ -4,7 +4,7 @@
 // https://opensource.org/licenses/MIT
 
 import { useState, useEffect } from 'react'
-import { Table, Button, Space, message, Modal, Form, Input, Tag } from 'antd'
+import { Table, Button, Space, message, Modal, Form, Input, Tag, ColorPicker } from 'antd'
 import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons'
 import { tagApi, Tag as TagType, CreateTagRequest, UpdateTagRequest } from '@/api/tag'
 
@@ -34,12 +34,16 @@ const TagList = () => {
   const handleCreate = () => {
     setEditingTag(null)
     form.resetFields()
+    form.setFieldsValue({ color: '#1890ff' })
     setModalVisible(true)
   }
 
   const handleEdit = (tag: TagType) => {
     setEditingTag(tag)
-    form.setFieldsValue(tag)
+    form.setFieldsValue({
+      ...tag,
+      color: tag.color || '#1890ff',
+    })
     setModalVisible(true)
   }
 
@@ -160,8 +164,19 @@ const TagList = () => {
           >
             <Input placeholder="标签名称" />
           </Form.Item>
-          <Form.Item name="color" label="颜色">
-            <Input placeholder="颜色代码（如：#1890ff）" />
+          <Form.Item name="color" label="颜色" initialValue="#1890ff">
+            <ColorPicker
+              showText
+              format="hex"
+              onChange={(color) => form.setFieldsValue({ color: color.toHexString() })}
+            />
+          </Form.Item>
+          <Form.Item label="预览" dependencies={['name', 'color']}>
+            {() => {
+              const name = form.getFieldValue('name') || '标签预览'
+              const color = form.getFieldValue('color') || '#1890ff'
+              return <Tag color={color}>{name}</Tag>
+            }}
           </Form.Item>
           <Form.Item name="description" label="描述">
             <Input.TextArea rows={4} placeholder="标签描述" />

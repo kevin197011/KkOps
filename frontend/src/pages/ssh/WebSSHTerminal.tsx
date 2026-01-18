@@ -1411,7 +1411,7 @@ const WebSSHTerminal = () => {
           background: headerBg,
           display: 'flex',
           alignItems: 'center',
-          gap: 16,
+          justifyContent: 'space-between',
           borderBottom: mode === 'dark' 
             ? '1px solid rgba(255, 255, 255, 0.08)' 
             : '1px solid rgba(0, 0, 0, 0.06)',
@@ -1422,43 +1422,41 @@ const WebSSHTerminal = () => {
           zIndex: 10,
         }}
       >
-        <Button
-          type="text"
-          icon={<ArrowLeftOutlined />}
-          onClick={() => navigate('/dashboard')}
-          style={{ 
-            color: mode === 'dark' ? '#F1F5F9' : '#1E293B',
-            transition: 'all 0.2s ease',
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.backgroundColor = mode === 'dark' ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.04)'
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.backgroundColor = 'transparent'
-          }}
-        >
-          返回
-        </Button>
-        <div style={{ 
-          width: 1, 
-          height: 24, 
-          background: mode === 'dark' ? 'rgba(255, 255, 255, 0.12)' : 'rgba(0, 0, 0, 0.12)',
-          margin: '0 16px',
-        }} />
-        <Typography.Title 
-          level={4} 
-          style={{ 
-            margin: 0, 
-            flex: 1,
-            color: mode === 'dark' ? '#F1F5F9' : '#1E293B',
-            fontWeight: 600,
-            fontFamily: '"IBM Plex Sans", -apple-system, BlinkMacSystemFont, sans-serif',
-            fontSize: 16,
-            letterSpacing: '-0.01em',
-          }}
-        >
-          WebSSH Terminal
-        </Typography.Title>
+        {/* 左侧：Logo 和返回按钮 */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+          <img
+            src={mode === 'dark' ? '/logo-dark.svg' : '/logo-light.svg'}
+            alt="KkOps"
+            style={{
+              height: 28,
+              width: 'auto',
+            }}
+          />
+          <div style={{ 
+            width: 1, 
+            height: 24, 
+            background: mode === 'dark' ? 'rgba(255, 255, 255, 0.12)' : 'rgba(0, 0, 0, 0.12)',
+          }} />
+          <Button
+            type="text"
+            icon={<ArrowLeftOutlined />}
+            onClick={() => navigate('/dashboard')}
+            style={{ 
+              color: mode === 'dark' ? '#F1F5F9' : '#1E293B',
+              transition: 'all 0.2s ease',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = mode === 'dark' ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.04)'
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = 'transparent'
+            }}
+          >
+            返回
+          </Button>
+        </div>
+
+        {/* 右侧：连接数、主题切换和用户 */}
         <Space size="middle">
           {connections.size > 0 && (
             <>

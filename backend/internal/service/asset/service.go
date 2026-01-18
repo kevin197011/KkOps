@@ -139,23 +139,36 @@ func (s *Service) GetAsset(id uint) (*AssetResponse, error) {
 	return s.getAssetResponse(id)
 }
 
-// ListAssets retrieves a paginated and filtered list of assets
+// ListAssetsFilter 资产列表查询过滤条件
 type ListAssetsFilter struct {
-	Page          int
-	PageSize      int
-	ProjectID     *uint
+	Page            int
+	PageSize        int
+	ProjectID       *uint
 	CloudPlatformID *uint
-	EnvironmentID *uint
-	Status        string
-	IP            string
-	SSHKeyID      *uint
-	TagIDs        []uint
-	Search        string // Search in hostName, IP, description
+	EnvironmentID   *uint
+	Status          string
+	IP              string
+	SSHKeyID        *uint
+	TagIDs          []uint
+	Search          string // Search in hostName, IP, description
+	// 权限过滤
+	AllowedAssetIDs []uint // 允许访问的资产ID列表，nil 表示不限制（管理员）
+	IsAdmin         bool   // 是否为管理员，管理员可以访问所有资产
 }
 
 // ListAssets retrieves assets with filtering and pagination
+// 支持权限过滤：非管理员用户只能看到已授权的资产
 func (s *Service) ListAssets(filter ListAssetsFilter) ([]AssetResponse, int64, error) {
 	query := s.db.Model(&model.Asset{})
+
+	// 权限过滤：非管理员需要限制在允许的资产范围内
+	if !filter.IsAdmin {
+		if len(filter.AllowedAssetIDs) == 0 {
+			// 非管理员且没有任何授权，返回空结果
+			return []AssetResponse{}, 0, nil
+		}
+		query = query.Where("id IN ?", filter.AllowedAssetIDs)
+	}
 
 	// Apply filters
 	if filter.ProjectID != nil {

@@ -6,7 +6,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Layout, Button, Space, message, Input, Select, Spin } from 'antd'
 import { PlusOutlined, ReloadOutlined, SearchOutlined } from '@ant-design/icons'
-import { taskApi, Task, TaskExecution } from '@/api/task'
+import { executionApi, Execution, ExecutionRecord } from '@/api/execution'
 import { projectApi, Project } from '@/api/project'
 import { environmentApi, Environment } from '@/api/environment'
 import WorkflowList from './components/WorkflowList'
@@ -16,9 +16,9 @@ import { useThemeStore } from '@/stores/theme'
 
 const { Sider, Content } = Layout
 
-export interface WorkflowWithExecutions extends Task {
-  executions: TaskExecution[]
-  lastExecution?: TaskExecution
+export interface WorkflowWithExecutions extends Execution {
+  executions: ExecutionRecord[]
+  lastExecution?: ExecutionRecord
 }
 
 const TaskManagementPage = () => {
@@ -31,14 +31,14 @@ const TaskManagementPage = () => {
   const [projects, setProjects] = useState<Project[]>([])
   const [environments, setEnvironments] = useState<Environment[]>([])
   const [modalVisible, setModalVisible] = useState(false)
-  const [editingTask, setEditingTask] = useState<Task | null>(null)
+  const [editingTask, setEditingTask] = useState<Execution | null>(null)
 
   // Fetch workflows and their executions
   const fetchWorkflows = useCallback(async () => {
     setLoading(true)
     try {
       const [tasksResponse] = await Promise.all([
-        taskApi.list(1, 100),
+        executionApi.list(1, 100),
       ])
       
       const tasks = tasksResponse.data.data || []
@@ -47,7 +47,7 @@ const TaskManagementPage = () => {
       const workflowsWithExecutions = await Promise.all(
         tasks.map(async (task) => {
           try {
-            const execResponse = await taskApi.getExecutions(task.id)
+            const execResponse = await executionApi.getHistory(task.id)
             const executions = execResponse.data.data || []
             // Sort by created_at descending to get newest first
             const sortedExecutions = [...executions].sort((a, b) => 
@@ -115,7 +115,7 @@ const TaskManagementPage = () => {
     setModalVisible(true)
   }
 
-  const handleEditTask = (task: Task) => {
+  const handleEditTask = (task: Execution) => {
     setEditingTask(task)
     setModalVisible(true)
   }
@@ -133,7 +133,7 @@ const TaskManagementPage = () => {
 
   const handleExecute = async (taskId: number, executionType: 'sync' | 'async') => {
     try {
-      await taskApi.execute(taskId, executionType)
+      await executionApi.execute(taskId, executionType)
       message.success('任务执行已启动')
       // Immediately refresh to show the new execution
       await fetchWorkflows()
@@ -144,7 +144,7 @@ const TaskManagementPage = () => {
         const pollInterval = setInterval(async () => {
           pollCount++
           try {
-            const response = await taskApi.getExecutions(taskId)
+            const response = await executionApi.getHistory(taskId)
             const executions = response.data.data || []
             const hasRunning = executions.some((e) => e.status === 'running' || e.status === 'pending')
             await fetchWorkflows()
@@ -164,7 +164,7 @@ const TaskManagementPage = () => {
 
   const handleCancel = async (taskId: number) => {
     try {
-      await taskApi.cancel(taskId)
+      await executionApi.cancel(taskId)
       message.success('任务已取消')
       fetchWorkflows()
     } catch (error: any) {
@@ -174,7 +174,7 @@ const TaskManagementPage = () => {
 
   const handleDelete = async (taskId: number) => {
     try {
-      await taskApi.delete(taskId)
+      await executionApi.delete(taskId)
       message.success('任务已删除')
       // Clear selection if deleted task was selected
       if (selectedWorkflowId === taskId) {

@@ -25,8 +25,15 @@ export interface UserInfo {
   roles: string[]
 }
 
+export interface ChangePasswordRequest {
+  old_password: string
+  new_password: string
+}
+
 export const authApi = {
   login: (data: LoginRequest) => apiClient.post<LoginResponse>('/auth/login', data),
   getMe: () => apiClient.get<UserInfo>('/auth/me'),
   logout: () => apiClient.post<{ message: string }>('/auth/logout'),
+  changePassword: (data: ChangePasswordRequest) =>
+    apiClient.post<{ message: string }>('/auth/change-password', data),
 }

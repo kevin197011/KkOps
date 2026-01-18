@@ -17,13 +17,15 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/kkops/backend/internal/model"
+	"github.com/kkops/backend/internal/service/authorization"
 	"github.com/kkops/backend/internal/service/sshkey"
 	"github.com/kkops/backend/internal/utils"
 )
 
 // SSHTerminalHandler handles SSH terminal WebSocket connections
 // WS /ws/ssh/connect
-func SSHTerminalHandler(db *gorm.DB, cfg interface{}, sshkeySvc *sshkey.Service) gin.HandlerFunc {
+// 增加资产访问权限检查：管理员可以连接任意资产，普通用户只能连接已授权的资产
+func SSHTerminalHandler(db *gorm.DB, cfg interface{}, sshkeySvc *sshkey.Service, authzSvc *authorization.Service) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		userID, exists := c.Get("user_id")
 		if !exists {
@@ -78,7 +80,7 @@ func SSHTerminalHandler(db *gorm.DB, cfg interface{}, sshkeySvc *sshkey.Service)
 			switch msgType {
 			case "connect":
 				// Handle SSH connection - this will manage the entire session lifecycle
-				handleSSHConnect(conn, msg, db, userID.(uint), sshkeySvc)
+				handleSSHConnect(conn, msg, db, userID.(uint), sshkeySvc, authzSvc)
 				return // After SSH session ends, close the WebSocket handler
 			default:
 				conn.WriteJSON(map[string]interface{}{
@@ -90,7 +92,7 @@ func SSHTerminalHandler(db *gorm.DB, cfg interface{}, sshkeySvc *sshkey.Service)
 	}
 }
 
-func handleSSHConnect(conn *websocket.Conn, msg map[string]interface{}, db *gorm.DB, userID uint, sshkeySvc *sshkey.Service) {
+func handleSSHConnect(conn *websocket.Conn, msg map[string]interface{}, db *gorm.DB, userID uint, sshkeySvc *sshkey.Service, authzSvc *authorization.Service) {
 	data, ok := msg["data"].(map[string]interface{})
 	if !ok {
 		conn.WriteJSON(map[string]interface{}{
@@ -110,6 +112,23 @@ func handleSSHConnect(conn *websocket.Conn, msg map[string]interface{}, db *gorm
 		return
 	}
 	assetID := uint(assetIDFloat)
+
+	// 检查用户对资产的访问权限
+	hasAccess, err := authzSvc.HasAssetAccess(userID, assetID)
+	if err != nil {
+		conn.WriteJSON(map[string]interface{}{
+			"type": "error",
+			"data": "Failed to check permission",
+		})
+		return
+	}
+	if !hasAccess {
+		conn.WriteJSON(map[string]interface{}{
+			"type": "error",
+			"data": "no permission to access this asset",
+		})
+		return
+	}
 
 	// Get asset
 	var asset model.Asset
@@ -158,7 +177,6 @@ func handleSSHConnect(conn *websocket.Conn, msg map[string]interface{}, db *gorm
 	}
 
 	var sshClient *utils.SSHClient
-	var err error
 	timeout := 30 * time.Second
 
 	if asset.SSHKeyID == nil {

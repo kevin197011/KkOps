@@ -91,6 +91,291 @@ func seedDefaultUser(db *gorm.DB) error {
 	return nil
 }
 
+// seedDefaultAdminRole creates a default admin role if no admin role exists
+func seedDefaultAdminRole(db *gorm.DB) error {
+	var adminRole model.Role
+	result := db.Where("name = ?", "admin").First(&adminRole)
+	
+	if result.Error == gorm.ErrRecordNotFound {
+		// Create admin role
+		adminRole = model.Role{
+			Name:        "admin",
+			Description: "系统管理员，拥有所有资产的访问权限",
+			IsAdmin:     true,
+		}
+		if err := db.Create(&adminRole).Error; err != nil {
+			return fmt.Errorf("failed to create default admin role: %w", err)
+		}
+		
+		// Assign admin role to admin user
+		var adminUser model.User
+		if err := db.Where("username = ?", "admin").First(&adminUser).Error; err == nil {
+			db.Model(&adminUser).Association("Roles").Append(&adminRole)
+		}
+	} else if result.Error != nil {
+		return result.Error
+	} else {
+		// Admin role exists, ensure is_admin is true
+		if !adminRole.IsAdmin {
+			adminRole.IsAdmin = true
+			db.Save(&adminRole)
+		}
+	}
+	
+	return nil
+}
+
+// seedDefaultTemplates creates default task templates
+func seedDefaultTemplates(db *gorm.DB) error {
+	// 获取 admin 用户 ID
+	var adminUser model.User
+	if err := db.Where("username = ?", "admin").First(&adminUser).Error; err != nil {
+		// 如果没有 admin 用户，跳过模板创建
+		return nil
+	}
+	adminID := adminUser.ID
+
+	// 系统信息采集模板
+	systemInfoTemplate := model.TaskTemplate{
+		Name:        "系统信息采集",
+		Type:        "shell",
+		Description: "采集主机 CPU、内存、磁盘信息，用于自动更新资产信息",
+		CreatedBy:   adminID,
+		Content: `#!/usr/bin/env bash
+# 系统信息采集脚本 - 输出 JSON 格式供自动更新资产信息
+
+# 获取主机名
+hostname=$(hostname)
+
+# 获取 CPU 信息
+cpu_info=$(grep -m1 'model name' /proc/cpuinfo 2>/dev/null | cut -d: -f2 | xargs || echo "Unknown")
+cpu_cores=$(nproc 2>/dev/null || echo "1")
+cpu="${cpu_info} (${cpu_cores}核)"
+
+# 获取内存信息（MB）
+mem_total=$(awk '/MemTotal/ {printf "%.0f", $2/1024}' /proc/meminfo 2>/dev/null || echo "0")
+memory="${mem_total}MB"
+
+# 获取磁盘信息（根分区）
+disk_total=$(df -BG / 2>/dev/null | awk 'NR==2 {gsub(/G/,"",$2); print $2}' || echo "0")
+disk="${disk_total}GB"
+
+# 输出 JSON 格式（用于自动更新资产信息）
+cat << EOF
+{
+  "hostname": "${hostname}",
+  "cpu": "${cpu}",
+  "memory": "${memory}",
+  "disk": "${disk}"
+}
+EOF`,
+	}
+
+	// 辅助函数：检查模板是否存在（包括软删除的记录）
+	templateExists := func(name string) bool {
+		var count int64
+		db.Unscoped().Model(&model.TaskTemplate{}).Where("name = ?", name).Count(&count)
+		return count > 0
+	}
+
+	// 创建系统信息采集模板
+	if !templateExists(systemInfoTemplate.Name) {
+		if err := db.Create(&systemInfoTemplate).Error; err != nil {
+			return fmt.Errorf("failed to create system info template: %w", err)
+		}
+	}
+
+	// 磁盘使用率检查模板
+	diskUsageTemplate := model.TaskTemplate{
+		Name:        "磁盘使用率检查",
+		Type:        "shell",
+		Description: "检查磁盘使用率，超过阈值则告警",
+		CreatedBy:   adminID,
+		Content: `#!/usr/bin/env bash
+# 磁盘使用率检查脚本
+
+THRESHOLD=80
+
+echo "=== 磁盘使用率检查 ==="
+echo "主机: $(hostname)"
+echo "时间: $(date '+%Y-%m-%d %H:%M:%S')"
+echo ""
+
+df -h | grep -E '^/dev/' | while read line; do
+    usage=$(echo $line | awk '{print $5}' | sed 's/%//')
+    mount=$(echo $line | awk '{print $6}')
+    
+    if [ "$usage" -gt "$THRESHOLD" ]; then
+        echo "[警告] $mount 使用率: ${usage}% (超过阈值 ${THRESHOLD}%)"
+    else
+        echo "[正常] $mount 使用率: ${usage}%"
+    fi
+done`,
+	}
+
+	if !templateExists(diskUsageTemplate.Name) {
+		if err := db.Create(&diskUsageTemplate).Error; err != nil {
+			return fmt.Errorf("failed to create disk usage template: %w", err)
+		}
+	}
+
+	// 系统健康检查模板
+	healthCheckTemplate := model.TaskTemplate{
+		Name:        "系统健康检查",
+		Type:        "shell",
+		Description: "检查系统负载、内存、进程等健康状态",
+		CreatedBy:   adminID,
+		Content: `#!/usr/bin/env bash
+# 系统健康检查脚本
+
+echo "=== 系统健康检查 ==="
+echo "主机: $(hostname)"
+echo "时间: $(date '+%Y-%m-%d %H:%M:%S')"
+echo ""
+
+echo "--- 系统负载 ---"
+uptime
+
+echo ""
+echo "--- 内存使用 ---"
+free -h
+
+echo ""
+echo "--- 磁盘使用 ---"
+df -h | grep -E '^/dev/'
+
+echo ""
+echo "--- CPU 占用 TOP 5 ---"
+ps aux --sort=-%cpu | head -6
+
+echo ""
+echo "--- 内存占用 TOP 5 ---"
+ps aux --sort=-%mem | head -6
+
+echo ""
+echo "--- 网络连接统计 ---"
+ss -s 2>/dev/null || netstat -an | awk '/^tcp/ {++S[$NF]} END {for(a in S) print a, S[a]}'`,
+	}
+
+	if !templateExists(healthCheckTemplate.Name) {
+		if err := db.Create(&healthCheckTemplate).Error; err != nil {
+			return fmt.Errorf("failed to create health check template: %w", err)
+		}
+	}
+
+	// 日志清理模板
+	logCleanupTemplate := model.TaskTemplate{
+		Name:        "日志清理",
+		Type:        "shell",
+		Description: "清理过期日志文件，释放磁盘空间",
+		CreatedBy:   adminID,
+		Content: `#!/usr/bin/env bash
+# 日志清理脚本
+
+# 配置
+LOG_DIRS="/var/log /tmp"
+DAYS=7
+
+echo "=== 日志清理 ==="
+echo "主机: $(hostname)"
+echo "时间: $(date '+%Y-%m-%d %H:%M:%S')"
+echo "清理 ${DAYS} 天前的日志文件"
+echo ""
+
+for dir in $LOG_DIRS; do
+    if [ -d "$dir" ]; then
+        echo "--- 清理目录: $dir ---"
+        # 查找并删除过期的日志文件
+        find "$dir" -name "*.log" -type f -mtime +$DAYS -exec ls -lh {} \; 2>/dev/null
+        find "$dir" -name "*.log.*" -type f -mtime +$DAYS -exec ls -lh {} \; 2>/dev/null
+        # 实际删除（取消注释以下行）
+        # find "$dir" -name "*.log" -type f -mtime +$DAYS -delete 2>/dev/null
+        # find "$dir" -name "*.log.*" -type f -mtime +$DAYS -delete 2>/dev/null
+    fi
+done
+
+echo ""
+echo "清理完成"`,
+	}
+
+	if !templateExists(logCleanupTemplate.Name) {
+		if err := db.Create(&logCleanupTemplate).Error; err != nil {
+			return fmt.Errorf("failed to create log cleanup template: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// seedDefaultScheduledTasks creates default scheduled tasks
+func seedDefaultScheduledTasks(db *gorm.DB) error {
+	// 获取 admin 用户 ID
+	var adminUser model.User
+	if err := db.Where("username = ?", "admin").First(&adminUser).Error; err != nil {
+		return nil // 如果没有 admin 用户，跳过
+	}
+
+	// 辅助函数：检查定时任务是否存在（包括软删除的记录）
+	taskExists := func(name string) bool {
+		var count int64
+		db.Unscoped().Model(&model.ScheduledTask{}).Where("name = ?", name).Count(&count)
+		return count > 0
+	}
+
+	// 获取系统信息采集模板
+	var systemInfoTemplate model.TaskTemplate
+	if err := db.Where("name = ?", "系统信息采集").First(&systemInfoTemplate).Error; err != nil {
+		return nil // 如果模板不存在，跳过
+	}
+
+	// 创建每日系统信息采集定时任务
+	taskName := "每日系统信息采集"
+	if !taskExists(taskName) {
+		scheduledTask := model.ScheduledTask{
+			Name:           taskName,
+			Description:    "每天午夜自动采集所有主机的 CPU、内存、磁盘信息并更新资产管理",
+			CronExpression: "0 0 0 * * *", // 每天午夜执行
+			TemplateID:     &systemInfoTemplate.ID,
+			Content:        systemInfoTemplate.Content,
+			Type:           "shell",
+			Timeout:        300,
+			Enabled:        false, // 默认禁用，需要用户选择主机后启用
+			UpdateAssets:   true,  // 启用资产自动更新
+			CreatedBy:      adminUser.ID,
+		}
+
+		if err := db.Create(&scheduledTask).Error; err != nil {
+			return fmt.Errorf("failed to create system info scheduled task: %w", err)
+		}
+	}
+
+	// 创建每日健康检查定时任务
+	var healthCheckTemplate model.TaskTemplate
+	if err := db.Where("name = ?", "系统健康检查").First(&healthCheckTemplate).Error; err == nil {
+		healthTaskName := "每日系统健康检查"
+		if !taskExists(healthTaskName) {
+			scheduledTask := model.ScheduledTask{
+				Name:           healthTaskName,
+				Description:    "每天早上 8 点执行系统健康检查",
+				CronExpression: "0 0 8 * * *", // 每天早上 8 点
+				TemplateID:     &healthCheckTemplate.ID,
+				Content:        healthCheckTemplate.Content,
+				Type:           "shell",
+				Timeout:        300,
+				Enabled:        false, // 默认禁用
+				UpdateAssets:   false,
+				CreatedBy:      adminUser.ID,
+			}
+
+			if err := db.Create(&scheduledTask).Error; err != nil {
+				return fmt.Errorf("failed to create health check scheduled task: %w", err)
+			}
+		}
+	}
+
+	return nil
+}
+
 // runSQLMigrations executes SQL migration files in order
 func runSQLMigrations(db *gorm.DB) error {
 	// Get the base directory (assuming migrations are relative to backend/)
@@ -111,6 +396,11 @@ func runSQLMigrations(db *gorm.DB) error {
 		"rename_asset_name_to_hostname.sql",
 		"remove_code_fields.sql",
 		"add_cloud_platform_management.sql",
+		"add_asset_authorization.sql",
+		"add_role_asset_authorization.sql",
+		"add_deployment_management.sql",
+		"add_scheduled_task.sql",
+		"add_audit_log.sql",
 	}
 
 	// Execute migrations in order
@@ -182,6 +472,8 @@ func migrate(db *gorm.DB) error {
 		&model.Permission{},
 		&model.UserRole{},
 		&model.RolePermission{},
+		&model.UserAsset{},
+		&model.RoleAsset{},
 		&model.Project{},
 		&model.Environment{},
 		&model.CloudPlatform{},
@@ -193,12 +485,27 @@ func migrate(db *gorm.DB) error {
 		&model.TaskTemplate{},
 		&model.Task{},
 		&model.TaskExecution{},
+		&model.ScheduledTask{},
+		&model.DeploymentModule{},
+		&model.Deployment{},
+		&model.AuditLog{},
 	); err != nil {
 		return err
 	}
 
-	// Initialize default admin user if database is empty
-	return seedDefaultUser(db)
+	// Initialize default admin user and admin role if database is empty
+	if err := seedDefaultUser(db); err != nil {
+		return err
+	}
+	if err := seedDefaultAdminRole(db); err != nil {
+		return err
+	}
+	// Initialize default task templates
+	if err := seedDefaultTemplates(db); err != nil {
+		return err
+	}
+	// Initialize default scheduled tasks
+	return seedDefaultScheduledTasks(db)
 }
 
 // NewGormLogger creates a GORM logger adapter for Zap

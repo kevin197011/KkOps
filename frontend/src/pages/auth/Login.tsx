@@ -279,6 +279,22 @@ const Login = () => {
           </Form.Item>
         </Form>
       </Card>
+      
+      {/* Footer */}
+      <div
+        style={{
+          position: 'absolute',
+          bottom: 16,
+          left: 0,
+          right: 0,
+          textAlign: 'center',
+          color: 'rgba(148, 163, 184, 0.8)',
+          fontSize: 12,
+          zIndex: 1,
+        }}
+      >
+        系统运行部驱动 © {new Date().getFullYear()} KkOps
+      </div>
       </div>
     </ConfigProvider>
   )

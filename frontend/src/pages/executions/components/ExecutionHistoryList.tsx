@@ -16,10 +16,10 @@ import {
   UpOutlined,
 } from '@ant-design/icons'
 import { useThemeStore } from '@/stores/theme'
-import { TaskExecution, taskExecutionApi } from '@/api/task'
+import { ExecutionRecord, executionRecordApi } from '@/api/execution'
 
 interface ExecutionHistoryListProps {
-  executions: TaskExecution[]
+  executions: ExecutionRecord[]
   onRefresh: () => void
   autoExpandLatest?: boolean  // Auto-expand the latest running execution
 }
@@ -108,7 +108,7 @@ const InlineLogViewer = ({ executionId, isRunning, assetName, assetIp }: InlineL
     // Fetch initial logs
     const fetchLogs = async () => {
       try {
-        const response = await taskExecutionApi.getLogs(executionId)
+        const response = await executionRecordApi.getLogs(executionId)
         const logData = response.data.data?.logs || []
         setLogs(logData.map((l: any) => l.output || l))
       } catch {
@@ -270,7 +270,7 @@ const ExecutionHistoryList = ({ executions, onRefresh, autoExpandLatest = true }
   const isDark = mode === 'dark'
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set())
   const [showAll, setShowAll] = useState(false)
-  const prevExecutionsRef = useRef<TaskExecution[]>([])
+  const prevExecutionsRef = useRef<ExecutionRecord[]>([])
 
   // Sort executions by created_at descending (newest first)
   const sortedExecutions = useMemo(() => {
@@ -294,6 +294,19 @@ const ExecutionHistoryList = ({ executions, onRefresh, autoExpandLatest = true }
   }, [sortedExecutions, autoExpandLatest])
 
   const displayedExecutions = showAll ? sortedExecutions : sortedExecutions.slice(0, 5)
+
+  // 计算每个执行记录的任务内运行编号（从最早到最新：#1, #2, #3...）
+  const executionRunNumbers = useMemo(() => {
+    const runNumbers = new Map<number, number>()
+    // 按创建时间升序排列，然后分配编号
+    const chronological = [...executions].sort((a, b) => 
+      new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+    )
+    chronological.forEach((exec, index) => {
+      runNumbers.set(exec.id, index + 1)
+    })
+    return runNumbers
+  }, [executions])
 
   const toggleExpand = (id: number) => {
     setExpandedIds(prev => {
@@ -355,8 +368,8 @@ const ExecutionHistoryList = ({ executions, onRefresh, autoExpandLatest = true }
               {/* Status Icon */}
               {statusConfig.icon}
 
-              {/* Run Number */}
-              <span style={{ fontWeight: 500, minWidth: 50 }}>#{execution.id}</span>
+              {/* Run Number (任务内的运行编号) */}
+              <span style={{ fontWeight: 500, minWidth: 50 }}>#{executionRunNumbers.get(execution.id) || 1}</span>
 
               {/* Asset Info */}
               {assetName && (

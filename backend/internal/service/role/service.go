@@ -27,12 +27,14 @@ func NewService(db *gorm.DB) *Service {
 type CreateRoleRequest struct {
 	Name        string `json:"name" binding:"required"`
 	Description string `json:"description"`
+	IsAdmin     bool   `json:"is_admin"` // 是否为管理员角色
 }
 
 // UpdateRoleRequest represents a request to update a role
 type UpdateRoleRequest struct {
 	Name        string `json:"name"`
 	Description string `json:"description"`
+	IsAdmin     *bool  `json:"is_admin"` // 使用指针以区分未设置和设置为 false
 }
 
 // RoleResponse represents a role response
@@ -40,6 +42,8 @@ type RoleResponse struct {
 	ID          uint   `json:"id"`
 	Name        string `json:"name"`
 	Description string `json:"description"`
+	IsAdmin     bool   `json:"is_admin"`     // 是否为管理员角色
+	AssetCount  int64  `json:"asset_count"`  // 授权资产数量（管理员角色返回-1表示全部）
 	CreatedAt   string `json:"created_at"`
 	UpdatedAt   string `json:"updated_at"`
 }
@@ -55,6 +59,7 @@ func (s *Service) CreateRole(req *CreateRoleRequest) (*RoleResponse, error) {
 	role := model.Role{
 		Name:        req.Name,
 		Description: req.Description,
+		IsAdmin:     req.IsAdmin,
 	}
 
 	if err := s.db.Create(&role).Error; err != nil {
@@ -65,6 +70,7 @@ func (s *Service) CreateRole(req *CreateRoleRequest) (*RoleResponse, error) {
 		ID:          role.ID,
 		Name:        role.Name,
 		Description: role.Description,
+		IsAdmin:     role.IsAdmin,
 		CreatedAt:   role.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
 		UpdatedAt:   role.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
 	}, nil
@@ -81,12 +87,13 @@ func (s *Service) GetRole(id uint) (*RoleResponse, error) {
 		ID:          role.ID,
 		Name:        role.Name,
 		Description: role.Description,
+		IsAdmin:     role.IsAdmin,
 		CreatedAt:   role.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
 		UpdatedAt:   role.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
 	}, nil
 }
 
-// ListRoles retrieves all roles
+// ListRoles retrieves all roles with asset count
 func (s *Service) ListRoles() ([]RoleResponse, error) {
 	var roles []model.Role
 	if err := s.db.Find(&roles).Error; err != nil {
@@ -95,10 +102,21 @@ func (s *Service) ListRoles() ([]RoleResponse, error) {
 
 	result := make([]RoleResponse, len(roles))
 	for i, role := range roles {
+		var assetCount int64
+		if role.IsAdmin {
+			// 管理员角色返回-1表示可访问全部资产
+			assetCount = -1
+		} else {
+			// 查询角色授权的资产数量
+			s.db.Model(&model.RoleAsset{}).Where("role_id = ?", role.ID).Count(&assetCount)
+		}
+
 		result[i] = RoleResponse{
 			ID:          role.ID,
 			Name:        role.Name,
 			Description: role.Description,
+			IsAdmin:     role.IsAdmin,
+			AssetCount:  assetCount,
 			CreatedAt:   role.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
 			UpdatedAt:   role.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
 		}
@@ -127,6 +145,11 @@ func (s *Service) UpdateRole(id uint, req *UpdateRoleRequest) (*RoleResponse, er
 		role.Description = req.Description
 	}
 
+	// 更新 is_admin 字段（使用指针以区分未设置和设置为 false）
+	if req.IsAdmin != nil {
+		role.IsAdmin = *req.IsAdmin
+	}
+
 	if err := s.db.Save(&role).Error; err != nil {
 		return nil, err
 	}
@@ -135,6 +158,7 @@ func (s *Service) UpdateRole(id uint, req *UpdateRoleRequest) (*RoleResponse, er
 		ID:          role.ID,
 		Name:        role.Name,
 		Description: role.Description,
+		IsAdmin:     role.IsAdmin,
 		CreatedAt:   role.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
 		UpdatedAt:   role.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
 	}, nil

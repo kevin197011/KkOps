@@ -13,16 +13,21 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/kkops/backend/internal/service/asset"
+	"github.com/kkops/backend/internal/service/authorization"
 )
 
 // Handler handles asset management HTTP requests
 type Handler struct {
-	service *asset.Service
+	service  *asset.Service
+	authzSvc *authorization.Service
 }
 
 // NewHandler creates a new asset handler
-func NewHandler(service *asset.Service) *Handler {
-	return &Handler{service: service}
+func NewHandler(service *asset.Service, authzSvc *authorization.Service) *Handler {
+	return &Handler{
+		service:  service,
+		authzSvc: authzSvc,
+	}
 }
 
 // CreateAsset handles asset creation
@@ -42,11 +47,29 @@ func (h *Handler) CreateAsset(c *gin.Context) {
 	c.JSON(http.StatusCreated, resp)
 }
 
-// GetAsset handles asset retrieval
+// GetAsset handles asset retrieval with permission check
 func (h *Handler) GetAsset(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid asset ID"})
+		return
+	}
+
+	// 获取当前用户ID
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
+	// 检查资产访问权限
+	hasAccess, err := h.authzSvc.HasAssetAccess(userID.(uint), uint(id))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to check permission"})
+		return
+	}
+	if !hasAccess {
+		c.JSON(http.StatusForbidden, gin.H{"error": "insufficient permissions"})
 		return
 	}
 
@@ -59,12 +82,28 @@ func (h *Handler) GetAsset(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 }
 
-// ListAssets handles asset list retrieval with filtering
+// ListAssets handles asset list retrieval with filtering and permission check
 func (h *Handler) ListAssets(c *gin.Context) {
 	filter := asset.ListAssetsFilter{
 		Page:     1,
 		PageSize: 20,
 	}
+
+	// 获取当前用户ID
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
+	// 获取用户权限范围
+	allowedAssetIDs, isAdmin, err := h.authzSvc.GetUserAssetIDs(userID.(uint))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to check permission"})
+		return
+	}
+	filter.IsAdmin = isAdmin
+	filter.AllowedAssetIDs = allowedAssetIDs
 
 	// Parse pagination
 	if page, err := strconv.Atoi(c.DefaultQuery("page", "1")); err == nil {

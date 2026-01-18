@@ -21,12 +21,15 @@ const EnvironmentList = lazy(() => import('./pages/environments/EnvironmentList'
 const CloudPlatformList = lazy(() => import('./pages/cloudPlatforms/CloudPlatformList'))
 const CategoryList = lazy(() => import('./pages/categories/CategoryList'))
 const TagList = lazy(() => import('./pages/tags/TagList'))
-const TemplateList = lazy(() => import('./pages/tasks/TemplateList'))
-const TaskManagementPage = lazy(() => import('./pages/tasks/TaskManagementPage'))
-const TaskExecutionList = lazy(() => import('./pages/tasks/TaskExecutionList'))
-const TaskExecutionLogs = lazy(() => import('./pages/tasks/TaskExecutionLogs'))
+const TemplateList = lazy(() => import('./pages/executions/TemplateList'))
+const ExecutionManagementPage = lazy(() => import('./pages/executions/TaskManagementPage'))
+const ExecutionHistoryPage = lazy(() => import('./pages/executions/TaskExecutionList'))
+const ExecutionLogsPage = lazy(() => import('./pages/executions/TaskExecutionLogs'))
+const DeploymentModuleList = lazy(() => import('./pages/deployments/DeploymentModuleList'))
+const ScheduledTaskList = lazy(() => import('./pages/tasks/ScheduledTaskList'))
 const SSHKeyList = lazy(() => import('./pages/ssh/SSHKeyList'))
 const WebSSHTerminal = lazy(() => import('./pages/ssh/WebSSHTerminal'))
+const AuditLogList = lazy(() => import('./pages/audit/AuditLogList'))
 
 // Loading component
 const PageLoading = () => (
@@ -166,7 +169,7 @@ function App() {
           }
         />
         <Route
-          path="/task-templates"
+          path="/templates"
           element={
             <ProtectedRoute>
               <MainLayout>
@@ -178,36 +181,60 @@ function App() {
           }
         />
         <Route
+          path="/executions"
+          element={
+            <ProtectedRoute>
+              <MainLayout>
+                <Suspense fallback={<PageLoading />}>
+                  <ExecutionManagementPage />
+                </Suspense>
+              </MainLayout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/executions/:executionId/history"
+          element={
+            <ProtectedRoute>
+              <MainLayout>
+                <Suspense fallback={<PageLoading />}>
+                  <ExecutionHistoryPage />
+                </Suspense>
+              </MainLayout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/execution-records/:id/logs"
+          element={
+            <ProtectedRoute>
+              <Suspense fallback={<PageLoading />}>
+                <ExecutionLogsPage />
+              </Suspense>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/deployments"
+          element={
+            <ProtectedRoute>
+              <MainLayout>
+                <Suspense fallback={<PageLoading />}>
+                  <DeploymentModuleList />
+                </Suspense>
+              </MainLayout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
           path="/tasks"
           element={
             <ProtectedRoute>
               <MainLayout>
                 <Suspense fallback={<PageLoading />}>
-                  <TaskManagementPage />
+                  <ScheduledTaskList />
                 </Suspense>
               </MainLayout>
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/tasks/:taskId/executions"
-          element={
-            <ProtectedRoute>
-              <MainLayout>
-                <Suspense fallback={<PageLoading />}>
-                  <TaskExecutionList />
-                </Suspense>
-              </MainLayout>
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/task-executions/:id/logs"
-          element={
-            <ProtectedRoute>
-              <Suspense fallback={<PageLoading />}>
-                <TaskExecutionLogs />
-              </Suspense>
             </ProtectedRoute>
           }
         />
@@ -230,6 +257,18 @@ function App() {
               <Suspense fallback={<PageLoading />}>
                 <WebSSHTerminal />
               </Suspense>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/audit-logs"
+          element={
+            <ProtectedRoute>
+              <MainLayout>
+                <Suspense fallback={<PageLoading />}>
+                  <AuditLogList />
+                </Suspense>
+              </MainLayout>
             </ProtectedRoute>
           }
         />

@@ -143,3 +143,36 @@ func (s *Service) GetCurrentUser(userID uint) (*UserInfo, error) {
 		Roles:    roleNames,
 	}, nil
 }
+
+// ChangePasswordRequest represents a change password request
+type ChangePasswordRequest struct {
+	OldPassword string `json:"old_password" binding:"required"`
+	NewPassword string `json:"new_password" binding:"required,min=6"`
+}
+
+// ChangePassword changes the password for the current user
+func (s *Service) ChangePassword(userID uint, req *ChangePasswordRequest) error {
+	var user model.User
+	if err := s.db.First(&user, userID).Error; err != nil {
+		return errors.New("user not found")
+	}
+
+	// Verify old password
+	if !utils.CheckPasswordHash(req.OldPassword, user.PasswordHash) {
+		return errors.New("原密码不正确")
+	}
+
+	// Hash new password
+	newHash, err := utils.HashPassword(req.NewPassword)
+	if err != nil {
+		return errors.New("密码加密失败")
+	}
+
+	// Update password
+	user.PasswordHash = newHash
+	if err := s.db.Save(&user).Error; err != nil {
+		return errors.New("密码更新失败")
+	}
+
+	return nil
+}

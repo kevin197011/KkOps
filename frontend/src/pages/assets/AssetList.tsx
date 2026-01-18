@@ -4,14 +4,14 @@
 // https://opensource.org/licenses/MIT
 
 import { useState, useEffect } from 'react'
-import { Table, Button, Space, message, Tag, Input, Select, Modal, Form, Descriptions, Spin } from 'antd'
+import { Table, Button, Space, message, Tag, Input, Select, Modal, Form, Descriptions, Spin, Divider, ColorPicker } from 'antd'
 import { PlusOutlined, SearchOutlined, DownloadOutlined, UploadOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons'
 import { assetApi, Asset, CreateAssetRequest, UpdateAssetRequest } from '@/api/asset'
 import { projectApi, Project } from '@/api/project'
 import { environmentApi, Environment } from '@/api/environment'
 import { cloudPlatformApi, CloudPlatform } from '@/api/cloudPlatform'
 import { sshkeyApi, SSHKey } from '@/api/sshkey'
-import { tagApi, Tag as TagType } from '@/api/tag'
+import { tagApi, Tag as TagType, CreateTagRequest } from '@/api/tag'
 
 const { Search } = Input
 
@@ -34,6 +34,11 @@ const AssetList = () => {
   const [detailModalVisible, setDetailModalVisible] = useState(false)
   const [detailAsset, setDetailAsset] = useState<Asset | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
+  // 新建标签相关状态
+  const [newTagModalVisible, setNewTagModalVisible] = useState(false)
+  const [newTagName, setNewTagName] = useState('')
+  const [newTagColor, setNewTagColor] = useState('#1890ff')
+  const [creatingTag, setCreatingTag] = useState(false)
 
   useEffect(() => {
     fetchAssets()
@@ -60,7 +65,11 @@ const AssetList = () => {
       setAssets(response.data.data)
       setTotal(response.data.total)
     } catch (error: any) {
-      message.error('获取资产列表失败')
+      if (error.response?.status === 403) {
+        message.error('无权限访问资产列表')
+      } else {
+        message.error('获取资产列表失败')
+      }
     } finally {
       setLoading(false)
     }
@@ -108,6 +117,42 @@ const AssetList = () => {
       setTags(response.data || [])
     } catch (error: any) {
       // Ignore tag fetch errors
+    }
+  }
+
+  // 创建新标签
+  const handleCreateTag = async () => {
+    if (!newTagName.trim()) {
+      message.warning('请输入标签名称')
+      return
+    }
+    setCreatingTag(true)
+    try {
+      const tagData: CreateTagRequest = {
+        name: newTagName.trim(),
+        color: newTagColor,
+      }
+      const response = await tagApi.create(tagData)
+      message.success('标签创建成功')
+      
+      // 刷新标签列表
+      await fetchTags()
+      
+      // 获取当前选中的标签并添加新标签
+      const currentTags = form.getFieldValue('tag_ids') || []
+      const newTagId = response.data?.data?.id || response.data?.id
+      if (newTagId) {
+        form.setFieldsValue({ tag_ids: [...currentTags, newTagId] })
+      }
+      
+      // 重置并关闭弹窗
+      setNewTagName('')
+      setNewTagColor('#1890ff')
+      setNewTagModalVisible(false)
+    } catch (error: any) {
+      message.error(error.response?.data?.error || '创建标签失败')
+    } finally {
+      setCreatingTag(false)
     }
   }
 
@@ -499,7 +544,26 @@ const AssetList = () => {
             <Input.TextArea rows={4} placeholder="资产描述" aria-label="描述" />
           </Form.Item>
           <Form.Item name="tag_ids" label="标签">
-            <Select mode="multiple" placeholder="选择标签" allowClear aria-label="标签">
+            <Select 
+              mode="multiple" 
+              placeholder="选择标签" 
+              allowClear 
+              aria-label="标签"
+              dropdownRender={(menu) => (
+                <>
+                  {menu}
+                  <Divider style={{ margin: '8px 0' }} />
+                  <Button 
+                    type="link" 
+                    icon={<PlusOutlined />}
+                    onClick={() => setNewTagModalVisible(true)}
+                    style={{ width: '100%', textAlign: 'left' }}
+                  >
+                    新建标签
+                  </Button>
+                </>
+              )}
+            >
               {tags.map((tag) => (
                 <Select.Option key={tag.id} value={tag.id}>
                   <Tag color={tag.color}>{tag.name}</Tag>
@@ -621,6 +685,42 @@ const AssetList = () => {
             <Descriptions.Item label="更新时间">{detailAsset.updated_at}</Descriptions.Item>
           </Descriptions>
         ) : null}
+      </Modal>
+
+      {/* 新建标签弹窗 */}
+      <Modal
+        title="新建标签"
+        open={newTagModalVisible}
+        onCancel={() => {
+          setNewTagModalVisible(false)
+          setNewTagName('')
+          setNewTagColor('#1890ff')
+        }}
+        onOk={handleCreateTag}
+        confirmLoading={creatingTag}
+        width={400}
+        okText="创建"
+        cancelText="取消"
+      >
+        <Form layout="vertical">
+          <Form.Item label="标签名称" required>
+            <Input
+              placeholder="输入标签名称"
+              value={newTagName}
+              onChange={(e) => setNewTagName(e.target.value)}
+              onPressEnter={handleCreateTag}
+            />
+          </Form.Item>
+          <Form.Item label="标签颜色">
+            <Space>
+              <ColorPicker
+                value={newTagColor}
+                onChange={(color) => setNewTagColor(color.toHexString())}
+              />
+              <Tag color={newTagColor}>{newTagName || '预览'}</Tag>
+            </Space>
+          </Form.Item>
+        </Form>
       </Modal>
     </div>
   )

@@ -4,7 +4,7 @@
 // https://opensource.org/licenses/MIT
 
 import React, { useState, useEffect } from 'react'
-import { Layout, Menu, theme, Dropdown, message, Button } from 'antd'
+import { Layout, Menu, theme, Dropdown, message, Button, Modal, Form, Input } from 'antd'
 import type { MenuProps } from 'antd'
 import { useNavigate, useLocation } from 'react-router-dom'
 import {
@@ -22,12 +22,17 @@ import {
   FolderOutlined,
   GlobalOutlined,
   CloudOutlined,
+  RocketOutlined,
+  LockOutlined,
+  ScheduleOutlined,
+  FileTextOutlined,
+  AuditOutlined,
 } from '@ant-design/icons'
 import { useThemeStore } from '@/stores/theme'
 import { useAuthStore } from '@/stores/auth'
 import { authApi } from '@/api/auth'
 
-const { Header, Sider, Content } = Layout
+const { Header, Sider, Content, Footer } = Layout
 
 interface MainLayoutProps {
   children: React.ReactNode
@@ -36,6 +41,9 @@ interface MainLayoutProps {
 const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
   const [collapsed, setCollapsed] = useState(false)
   const [isMobile, setIsMobile] = useState(false)
+  const [passwordModalVisible, setPasswordModalVisible] = useState(false)
+  const [passwordLoading, setPasswordLoading] = useState(false)
+  const [passwordForm] = Form.useForm()
   const navigate = useNavigate()
   const location = useLocation()
   const { mode, toggleMode } = useThemeStore()
@@ -84,14 +92,24 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
       label: '资产管理',
     },
     {
-      key: '/tasks',
+      key: '/executions',
       icon: <PlayCircleOutlined />,
       label: '运维执行',
     },
     {
-      key: '/task-templates',
-      icon: <PlayCircleOutlined />,
+      key: '/templates',
+      icon: <FileTextOutlined />,
       label: '任务模板',
+    },
+    {
+      key: '/tasks',
+      icon: <ScheduleOutlined />,
+      label: '任务执行',
+    },
+    {
+      key: '/deployments',
+      icon: <RocketOutlined />,
+      label: '部署管理',
     },
     {
       key: '/ssh/keys',
@@ -107,6 +125,11 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
       key: '/roles',
       icon: <TeamOutlined />,
       label: '角色权限',
+    },
+    {
+      key: '/audit-logs',
+      icon: <AuditOutlined />,
+      label: '审计日志',
     },
   ]
 
@@ -132,7 +155,30 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
     navigate('/login')
   }
 
+  const handleChangePassword = async (values: { old_password: string; new_password: string }) => {
+    setPasswordLoading(true)
+    try {
+      await authApi.changePassword(values)
+      message.success('密码修改成功')
+      setPasswordModalVisible(false)
+      passwordForm.resetFields()
+    } catch (error: any) {
+      message.error(error.response?.data?.error || '密码修改失败')
+    } finally {
+      setPasswordLoading(false)
+    }
+  }
+
   const userMenuItems: MenuProps['items'] = [
+    {
+      key: 'change-password',
+      icon: <LockOutlined />,
+      label: '修改密码',
+      onClick: () => setPasswordModalVisible(true),
+    },
+    {
+      type: 'divider',
+    },
     {
       key: 'logout',
       icon: <LogoutOutlined />,
@@ -320,7 +366,86 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
         >
           {children}
         </Content>
+        <Footer
+          style={{
+            textAlign: 'center',
+            padding: '12px 24px',
+            background: 'transparent',
+            color: mode === 'dark' ? '#64748B' : '#94A3B8',
+            fontSize: 12,
+          }}
+        >
+          系统运行部驱动 © {new Date().getFullYear()} KkOps
+        </Footer>
       </Layout>
+
+      {/* 修改密码弹窗 */}
+      <Modal
+        title="修改密码"
+        open={passwordModalVisible}
+        onCancel={() => {
+          setPasswordModalVisible(false)
+          passwordForm.resetFields()
+        }}
+        footer={null}
+        destroyOnClose
+      >
+        <Form
+          form={passwordForm}
+          layout="vertical"
+          onFinish={handleChangePassword}
+        >
+          <Form.Item
+            name="old_password"
+            label="原密码"
+            rules={[{ required: true, message: '请输入原密码' }]}
+          >
+            <Input.Password placeholder="请输入原密码" />
+          </Form.Item>
+          <Form.Item
+            name="new_password"
+            label="新密码"
+            rules={[
+              { required: true, message: '请输入新密码' },
+              { min: 6, message: '密码长度至少6位' },
+            ]}
+          >
+            <Input.Password placeholder="请输入新密码（至少6位）" />
+          </Form.Item>
+          <Form.Item
+            name="confirm_password"
+            label="确认新密码"
+            dependencies={['new_password']}
+            rules={[
+              { required: true, message: '请确认新密码' },
+              ({ getFieldValue }) => ({
+                validator(_, value) {
+                  if (!value || getFieldValue('new_password') === value) {
+                    return Promise.resolve()
+                  }
+                  return Promise.reject(new Error('两次输入的密码不一致'))
+                },
+              }),
+            ]}
+          >
+            <Input.Password placeholder="请再次输入新密码" />
+          </Form.Item>
+          <Form.Item style={{ marginBottom: 0, textAlign: 'right' }}>
+            <Button
+              style={{ marginRight: 8 }}
+              onClick={() => {
+                setPasswordModalVisible(false)
+                passwordForm.resetFields()
+              }}
+            >
+              取消
+            </Button>
+            <Button type="primary" htmlType="submit" loading={passwordLoading}>
+              确认修改
+            </Button>
+          </Form.Item>
+        </Form>
+      </Modal>
     </Layout>
   )
 }

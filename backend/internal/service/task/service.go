@@ -13,16 +13,21 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/kkops/backend/internal/model"
+	"github.com/kkops/backend/internal/service/authorization"
 )
 
 // Service handles task and template management business logic
 type Service struct {
-	db *gorm.DB
+	db       *gorm.DB
+	authzSvc *authorization.Service
 }
 
 // NewService creates a new task service
-func NewService(db *gorm.DB) *Service {
-	return &Service{db: db}
+func NewService(db *gorm.DB, authzSvc *authorization.Service) *Service {
+	return &Service{
+		db:       db,
+		authzSvc: authzSvc,
+	}
 }
 
 // CreateTemplateRequest represents a request to create a task template
@@ -207,6 +212,7 @@ func (s *Service) DeleteTemplate(id uint) error {
 }
 
 // CreateTask creates a new task (without execution records - those are created on Execute)
+// 增加资产权限检查：用户只能在已授权的资产上创建任务
 func (s *Service) CreateTask(userID uint, req *CreateTaskRequest) (*TaskResponse, error) {
 	// If template ID is provided, load template content
 	if req.TemplateID != nil {
@@ -219,6 +225,17 @@ func (s *Service) CreateTask(userID uint, req *CreateTaskRequest) (*TaskResponse
 		}
 		if req.Type == "" {
 			req.Type = template.Type
+		}
+	}
+
+	// 检查用户对目标资产的访问权限
+	if len(req.AssetIDs) > 0 && s.authzSvc != nil {
+		authorizedAssets, err := s.authzSvc.HasMultipleAssetAccess(userID, req.AssetIDs)
+		if err != nil {
+			return nil, errors.New("failed to check asset permissions")
+		}
+		if len(authorizedAssets) != len(req.AssetIDs) {
+			return nil, errors.New("no permission to execute on selected assets")
 		}
 	}
 

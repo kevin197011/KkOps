@@ -11,17 +11,22 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/kkops/backend/internal/service/authorization"
 	"github.com/kkops/backend/internal/service/user"
 )
 
 // Handler handles user management HTTP requests
 type Handler struct {
-	service *user.Service
+	service  *user.Service
+	authzSvc *authorization.Service
 }
 
 // NewHandler creates a new user handler
-func NewHandler(service *user.Service) *Handler {
-	return &Handler{service: service}
+func NewHandler(service *user.Service, authzSvc *authorization.Service) *Handler {
+	return &Handler{
+		service:  service,
+		authzSvc: authzSvc,
+	}
 }
 
 // CreateUser handles user creation

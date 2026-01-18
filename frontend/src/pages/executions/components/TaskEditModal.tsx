@@ -15,20 +15,27 @@ import {
   Spin,
   Tree,
   Empty,
+  Button,
+  Space,
 } from 'antd'
 import type { DataNode } from 'antd/es/tree'
-import { taskApi, Task } from '@/api/task'
+import { executionApi, Execution, templateApi, ExecutionTemplate } from '@/api/execution'
 import { assetApi, Asset } from '@/api/asset'
-import { templateApi, TaskTemplate } from '@/api/task'
 import { Project } from '@/api/project'
 import { Environment } from '@/api/environment'
 import { useThemeStore } from '@/stores/theme'
 
 const { TextArea } = Input
 
+// 不同类型的 shebang
+const SHEBANGS: Record<string, string> = {
+  shell: '#!/usr/bin/env bash\n\n',
+  python: '#!/usr/bin/env python3\n\n',
+}
+
 interface TaskEditModalProps {
   visible: boolean
-  task: Task | null
+  task: Execution | null
   projects: Project[]
   environments: Environment[]
   onClose: () => void
@@ -49,7 +56,7 @@ const TaskEditModal = ({
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [assets, setAssets] = useState<Asset[]>([])
-  const [templates, setTemplates] = useState<TaskTemplate[]>([])
+  const [templates, setTemplates] = useState<ExecutionTemplate[]>([])
   const [selectedAssetIds, setSelectedAssetIds] = useState<number[]>([])
   const [projectFilter, setProjectFilter] = useState<number | null>(null)
   const [environmentFilter, setEnvironmentFilter] = useState<number | null>(null)
@@ -98,6 +105,7 @@ const TaskEditModal = ({
         form.setFieldsValue({
           type: 'shell',
           timeout: 600,
+          content: SHEBANGS.shell,
         })
         setSelectedAssetIds([])
         setUseTemplate(false)
@@ -159,6 +167,50 @@ const TaskEditModal = ({
     setSelectedAssetIds(assetIds)
   }
 
+  // 处理类型变更，自动插入对应的 shebang
+  const handleTypeChange = (newType: string) => {
+    const currentContent = form.getFieldValue('content') || ''
+    const newShebang = SHEBANGS[newType] || ''
+    
+    // 检查当前内容是否为空或只包含其他类型的 shebang
+    const isEmptyOrShebangOnly = !currentContent.trim() || 
+      Object.values(SHEBANGS).some(shebang => currentContent.trim() === shebang.trim())
+    
+    if (isEmptyOrShebangOnly) {
+      form.setFieldsValue({ content: newShebang })
+    } else {
+      // 如果内容不为空，检查是否以其他 shebang 开头，替换它
+      let updatedContent = currentContent
+      for (const shebang of Object.values(SHEBANGS)) {
+        if (currentContent.startsWith(shebang.trim())) {
+          updatedContent = currentContent.replace(shebang.trim(), newShebang.trim())
+          break
+        }
+      }
+      // 如果没有任何 shebang，在开头插入
+      if (updatedContent === currentContent && !currentContent.startsWith('#!')) {
+        updatedContent = newShebang + currentContent
+      }
+      form.setFieldsValue({ content: updatedContent })
+    }
+  }
+
+  // 选择所有主机
+  const handleSelectAll = () => {
+    if (filteredAssets.length === 0) {
+      message.info('没有可选的主机')
+      return
+    }
+    const allAssetIds = filteredAssets.map((a) => a.id)
+    setSelectedAssetIds(allAssetIds)
+    message.success(`已选择 ${allAssetIds.length} 个主机`)
+  }
+
+  // 清空选择
+  const handleClearSelection = () => {
+    setSelectedAssetIds([])
+  }
+
   const handleSave = async () => {
     try {
       const values = await form.validateFields()
@@ -176,10 +228,10 @@ const TaskEditModal = ({
       }
 
       if (isEditing && task) {
-        await taskApi.update(task.id, taskData)
+        await executionApi.update(task.id, taskData)
         message.success('任务更新成功')
       } else {
-        await taskApi.create(taskData)
+        await executionApi.create(taskData)
         message.success('任务创建成功')
       }
 
@@ -263,6 +315,7 @@ const TaskEditModal = ({
             initialValue="shell"
           >
             <Select
+              onChange={handleTypeChange}
               options={[
                 { label: 'Shell', value: 'shell' },
                 { label: 'Python', value: 'python' },
@@ -294,7 +347,7 @@ const TaskEditModal = ({
 
           {/* Host Selection */}
           <Form.Item label="执行主机" required>
-            <div style={{ marginBottom: 12, display: 'flex', gap: 12 }}>
+            <div style={{ marginBottom: 12, display: 'flex', gap: 12, flexWrap: 'wrap' }}>
               <Select
                 placeholder="按项目筛选"
                 allowClear
@@ -311,6 +364,17 @@ const TaskEditModal = ({
                 onChange={setEnvironmentFilter}
                 options={environments.map((e) => ({ label: e.name, value: e.id }))}
               />
+              <Space>
+                <Button size="small" onClick={handleSelectAll}>
+                  全选
+                </Button>
+                <Button size="small" onClick={handleClearSelection}>
+                  清空
+                </Button>
+              </Space>
+            </div>
+            <div style={{ marginBottom: 8, fontSize: 12, color: '#888' }}>
+              已选择 {selectedAssetIds.length} 个主机
             </div>
 
             <div

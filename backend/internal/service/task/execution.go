@@ -41,7 +41,7 @@ func (s *ExecutionService) CreateTaskExecutions(taskID uint, assetIDs []uint) er
 	executions := make([]model.TaskExecution, len(assetIDs))
 	for i, assetID := range assetIDs {
 		executions[i] = model.TaskExecution{
-			TaskID:  taskID,
+			TaskID:  &taskID,
 			AssetID: assetID,
 			Status:  "pending",
 		}
@@ -94,9 +94,10 @@ func (s *ExecutionService) ExecuteTask(taskID uint, executionType string) error 
 
 	// Create new execution records for this run
 	executions := make([]model.TaskExecution, len(assetIDs))
+	execTaskID := task.ID
 	for i, assetID := range assetIDs {
 		executions[i] = model.TaskExecution{
-			TaskID:  task.ID,
+			TaskID:  &execTaskID,
 			AssetID: assetID,
 			Status:  "pending",
 		}

@@ -96,7 +96,7 @@ func Load(configPath string) (*Config, error) {
 	viper.SetDefault("jwt.refresh_expires_in", 604800)
 	viper.SetDefault("encryption.key", "change-this-encryption-key-in-production")
 	viper.SetDefault("log.level", "info")
-	viper.SetDefault("log.format", "json")
+	viper.SetDefault("log.format", "text") // text for dev, json for production
 	viper.SetDefault("log.output", "stdout")
 
 	// Read from environment variables

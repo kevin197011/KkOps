@@ -26,7 +26,7 @@ const TaskExecutionLogs = () => {
 
   useEffect(() => {
     if (!id) {
-      navigate('/tasks')
+      navigate('/executions')
       return
     }
 
@@ -55,7 +55,7 @@ const TaskExecutionLogs = () => {
 
     // Determine WebSocket protocol (ws or wss)
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const wsUrl = `${protocol}//${window.location.host}/ws/task-executions/${id}/logs?token=${encodeURIComponent(token)}`
+    const wsUrl = `${protocol}//${window.location.host}/ws/execution-records/${id}/logs?token=${encodeURIComponent(token)}`
     
     const ws = new WebSocket(wsUrl)
 
@@ -91,8 +91,8 @@ const TaskExecutionLogs = () => {
     <MainLayout>
       <div>
         <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/tasks')}>
-            返回任务列表
+          <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/executions')}>
+            返回运维执行
           </Button>
           <Tag color={connected ? 'success' : 'default'}>
             {connected ? '已连接' : '未连接'}

@@ -41,6 +41,14 @@ export interface ListUsersResponse {
   size: number
 }
 
+// 用户角色信息
+export interface UserRoleInfo {
+  id: number
+  name: string
+  description: string
+  is_admin: boolean
+}
+
 export const userApi = {
   list: (page?: number, pageSize?: number) => {
     const params = new URLSearchParams()
@@ -53,4 +61,14 @@ export const userApi = {
   create: (data: CreateUserRequest) => apiClient.post<User>('/users', data),
   update: (id: number, data: UpdateUserRequest) => apiClient.put<User>(`/users/${id}`, data),
   delete: (id: number) => apiClient.delete(`/users/${id}`),
+  resetPassword: (id: number, password: string) =>
+    apiClient.post(`/users/${id}/reset-password`, { password }),
+  
+  // 用户角色管理
+  getUserRoles: (userId: number) =>
+    apiClient.get<{ data: UserRoleInfo[] }>(`/users/${userId}/roles`),
+  setUserRoles: (userId: number, roleIds: number[]) =>
+    apiClient.post(`/users/${userId}/roles`, { role_ids: roleIds }),
+  removeUserRole: (userId: number, roleId: number) =>
+    apiClient.delete(`/users/${userId}/roles/${roleId}`),
 }

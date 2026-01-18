@@ -6,16 +6,50 @@
 import { useState, useEffect } from 'react'
 import { Table, Button, Space, message, Modal, Form, Input, Select, Tag } from 'antd'
 import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons'
-import { taskTemplateApi, TaskTemplate, CreateTemplateRequest, UpdateTemplateRequest } from '@/api/task'
+import { executionTemplateApi, ExecutionTemplate, CreateTemplateRequest, UpdateTemplateRequest } from '@/api/execution'
 
 const { TextArea } = Input
 
+// 不同类型的 shebang
+const SHEBANGS: Record<string, string> = {
+  shell: '#!/usr/bin/env bash\n\n',
+  python: '#!/usr/bin/env python3\n\n',
+}
+
 const TemplateList = () => {
-  const [templates, setTemplates] = useState<TaskTemplate[]>([])
+  const [templates, setTemplates] = useState<ExecutionTemplate[]>([])
   const [loading, setLoading] = useState(false)
   const [modalVisible, setModalVisible] = useState(false)
-  const [editingTemplate, setEditingTemplate] = useState<TaskTemplate | null>(null)
+  const [editingTemplate, setEditingTemplate] = useState<ExecutionTemplate | null>(null)
   const [form] = Form.useForm()
+
+  // 处理类型变更，自动插入对应的 shebang
+  const handleTypeChange = (newType: string) => {
+    const currentContent = form.getFieldValue('content') || ''
+    const newShebang = SHEBANGS[newType] || ''
+    
+    // 检查当前内容是否为空或只包含其他类型的 shebang
+    const isEmptyOrShebangOnly = !currentContent.trim() || 
+      Object.values(SHEBANGS).some(shebang => currentContent.trim() === shebang.trim())
+    
+    if (isEmptyOrShebangOnly) {
+      form.setFieldsValue({ content: newShebang })
+    } else {
+      // 如果内容不为空，检查是否以其他 shebang 开头，替换它
+      let updatedContent = currentContent
+      for (const shebang of Object.values(SHEBANGS)) {
+        if (currentContent.startsWith(shebang.trim())) {
+          updatedContent = currentContent.replace(shebang.trim(), newShebang.trim())
+          break
+        }
+      }
+      // 如果没有任何 shebang，在开头插入
+      if (updatedContent === currentContent && !currentContent.startsWith('#!')) {
+        updatedContent = newShebang + currentContent
+      }
+      form.setFieldsValue({ content: updatedContent })
+    }
+  }
 
   useEffect(() => {
     fetchTemplates()
@@ -24,7 +58,7 @@ const TemplateList = () => {
   const fetchTemplates = async () => {
     setLoading(true)
     try {
-      const response = await taskTemplateApi.list()
+      const response = await executionTemplateApi.list()
       setTemplates(response.data)
     } catch (error: any) {
       message.error('获取模板列表失败')
@@ -36,10 +70,12 @@ const TemplateList = () => {
   const handleCreate = () => {
     setEditingTemplate(null)
     form.resetFields()
+    // 新建时默认插入 shell 的 shebang
+    form.setFieldsValue({ content: SHEBANGS.shell })
     setModalVisible(true)
   }
 
-  const handleEdit = (template: TaskTemplate) => {
+  const handleEdit = (template: ExecutionTemplate) => {
     setEditingTemplate(template)
     form.setFieldsValue(template)
     setModalVisible(true)
@@ -51,7 +87,7 @@ const TemplateList = () => {
       content: '确定要删除这个模板吗？',
       onOk: async () => {
         try {
-          await taskTemplateApi.delete(id)
+          await executionTemplateApi.delete(id)
           message.success('删除成功')
           fetchTemplates()
         } catch (error: any) {
@@ -64,10 +100,10 @@ const TemplateList = () => {
   const handleSubmit = async (values: CreateTemplateRequest | UpdateTemplateRequest) => {
     try {
       if (editingTemplate) {
-        await taskTemplateApi.update(editingTemplate.id, values)
+        await executionTemplateApi.update(editingTemplate.id, values)
         message.success('更新成功')
       } else {
-        await taskTemplateApi.create(values)
+        await executionTemplateApi.create(values)
         message.success('创建成功')
       }
       setModalVisible(false)
@@ -110,7 +146,7 @@ const TemplateList = () => {
       title: '操作',
       key: 'action',
       width: 150,
-      render: (_: any, record: TaskTemplate) => (
+      render: (_: any, record: ExecutionTemplate) => (
         <Space size="small">
           <Button type="link" size="small" icon={<EditOutlined />} onClick={() => handleEdit(record)}>
             编辑
@@ -165,10 +201,9 @@ const TemplateList = () => {
             <Input placeholder="模板名称" />
           </Form.Item>
           <Form.Item name="type" label="类型" initialValue="shell">
-            <Select>
+            <Select onChange={handleTypeChange}>
               <Select.Option value="shell">Shell</Select.Option>
               <Select.Option value="python">Python</Select.Option>
-              <Select.Option value="bash">Bash</Select.Option>
             </Select>
           </Form.Item>
           <Form.Item

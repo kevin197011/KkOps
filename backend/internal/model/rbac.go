@@ -16,6 +16,7 @@ type Role struct {
 	ID          uint           `gorm:"primaryKey" json:"id"`
 	Name        string         `gorm:"not null;size:100;uniqueIndex" json:"name"`
 	Description string         `gorm:"type:text" json:"description"`
+	IsAdmin     bool           `gorm:"default:false" json:"is_admin"` // 是否为管理员角色，管理员可访问所有资产
 	CreatedAt   time.Time      `json:"created_at"`
 	UpdatedAt   time.Time      `json:"updated_at"`
 	DeletedAt   gorm.DeletedAt `gorm:"index" json:"-"`

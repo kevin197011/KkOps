@@ -7,38 +7,38 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { Table, Button, Space, message, Tag, Spin } from 'antd'
 import { ArrowLeftOutlined, PlayCircleOutlined, EyeOutlined, StopOutlined } from '@ant-design/icons'
-import { taskApi, taskExecutionApi, TaskExecution, Task } from '@/api/task'
+import { executionApi, executionRecordApi, ExecutionRecord, Execution } from '@/api/execution'
 import { assetApi, Asset } from '@/api/asset'
 
 const TaskExecutionList = () => {
-  const { taskId } = useParams<{ taskId: string }>()
+  const { executionId } = useParams<{ executionId: string }>()
   const navigate = useNavigate()
-  const [executions, setExecutions] = useState<TaskExecution[]>([])
-  const [task, setTask] = useState<Task | null>(null)
+  const [executions, setExecutions] = useState<ExecutionRecord[]>([])
+  const [execution, setExecution] = useState<Execution | null>(null)
   const [assets, setAssets] = useState<Map<number, Asset>>(new Map())
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    if (!taskId) {
-      navigate('/tasks')
+    if (!executionId) {
+      navigate('/executions')
       return
     }
     fetchData()
-  }, [taskId])
+  }, [executionId])
 
   const fetchData = async () => {
-    if (!taskId) return
+    if (!executionId) return
     
     setLoading(true)
     try {
-      const [taskResponse, executionsResponse, assetsResponse] = await Promise.all([
-        taskApi.get(parseInt(taskId)),
-        taskApi.getExecutions(parseInt(taskId)),
+      const [executionResponse, historyResponse, assetsResponse] = await Promise.all([
+        executionApi.get(parseInt(executionId)),
+        executionApi.getHistory(parseInt(executionId)),
         assetApi.list({ page: 1, page_size: 1000 }),
       ])
       
-      setTask(taskResponse.data)
-      setExecutions(executionsResponse.data.data || [])
+      setExecution(executionResponse.data)
+      setExecutions(historyResponse.data.data || [])
       
       // Build asset lookup map
       const assetMap = new Map<number, Asset>()
@@ -53,13 +53,13 @@ const TaskExecutionList = () => {
     }
   }
 
-  const handleViewLogs = (executionId: number) => {
-    navigate(`/task-executions/${executionId}/logs`)
+  const handleViewLogs = (recordId: number) => {
+    navigate(`/execution-records/${recordId}/logs`)
   }
 
-  const handleCancelExecution = async (executionId: number) => {
+  const handleCancelExecution = async (recordId: number) => {
     try {
-      await taskExecutionApi.cancel(executionId)
+      await executionRecordApi.cancel(recordId)
       message.success('执行已取消')
       fetchData()
     } catch (error: any) {
@@ -67,10 +67,10 @@ const TaskExecutionList = () => {
     }
   }
 
-  const handleExecuteTask = async (executionType: 'sync' | 'async') => {
-    if (!taskId) return
+  const handleExecuteTask = async (execType: 'sync' | 'async') => {
+    if (!executionId) return
     try {
-      await taskApi.execute(parseInt(taskId), executionType)
+      await executionApi.execute(parseInt(executionId), execType)
       message.success('任务执行已启动')
       fetchData()
     } catch (error: any) {
@@ -148,7 +148,7 @@ const TaskExecutionList = () => {
       title: '操作',
       key: 'action',
       width: 150,
-      render: (_: any, record: TaskExecution) => (
+      render: (_: any, record: ExecutionRecord) => (
         <Space size="small">
           <Button
             type="link"
@@ -195,11 +195,11 @@ const TaskExecutionList = () => {
         }}
       >
         <Space>
-          <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/tasks')}>
-            返回任务列表
+          <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/executions')}>
+            返回运维执行
           </Button>
           <h2 style={{ margin: 0 }}>
-            {task?.name || '任务'} - 执行记录
+            {execution?.name || '执行任务'} - 执行历史
           </h2>
         </Space>
         <Space>

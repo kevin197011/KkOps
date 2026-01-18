@@ -93,6 +93,39 @@ func (h *Handler) Logout(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "logged out successfully"})
 }
 
+// ChangePassword handles password change for current user
+// @Summary Change password
+// @Description Change password for the current authenticated user
+// @Tags auth
+// @Security BearerAuth
+// @Accept json
+// @Produce json
+// @Param request body auth.ChangePasswordRequest true "Change password request"
+// @Success 200 {object} map[string]string
+// @Failure 400 {object} map[string]string
+// @Failure 401 {object} map[string]string
+// @Router /api/v1/auth/change-password [post]
+func (h *Handler) ChangePassword(c *gin.Context) {
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
+	var req auth.ChangePasswordRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if err := h.service.ChangePassword(userID.(uint), &req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "密码修改成功"})
+}
+
 // CreateAPIToken handles API token creation
 func (h *Handler) CreateAPIToken(c *gin.Context) {
 	userID, err := strconv.ParseUint(c.Param("id"), 10, 32)

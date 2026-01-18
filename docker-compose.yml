@@ -66,6 +66,12 @@ services:
       - backend_go_modules:/go/pkg/mod
     networks:
       - kkops-network
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:8080/api/v1/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
     command: sh -c "go mod download && go run cmd/server/main.go"
 
   frontend:
@@ -79,7 +85,8 @@ services:
       - API_PROXY_TARGET=http://backend:8080
       - WS_PROXY_TARGET=http://backend:8080
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     volumes:
       - ./frontend:/app
       - /app/node_modules
