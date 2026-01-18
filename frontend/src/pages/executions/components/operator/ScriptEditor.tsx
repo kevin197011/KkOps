@@ -12,7 +12,7 @@ const { Text } = Typography
 
 // 不同类型的 shebang
 const SHEBANGS: Record<string, string> = {
-  shell: '#!/bin/bash\n\n',
+  shell: '#!/usr/bin/env bash\n\n',
   python: '#!/usr/bin/env python3\n\n',
 }
 

@@ -331,7 +331,7 @@ const TaskEditModal = ({
           >
             <TextArea
               rows={8}
-              placeholder="#!/bin/bash&#10;echo 'Hello World'"
+              placeholder="#!/usr/bin/env bash&#10;echo 'Hello World'"
               style={{
                 fontFamily: 'Monaco, Menlo, "Ubuntu Mono", monospace',
                 fontSize: 13,

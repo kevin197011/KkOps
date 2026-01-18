@@ -114,7 +114,7 @@ const ExecutionOperatorPage = () => {
       setSelectedTemplate(null)
       // 插入默认 shebang
       if (!scriptContent) {
-        setScriptContent(scriptType === 'shell' ? '#!/bin/bash\n\n' : '#!/usr/bin/env python3\n\n')
+        setScriptContent(scriptType === 'shell' ? '#!/usr/bin/env bash\n\n' : '#!/usr/bin/env python3\n\n')
       }
     }
   }, [scriptContent, scriptType])
