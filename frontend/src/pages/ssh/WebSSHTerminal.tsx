@@ -533,7 +533,9 @@ const WebSSHTerminal = () => {
               const charWidth = 8.4  // Approximate width of monospace character
               const charHeight = 18.2 // Approximate height with line-height 1.4
               cols = Math.max(80, Math.floor(container.clientWidth / charWidth))
-              rows = Math.max(24, Math.floor(container.clientHeight / charHeight))
+              // Subtract extra space for padding to ensure last line is visible
+              const availableHeight = container.clientHeight - 12 // Account for container padding
+              rows = Math.max(24, Math.floor(availableHeight / charHeight))
             }
             return prev
           })
@@ -966,6 +968,26 @@ const WebSSHTerminal = () => {
     message.success(`正在克隆连接到 ${conn.asset.hostName}`)
   }
 
+  // Reconnect - disconnect and reconnect to the same asset
+  const handleReconnect = (connId: string) => {
+    const conn = connections.get(connId)
+    if (!conn) return
+    
+    const asset = conn.asset
+    
+    message.loading({ content: `正在重连到 ${asset.hostName}...`, key: `reconnect-${connId}`, duration: 0 })
+    
+    // Disconnect current connection
+    handleDisconnect(connId)
+    
+    // Reconnect to the same asset after a short delay to ensure cleanup completes
+    // handleConnect will automatically set the new connection as active
+    setTimeout(() => {
+      handleConnect(asset, asset.ssh_user || undefined)
+      message.success({ content: `已重连到 ${asset.hostName}`, key: `reconnect-${connId}` })
+    }, 300)
+  }
+
   // Get display name for a tab with auto-numbering for same host
   const getTabDisplayName = (connId: string): string => {
     const conn = connections.get(connId)
@@ -1044,6 +1066,12 @@ const WebSSHTerminal = () => {
         icon: <CopyOutlined />,
         disabled: !canClone,
         onClick: () => handleCloneConnection(connId),
+      },
+      {
+        key: 'reconnect',
+        label: '重连',
+        icon: <ReloadOutlined />,
+        onClick: () => handleReconnect(connId),
       },
       {
         type: 'divider',
@@ -2035,7 +2063,7 @@ const WebSSHTerminal = () => {
           <div
             style={{
               flex: 1,
-              padding: 24,
+              padding: '24px 24px 12px 24px', // Reduced bottom padding to give more space for terminal
               minHeight: 0,
               display: 'flex',
               flexDirection: 'column',
@@ -2096,7 +2124,7 @@ const WebSSHTerminal = () => {
                       display: isActive ? 'block' : 'none',
                       width: '100%',
                       height: '100%',
-                      padding: '16px',
+                      padding: '12px 16px 8px 16px', // Minimal padding: top 12px, bottom 8px for spacing
                       margin: 0,
                       boxSizing: 'border-box',
                       position: 'absolute',

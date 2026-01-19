@@ -181,6 +181,10 @@ h1, h2, h3, h4, h5, h6 {
   position: relative !important;
   /* Let xterm.js handle background color from theme */
   background-color: transparent !important;
+  /* Ensure terminal content is fully visible */
+  box-sizing: border-box !important;
+  /* Add small bottom margin to ensure last line is visible */
+  padding-bottom: 4px !important;
 }
 
 /* Ensure xterm.js background comes from theme, not CSS */
@@ -201,6 +205,10 @@ h1, h2, h3, h4, h5, h6 {
   position: relative !important;
   /* Ensure viewport background is transparent so theme background shows */
   background-color: transparent !important;
+  /* Add small padding at bottom to ensure last line with cursor is fully visible */
+  padding-bottom: 4px !important;
+  /* Ensure smooth scrolling */
+  scroll-behavior: smooth !important;
 }
 
 /* Ensure xterm.js canvas layers are visible and properly positioned */

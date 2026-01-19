@@ -97,12 +97,6 @@ const ProjectList = () => {
       ellipsis: true,
     },
     {
-      title: '创建时间',
-      dataIndex: 'created_at',
-      key: 'created_at',
-      width: 180,
-    },
-    {
       title: '操作',
       key: 'action',
       width: 150,
