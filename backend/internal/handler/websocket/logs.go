@@ -90,39 +90,36 @@ func StreamExecutionLogs(db *gorm.DB) gin.HandlerFunc {
 			ticker := time.NewTicker(1 * time.Second)
 			defer ticker.Stop()
 
-			for {
-				select {
-				case <-ticker.C:
-					// Check for updates
-					var updatedExecution model.TaskExecution
-					if err := db.First(&updatedExecution, executionID).Error; err != nil {
+			for range ticker.C {
+				// Check for updates
+				var updatedExecution model.TaskExecution
+				if err := db.First(&updatedExecution, executionID).Error; err != nil {
+					return
+				}
+
+				// Send updated output if available
+				if updatedExecution.Output != execution.Output {
+					newOutput := updatedExecution.Output[len(execution.Output):]
+					msg := LogMessage{
+						Level:     "INFO",
+						Content:   newOutput,
+						Timestamp: time.Now(),
+					}
+					if err := conn.WriteJSON(msg); err != nil {
 						return
 					}
+					execution.Output = updatedExecution.Output
+				}
 
-					// Send updated output if available
-					if updatedExecution.Output != execution.Output {
-						newOutput := updatedExecution.Output[len(execution.Output):]
-						msg := LogMessage{
-							Level:     "INFO",
-							Content:   newOutput,
-							Timestamp: time.Now(),
-						}
-						if err := conn.WriteJSON(msg); err != nil {
-							return
-						}
-						execution.Output = updatedExecution.Output
+				// Close connection if execution completed
+				if updatedExecution.Status != "running" {
+					finalMsg := LogMessage{
+						Level:     "INFO",
+						Content:   "\n[Execution completed]",
+						Timestamp: time.Now(),
 					}
-
-					// Close connection if execution completed
-					if updatedExecution.Status != "running" {
-						finalMsg := LogMessage{
-							Level:     "INFO",
-							Content:   "\n[Execution completed]",
-							Timestamp: time.Now(),
-						}
-						conn.WriteJSON(finalMsg)
-						return
-					}
+					conn.WriteJSON(finalMsg)
+					return
 				}
 			}
 		}
