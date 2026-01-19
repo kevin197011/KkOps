@@ -12,6 +12,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/kkops/backend/internal/service/authorization"
+	"github.com/kkops/backend/internal/service/rbac"
 	"github.com/kkops/backend/internal/service/user"
 )
 
@@ -19,13 +20,15 @@ import (
 type Handler struct {
 	service  *user.Service
 	authzSvc *authorization.Service
+	rbacSvc  *rbac.Service
 }
 
 // NewHandler creates a new user handler
-func NewHandler(service *user.Service, authzSvc *authorization.Service) *Handler {
+func NewHandler(service *user.Service, authzSvc *authorization.Service, rbacSvc *rbac.Service) *Handler {
 	return &Handler{
 		service:  service,
 		authzSvc: authzSvc,
+		rbacSvc:  rbacSvc,
 	}
 }
 
@@ -202,4 +205,27 @@ func (h *Handler) ResetPassword(c *gin.Context) {
 	}
 
 	c.Status(http.StatusNoContent)
+}
+
+// GetUserPermissions handles user permissions retrieval
+// @Summary Get current user permissions
+// @Description Get list of permissions for the current user
+// @Tags users
+// @Produce json
+// @Success 200 {object} map[string]interface{}
+// @Router /api/v1/user/permissions [get]
+func (h *Handler) GetUserPermissions(c *gin.Context) {
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
+	permissions, err := h.rbacSvc.GetUserPermissionList(userID.(uint))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"permissions": permissions})
 }

@@ -43,6 +43,7 @@ import (
 	dashboardHandler "github.com/kkops/backend/internal/handler/dashboard"
 	deploymentHandler "github.com/kkops/backend/internal/handler/deployment"
 	environmentHandler "github.com/kkops/backend/internal/handler/environment"
+	operationtoolHandler "github.com/kkops/backend/internal/handler/operationtool"
 	projectHandler "github.com/kkops/backend/internal/handler/project"
 	roleHandler "github.com/kkops/backend/internal/handler/role"
 	scheduledtaskHandler "github.com/kkops/backend/internal/handler/scheduledtask"
@@ -61,7 +62,9 @@ import (
 	dashboardService "github.com/kkops/backend/internal/service/dashboard"
 	deploymentService "github.com/kkops/backend/internal/service/deployment"
 	environmentService "github.com/kkops/backend/internal/service/environment"
+	operationtoolService "github.com/kkops/backend/internal/service/operationtool"
 	projectService "github.com/kkops/backend/internal/service/project"
+	rbacService "github.com/kkops/backend/internal/service/rbac"
 	roleService "github.com/kkops/backend/internal/service/role"
 	scheduledtaskService "github.com/kkops/backend/internal/service/scheduledtask"
 	sshkeyService "github.com/kkops/backend/internal/service/sshkey"
@@ -119,12 +122,14 @@ func main() {
 	assetSvc := assetService.NewService(db)
 	sshkeySvc := sshkeyService.NewService(db, cfg)
 	authzSvc := authorizationService.NewService(db) // 授权服务
+	rbacSvc := rbacService.NewService(db)           // RBAC 服务
 	taskSvc := taskService.NewService(db, authzSvc)
 	taskExecutionSvc := taskService.NewExecutionService(db, cfg, sshkeySvc)
 	dashboardSvc := dashboardService.NewService(db)
 	deploymentSvc := deploymentService.NewService(db, cfg)
 	scheduledTaskSvc := scheduledtaskService.NewService(db)
 	auditSvc := auditService.NewService(db)
+	operationtoolSvc := operationtoolService.NewService(db)
 
 	// Initialize scheduler for scheduled tasks
 	scheduler := scheduledtaskService.NewScheduler(db, cfg, zapLogger)
@@ -138,7 +143,7 @@ func main() {
 
 	// Initialize handlers
 	authHdl := authHandler.NewHandler(authSvc)
-	userHdl := userHandler.NewHandler(userSvc, authzSvc)
+	userHdl := userHandler.NewHandler(userSvc, authzSvc, rbacSvc)
 	roleHdl := roleHandler.NewHandler(roleSvc)
 	projectHdl := projectHandler.NewHandler(projectSvc)
 	environmentHdl := environmentHandler.NewHandler(environmentSvc)
@@ -151,6 +156,7 @@ func main() {
 	dashboardHdl := dashboardHandler.NewHandler(dashboardSvc)
 	deploymentHdl := deploymentHandler.NewHandler(deploymentSvc)
 	scheduledTaskHdl := scheduledtaskHandler.NewHandler(scheduledTaskSvc)
+	operationtoolHdl := operationtoolHandler.NewHandler(operationtoolSvc)
 	roleAssetHdl := roleHandler.NewAssetHandler(authzSvc)
 	userRoleHdl := userHandler.NewRoleHandler(authzSvc)
 	auditHdl := auditHandler.NewHandler(auditSvc)
@@ -174,11 +180,20 @@ func main() {
 			authGroup.POST("/change-password", middleware.AuthMiddleware(cfg), authHdl.ChangePassword)
 		}
 
+		// User permissions (protected, but available before full menu load)
+		userPermGroup := api.Group("/user")
+		userPermGroup.Use(middleware.AuthMiddleware(cfg))
+		{
+			userPermGroup.GET("/permissions", userHdl.GetUserPermissions)
+		}
+
 		// Protected routes
 		protected := api.Group("")
 		protected.Use(middleware.AuthMiddleware(cfg))
 		// 应用审计中间件
 		protected.Use(middleware.AuditMiddleware(auditSvc, middleware.GetDefaultAuditRoutes()))
+		// 应用权限检查中间件（自动根据路由路径检查权限）
+		protected.Use(middleware.RequireMenuPermission(rbacSvc))
 		{
 			// Audit logs (管理员查看)
 			auditLogsGroup := protected.Group("/audit-logs")
@@ -194,6 +209,16 @@ func main() {
 			dashboardGroup := protected.Group("/dashboard")
 			{
 				dashboardGroup.GET("/stats", dashboardHdl.GetStats)
+			}
+
+			// Operation tools (运维导航)
+			operationToolsGroup := protected.Group("/operation-tools")
+			{
+				operationToolsGroup.GET("", operationtoolHdl.List)
+				operationToolsGroup.GET("/:id", operationtoolHdl.Get)
+				operationToolsGroup.POST("", operationtoolHdl.Create)
+				operationToolsGroup.PUT("/:id", operationtoolHdl.Update)
+				operationToolsGroup.DELETE("/:id", operationtoolHdl.Delete)
 			}
 
 			// User management
@@ -225,6 +250,7 @@ func main() {
 				rolesGroup.DELETE("/:id", roleHdl.DeleteRole)
 				rolesGroup.GET("/:id/permissions", roleHdl.GetRolePermissions)
 				rolesGroup.POST("/:id/permissions", roleHdl.AssignPermissionToRole)
+				rolesGroup.DELETE("/:id/permissions/:permission_id", roleHdl.RemovePermissionFromRole)
 				// 角色资产授权管理
 				rolesGroup.GET("/:id/assets", roleAssetHdl.GetRoleAssets)
 				rolesGroup.POST("/:id/assets", roleAssetHdl.GrantRoleAssets)
@@ -310,6 +336,8 @@ func main() {
 			{
 				templatesGroup.GET("", taskHdl.ListTemplates)
 				templatesGroup.POST("", taskHdl.CreateTemplate)
+				templatesGroup.GET("/export", taskHdl.ExportTemplates)
+				templatesGroup.POST("/import", taskHdl.ImportTemplates)
 				templatesGroup.GET("/:id", taskHdl.GetTemplate)
 				templatesGroup.PUT("/:id", taskHdl.UpdateTemplate)
 				templatesGroup.DELETE("/:id", taskHdl.DeleteTemplate)
@@ -376,6 +404,8 @@ func main() {
 				tasksGroup.GET("", scheduledTaskHdl.ListScheduledTasks)
 				tasksGroup.POST("", scheduledTaskHdl.CreateScheduledTask)
 				tasksGroup.GET("/validate-cron", scheduledTaskHdl.ValidateCron)
+				tasksGroup.GET("/export", scheduledTaskHdl.ExportScheduledTasks)
+				tasksGroup.POST("/import", scheduledTaskHdl.ImportScheduledTasks)
 				tasksGroup.GET("/:id", scheduledTaskHdl.GetScheduledTask)
 				tasksGroup.PUT("/:id", scheduledTaskHdl.UpdateScheduledTask)
 				tasksGroup.DELETE("/:id", scheduledTaskHdl.DeleteScheduledTask)

@@ -34,12 +34,30 @@ export interface RoleAssetInfo {
   ip: string
 }
 
+// 权限信息
+export interface Permission {
+  id: number
+  name: string
+  resource: string
+  action: string
+  description: string
+}
+
 export const roleApi = {
   list: () => apiClient.get<Role[]>('/roles'),
   get: (id: number) => apiClient.get<Role>(`/roles/${id}`),
   create: (data: CreateRoleRequest) => apiClient.post<Role>('/roles', data),
   update: (id: number, data: UpdateRoleRequest) => apiClient.put<Role>(`/roles/${id}`, data),
   delete: (id: number) => apiClient.delete(`/roles/${id}`),
+  
+  // 权限管理
+  listPermissions: () => apiClient.get<Permission[]>('/permissions'),
+  getRolePermissions: (roleId: number) =>
+    apiClient.get<Permission[]>(`/roles/${roleId}/permissions`),
+  assignPermissionToRole: (roleId: number, permissionId: number) =>
+    apiClient.post(`/roles/${roleId}/permissions`, { permission_id: permissionId }),
+  removePermissionFromRole: (roleId: number, permissionId: number) =>
+    apiClient.delete(`/roles/${roleId}/permissions/${permissionId}`),
   
   // 角色资产授权管理
   getRoleAssets: (roleId: number) => 

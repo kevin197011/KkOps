@@ -440,3 +440,316 @@ func (s *Service) taskToResponse(task *model.ScheduledTask) *ScheduledTaskRespon
 
 	return resp
 }
+
+// ExportScheduledTaskConfig 导出定时任务配置结构
+type ExportScheduledTaskConfig struct {
+	Name           string   `json:"name"`
+	Description    string   `json:"description"`
+	CronExpression string   `json:"cron_expression"`
+	TemplateName   string   `json:"template_name,omitempty"` // 模板名称（如果有）
+	Content        string   `json:"content"`                  // 脚本内容（如果没有模板或自定义）
+	Type           string   `json:"type"`
+	Timeout        int      `json:"timeout"`
+	Enabled        bool     `json:"enabled"`
+	UpdateAssets   bool     `json:"update_assets"`
+	TargetHosts    []string `json:"target_hosts"` // 主机名或 IP 列表
+}
+
+// ExportScheduledTasksConfig 导出定时任务配置根结构
+type ExportScheduledTasksConfig struct {
+	Version  string                    `json:"version"`
+	ExportAt string                    `json:"export_at"`
+	Tasks    []ExportScheduledTaskConfig `json:"tasks"`
+}
+
+// ImportScheduledTaskConfig 导入定时任务配置结构
+type ImportScheduledTaskConfig struct {
+	Name           string   `json:"name" binding:"required"`
+	Description    string   `json:"description"`
+	CronExpression string   `json:"cron_expression" binding:"required"`
+	TemplateName   string   `json:"template_name"`   // 模板名称（可选）
+	Content        string   `json:"content"`         // 脚本内容（如果没有模板）
+	Type           string   `json:"type"`
+	Timeout        int      `json:"timeout"`
+	Enabled        bool     `json:"enabled"`
+	UpdateAssets   bool     `json:"update_assets"`
+	TargetHosts    []string `json:"target_hosts"` // 主机名或 IP 列表
+}
+
+// ImportScheduledTasksConfig 导入定时任务配置根结构
+type ImportScheduledTasksConfig struct {
+	Version string                    `json:"version"`
+	Tasks   []ImportScheduledTaskConfig `json:"tasks" binding:"required"`
+}
+
+// ImportScheduledTasksResult 导入定时任务结果
+type ImportScheduledTasksResult struct {
+	Total     int      `json:"total"`
+	Success   int      `json:"success"`
+	Failed    int      `json:"failed"`
+	Errors    []string `json:"errors,omitempty"`
+	Skipped   []string `json:"skipped,omitempty"`
+}
+
+// ExportScheduledTasks 导出所有定时任务
+func (s *Service) ExportScheduledTasks() (*ExportScheduledTasksConfig, error) {
+	var tasks []model.ScheduledTask
+	if err := s.db.Preload("Template").Find(&tasks).Error; err != nil {
+		return nil, err
+	}
+
+	exportTasks := make([]ExportScheduledTaskConfig, len(tasks))
+	for i, t := range tasks {
+		// 解析 AssetIDs 并转换为主机名/IP 列表
+		assetIDs := []uint{}
+		if t.AssetIDs != "" {
+			ids := strings.Split(t.AssetIDs, ",")
+			for _, idStr := range ids {
+				if id, err := strconv.ParseUint(strings.TrimSpace(idStr), 10, 32); err == nil {
+					assetIDs = append(assetIDs, uint(id))
+				}
+			}
+		}
+		targetHosts := s.getAssetHostnames(assetIDs)
+
+		// 获取模板名称
+		templateName := ""
+		if t.Template != nil {
+			templateName = t.Template.Name
+		}
+
+		exportTasks[i] = ExportScheduledTaskConfig{
+			Name:           t.Name,
+			Description:    t.Description,
+			CronExpression: t.CronExpression,
+			TemplateName:   templateName,
+			Content:        t.Content,
+			Type:           t.Type,
+			Timeout:        t.Timeout,
+			Enabled:        t.Enabled,
+			UpdateAssets:   t.UpdateAssets,
+			TargetHosts:    targetHosts,
+		}
+	}
+
+	return &ExportScheduledTasksConfig{
+		Version:  "1.0",
+		ExportAt: time.Now().Format(time.RFC3339),
+		Tasks:    exportTasks,
+	}, nil
+}
+
+// getAssetHostnames 根据资产ID列表获取主机名或IP列表
+func (s *Service) getAssetHostnames(assetIDs []uint) []string {
+	if len(assetIDs) == 0 {
+		return []string{}
+	}
+
+	var assets []model.Asset
+	s.db.Where("id IN ?", assetIDs).Find(&assets)
+
+	hostnames := make([]string, 0, len(assets))
+	for _, asset := range assets {
+		// 优先使用主机名，没有则使用 IP
+		if asset.HostName != "" {
+			hostnames = append(hostnames, asset.HostName)
+		} else if asset.IP != "" {
+			hostnames = append(hostnames, asset.IP)
+		}
+	}
+	return hostnames
+}
+
+// findAssetsByHostnames 根据主机名或IP列表查找资产ID
+func (s *Service) findAssetsByHostnames(hostnames []string) ([]uint, []string) {
+	if len(hostnames) == 0 {
+		return []uint{}, []string{}
+	}
+
+	var assets []model.Asset
+	// 同时匹配主机名和 IP
+	s.db.Where("host_name IN ? OR ip IN ?", hostnames, hostnames).Find(&assets)
+
+	// 创建已找到的主机名/IP 映射
+	foundSet := make(map[string]bool)
+	assetIDs := make([]uint, 0, len(assets))
+	for _, asset := range assets {
+		assetIDs = append(assetIDs, asset.ID)
+		if asset.HostName != "" {
+			foundSet[asset.HostName] = true
+		}
+		if asset.IP != "" {
+			foundSet[asset.IP] = true
+		}
+	}
+
+	// 找出未找到的主机名
+	missingHosts := make([]string, 0)
+	for _, h := range hostnames {
+		if !foundSet[h] {
+			missingHosts = append(missingHosts, h)
+		}
+	}
+
+	return assetIDs, missingHosts
+}
+
+// findTemplateByName 根据模板名称查找模板ID
+func (s *Service) findTemplateByName(name string) (uint, error) {
+	var template model.TaskTemplate
+	if err := s.db.Where("name = ?", name).First(&template).Error; err != nil {
+		return 0, fmt.Errorf("模板不存在: %s", name)
+	}
+	return template.ID, nil
+}
+
+// taskExistsByName 检查同名任务是否存在
+func (s *Service) taskExistsByName(name string) bool {
+	var task model.ScheduledTask
+	if err := s.db.Where("name = ?", name).First(&task).Error; err != nil {
+		return false
+	}
+	return true
+}
+
+// ImportScheduledTasks 导入定时任务
+func (s *Service) ImportScheduledTasks(config *ImportScheduledTasksConfig, userID uint) (*ImportScheduledTasksResult, error) {
+	result := &ImportScheduledTasksResult{
+		Total:   len(config.Tasks),
+		Errors:  []string{},
+		Skipped: []string{},
+	}
+
+	for _, t := range config.Tasks {
+		// 验证必填字段
+		if t.Name == "" {
+			result.Failed++
+			result.Errors = append(result.Errors, fmt.Sprintf("任务缺少必填字段 'name'"))
+			continue
+		}
+		if t.CronExpression == "" {
+			result.Failed++
+			result.Errors = append(result.Errors, fmt.Sprintf("任务 '%s': 缺少必填字段 'cron_expression'", t.Name))
+			continue
+		}
+
+		// 验证 Cron 表达式
+		if err := ValidateCronExpression(t.CronExpression); err != nil {
+			result.Failed++
+			result.Errors = append(result.Errors, fmt.Sprintf("任务 '%s': %v", t.Name, err))
+			continue
+		}
+
+		// 检查是否已存在同名任务
+		if s.taskExistsByName(t.Name) {
+			result.Skipped = append(result.Skipped, fmt.Sprintf("任务 '%s': 已存在，已跳过", t.Name))
+			continue
+		}
+
+		// 查找模板（如果提供了模板名称）
+		var templateID *uint
+		if t.TemplateName != "" {
+			tplID, err := s.findTemplateByName(t.TemplateName)
+			if err != nil {
+				// 模板不存在，检查是否有自定义内容
+				if t.Content == "" {
+					result.Failed++
+					result.Errors = append(result.Errors, fmt.Sprintf("任务 '%s': 模板 '%s' 不存在且未提供自定义内容", t.Name, t.TemplateName))
+					continue
+				}
+				// 有自定义内容，继续但给出警告
+				result.Skipped = append(result.Skipped, fmt.Sprintf("任务 '%s': 模板 '%s' 不存在，已跳过模板关联", t.Name, t.TemplateName))
+			} else {
+				templateID = &tplID
+			}
+		}
+
+		// 匹配主机
+		var assetIDs []uint
+		var missingHosts []string
+		if len(t.TargetHosts) > 0 {
+			assetIDs, missingHosts = s.findAssetsByHostnames(t.TargetHosts)
+			if len(missingHosts) > 0 {
+				result.Skipped = append(result.Skipped, fmt.Sprintf("任务 '%s': 主机 %v 不存在，已跳过", t.Name, missingHosts))
+			}
+		}
+
+		// 如果没有模板且没有自定义内容，失败
+		if templateID == nil && t.Content == "" {
+			result.Failed++
+			result.Errors = append(result.Errors, fmt.Sprintf("任务 '%s': 缺少脚本内容", t.Name))
+			continue
+		}
+
+		// 设置默认值
+		taskType := t.Type
+		if taskType == "" {
+			taskType = "shell"
+		}
+		timeout := t.Timeout
+		if timeout == 0 {
+			timeout = 300
+		}
+
+		// 如果有关联模板，尝试从模板获取内容
+		content := t.Content
+		taskTypeFromTemplate := taskType
+		if templateID != nil {
+			var template model.TaskTemplate
+			if err := s.db.First(&template, *templateID).Error; err == nil {
+				if content == "" {
+					content = template.Content
+				}
+				if taskType == "shell" {
+					taskTypeFromTemplate = template.Type
+				}
+			}
+		}
+
+		// 计算下次执行时间
+		var nextRunAt *time.Time
+		if t.Enabled {
+			nextRunAt, _ = GetNextRunTime(t.CronExpression)
+		}
+
+		// 将 AssetIDs 转换为字符串
+		assetIDStrs := make([]string, len(assetIDs))
+		for i, id := range assetIDs {
+			assetIDStrs[i] = strconv.FormatUint(uint64(id), 10)
+		}
+
+		// 创建定时任务
+		task := &model.ScheduledTask{
+			Name:           t.Name,
+			Description:    t.Description,
+			CronExpression: t.CronExpression,
+			TemplateID:     templateID,
+			Content:        content,
+			Type:           taskTypeFromTemplate,
+			AssetIDs:       strings.Join(assetIDStrs, ","),
+			Timeout:        timeout,
+			Enabled:        t.Enabled,
+			UpdateAssets:   t.UpdateAssets,
+			NextRunAt:      nextRunAt,
+			CreatedBy:      userID,
+		}
+
+		if err := s.db.Create(task).Error; err != nil {
+			result.Failed++
+			result.Errors = append(result.Errors, fmt.Sprintf("任务 '%s': 创建失败: %v", t.Name, err))
+			continue
+		}
+
+		// 如果任务启用且调度器存在，添加到调度器
+		if task.Enabled && s.scheduler != nil {
+			if err := s.scheduler.AddTask(task); err != nil {
+				// 记录错误但不影响导入
+				fmt.Printf("添加任务到调度器失败: %v\n", err)
+			}
+		}
+
+		result.Success++
+	}
+
+	return result, nil
+}

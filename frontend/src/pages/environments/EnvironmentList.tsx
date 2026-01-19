@@ -7,10 +7,12 @@ import { useState, useEffect } from 'react'
 import { Table, Button, Space, message, Modal, Form, Input, Tag } from 'antd'
 import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons'
 import { environmentApi, Environment, CreateEnvironmentRequest, UpdateEnvironmentRequest } from '@/api/environment'
+import { usePermissionStore } from '@/stores/permission'
 
 const { TextArea } = Input
 
 const EnvironmentList = () => {
+  const { hasPermission } = usePermissionStore()
   const [environments, setEnvironments] = useState<Environment[]>([])
   const [loading, setLoading] = useState(false)
   const [modalVisible, setModalVisible] = useState(false)
@@ -103,29 +105,39 @@ const EnvironmentList = () => {
       title: '操作',
       key: 'action',
       width: 150,
-      render: (_: any, record: Environment) => (
-        <Space size="small">
-          <Button
-            type="link"
-            size="small"
-            icon={<EditOutlined />}
-            onClick={() => handleEdit(record)}
-            aria-label={`编辑环境 ${record.name}`}
-          >
-            编辑
-          </Button>
-          <Button
-            type="link"
-            danger
-            size="small"
-            icon={<DeleteOutlined />}
-            onClick={() => handleDelete(record.id)}
-            aria-label={`删除环境 ${record.name}`}
-          >
-            删除
-          </Button>
-        </Space>
-      ),
+      render: (_: any, record: Environment) => {
+        const actions = []
+        if (hasPermission('environments', 'update')) {
+          actions.push(
+            <Button
+              key="edit"
+              type="link"
+              size="small"
+              icon={<EditOutlined />}
+              onClick={() => handleEdit(record)}
+              aria-label={`编辑环境 ${record.name}`}
+            >
+              编辑
+            </Button>
+          )
+        }
+        if (hasPermission('environments', 'delete')) {
+          actions.push(
+            <Button
+              key="delete"
+              type="link"
+              danger
+              size="small"
+              icon={<DeleteOutlined />}
+              onClick={() => handleDelete(record.id)}
+              aria-label={`删除环境 ${record.name}`}
+            >
+              删除
+            </Button>
+          )
+        }
+        return actions.length > 0 ? <Space size="small">{actions}</Space> : '-'
+      },
     },
   ]
 

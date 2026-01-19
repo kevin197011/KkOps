@@ -71,4 +71,8 @@ export const userApi = {
     apiClient.post(`/users/${userId}/roles`, { role_ids: roleIds }),
   removeUserRole: (userId: number, roleId: number) =>
     apiClient.delete(`/users/${userId}/roles/${roleId}`),
+  
+  // 获取当前用户权限
+  getPermissions: () =>
+    apiClient.get<{ permissions: string[] }>('/user/permissions'),
 }

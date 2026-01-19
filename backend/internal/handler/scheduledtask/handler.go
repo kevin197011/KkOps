@@ -6,8 +6,10 @@
 package scheduledtask
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/kkops/backend/internal/service/scheduledtask"
@@ -294,4 +296,53 @@ func (h *Handler) ValidateCron(c *gin.Context) {
 		"valid":       true,
 		"next_run_at": nextRunAt,
 	})
+}
+
+// ExportScheduledTasks handles scheduled tasks export
+// @Summary Export scheduled tasks
+// @Description Export all scheduled tasks to JSON
+// @Tags Scheduled Tasks
+// @Produce json
+// @Success 200 {object} scheduledtask.ExportScheduledTasksConfig
+// @Router /tasks/export [get]
+func (h *Handler) ExportScheduledTasks(c *gin.Context) {
+	config, err := h.service.ExportScheduledTasks()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Set response headers for file download
+	filename := fmt.Sprintf("scheduled-tasks-%s.json", time.Now().Format("20060102-150405"))
+	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s", filename))
+	c.Header("Content-Type", "application/json")
+
+	c.JSON(http.StatusOK, config)
+}
+
+// ImportScheduledTasks handles scheduled tasks import
+// @Summary Import scheduled tasks
+// @Description Import scheduled tasks from JSON
+// @Tags Scheduled Tasks
+// @Accept json
+// @Produce json
+// @Param request body scheduledtask.ImportScheduledTasksConfig true "Import config"
+// @Success 200 {object} scheduledtask.ImportScheduledTasksResult
+// @Failure 400 {object} map[string]string
+// @Router /tasks/import [post]
+func (h *Handler) ImportScheduledTasks(c *gin.Context) {
+	var config scheduledtask.ImportScheduledTasksConfig
+	if err := c.ShouldBindJSON(&config); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的导入配置: " + err.Error()})
+		return
+	}
+
+	userID := c.MustGet("user_id").(uint)
+	result, err := h.service.ImportScheduledTasks(&config, userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, result)
 }

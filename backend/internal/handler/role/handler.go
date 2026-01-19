@@ -183,3 +183,25 @@ func (h *Handler) GetRolePermissions(c *gin.Context) {
 
 	c.JSON(http.StatusOK, permissions)
 }
+
+// RemovePermissionFromRole handles permission removal from role
+func (h *Handler) RemovePermissionFromRole(c *gin.Context) {
+	roleID, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid role ID"})
+		return
+	}
+
+	permissionID, err := strconv.ParseUint(c.Param("permission_id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid permission ID"})
+		return
+	}
+
+	if err := h.service.RemovePermissionFromRole(uint(roleID), uint(permissionID)); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.Status(http.StatusNoContent)
+}

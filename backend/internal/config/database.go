@@ -401,6 +401,7 @@ func runSQLMigrations(db *gorm.DB) error {
 		"add_deployment_management.sql",
 		"add_scheduled_task.sql",
 		"add_audit_log.sql",
+		"add_operations_navigation.sql",
 	}
 
 	// Execute migrations in order
@@ -489,6 +490,7 @@ func migrate(db *gorm.DB) error {
 		&model.DeploymentModule{},
 		&model.Deployment{},
 		&model.AuditLog{},
+		&model.OperationTool{},
 	); err != nil {
 		return err
 	}
@@ -505,7 +507,130 @@ func migrate(db *gorm.DB) error {
 		return err
 	}
 	// Initialize default scheduled tasks
-	return seedDefaultScheduledTasks(db)
+	if err := seedDefaultScheduledTasks(db); err != nil {
+		return err
+	}
+	// Initialize default operation tools
+	if err := seedDefaultOperationTools(db); err != nil {
+		return err
+	}
+	// Initialize menu permissions
+	return seedMenuPermissions(db)
+}
+
+// seedDefaultOperationTools creates default operation tools
+func seedDefaultOperationTools(db *gorm.DB) error {
+	// 辅助函数：检查工具是否存在
+	toolExists := func(name string) bool {
+		var count int64
+		db.Model(&model.OperationTool{}).Where("name = ?", name).Count(&count)
+		return count > 0
+	}
+
+	// 定义默认运维工具
+	defaultTools := []model.OperationTool{
+		{
+			Name:        "Grafana",
+			Description: "开源监控和可视化平台",
+			Category:    "监控工具",
+			Icon:        "dashboard",
+			URL:         "https://grafana.example.com",
+			OrderIndex:  1,
+			Enabled:     true,
+		},
+		{
+			Name:        "Prometheus",
+			Description: "开源监控和告警系统",
+			Category:    "监控工具",
+			Icon:        "appstore",
+			URL:         "https://prometheus.example.com",
+			OrderIndex:  2,
+			Enabled:     true,
+		},
+		{
+			Name:        "Kibana",
+			Description: "Elasticsearch 数据可视化和分析平台",
+			Category:    "日志工具",
+			Icon:        "fileSearch",
+			URL:         "https://kibana.example.com",
+			OrderIndex:  3,
+			Enabled:     true,
+		},
+		{
+			Name:        "Jenkins",
+			Description: "开源自动化服务器，用于 CI/CD",
+			Category:    "CI/CD工具",
+			Icon:        "rocket",
+			URL:         "https://jenkins.example.com",
+			OrderIndex:  4,
+			Enabled:     true,
+		},
+		{
+			Name:        "GitLab",
+			Description: "Git 代码管理和 CI/CD 平台",
+			Category:    "CI/CD工具",
+			Icon:        "code",
+			URL:         "https://gitlab.example.com",
+			OrderIndex:  5,
+			Enabled:     true,
+		},
+		{
+			Name:        "phpMyAdmin",
+			Description: "MySQL/MariaDB 数据库管理工具",
+			Category:    "数据库工具",
+			Icon:        "database",
+			URL:         "https://phpmyadmin.example.com",
+			OrderIndex:  6,
+			Enabled:     true,
+		},
+		{
+			Name:        "DBeaver",
+			Description: "通用数据库管理工具（需要安装客户端）",
+			Category:    "数据库工具",
+			Icon:        "database",
+			URL:         "https://dbeaver.io",
+			OrderIndex:  7,
+			Enabled:     true,
+		},
+	}
+
+	// 创建不存在的工具
+	for _, tool := range defaultTools {
+		if !toolExists(tool.Name) {
+			if err := db.Create(&tool).Error; err != nil {
+				return fmt.Errorf("failed to create operation tool %s: %w", tool.Name, err)
+			}
+		}
+	}
+
+	return nil
+}
+
+// seedMenuPermissions creates menu permissions if they don't exist
+func seedMenuPermissions(db *gorm.DB) error {
+	for _, permDef := range model.AllMenuPermissions {
+		// Check if permission already exists
+		var existingPerm model.Permission
+		result := db.Where("resource = ? AND action = ?", permDef.Resource, permDef.Action).First(&existingPerm)
+		
+		if result.Error == gorm.ErrRecordNotFound {
+			// Create new permission
+			permission := model.Permission{
+				Name:        permDef.Name,
+				Resource:    permDef.Resource,
+				Action:      permDef.Action,
+				Description: permDef.Description,
+			}
+			if err := db.Create(&permission).Error; err != nil {
+				return fmt.Errorf("failed to create permission %s:%s: %w", permDef.Resource, permDef.Action, err)
+			}
+		} else if result.Error != nil {
+			return fmt.Errorf("failed to check permission %s:%s: %w", permDef.Resource, permDef.Action, result.Error)
+		}
+		// If permission exists, skip (idempotent)
+	}
+	
+	return nil
 }
 
 // NewGormLogger creates a GORM logger adapter for Zap

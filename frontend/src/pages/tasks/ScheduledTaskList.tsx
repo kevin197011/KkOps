@@ -23,7 +23,10 @@ import {
   Descriptions,
   Timeline,
   Checkbox,
+  Upload,
+  theme,
 } from 'antd'
+import { usePermissionStore } from '@/stores/permission'
 import type { DataNode } from 'antd/es/tree'
 import {
   PlusOutlined,
@@ -39,6 +42,8 @@ import {
   QuestionCircleOutlined,
   DownOutlined,
   UpOutlined,
+  DownloadOutlined,
+  UploadOutlined,
 } from '@ant-design/icons'
 import {
   scheduledTaskApi,
@@ -47,6 +52,9 @@ import {
   UpdateScheduledTaskRequest,
   ScheduledTaskExecution,
   ValidateCronResponse,
+  ExportScheduledTasksConfig,
+  ImportScheduledTasksConfig,
+  ImportScheduledTasksResult,
 } from '@/api/task'
 import { executionTemplateApi, ExecutionTemplate } from '@/api/execution'
 import { assetApi, Asset } from '@/api/asset'
@@ -77,13 +85,23 @@ const SHEBANGS: Record<string, string> = {
 }
 
 const ScheduledTaskList = () => {
+  const { token } = theme.useToken()
+  const { hasPermission } = usePermissionStore()
   const [tasks, setTasks] = useState<ScheduledTask[]>([])
   const [loading, setLoading] = useState(false)
+  const [total, setTotal] = useState(0)
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(20)
   const [modalVisible, setModalVisible] = useState(false)
   const [historyModalVisible, setHistoryModalVisible] = useState(false)
+  const [importResultVisible, setImportResultVisible] = useState(false)
+  const [importResult, setImportResult] = useState<ImportScheduledTasksResult | null>(null)
   const [editingTask, setEditingTask] = useState<ScheduledTask | null>(null)
   const [selectedTask, setSelectedTask] = useState<ScheduledTask | null>(null)
   const [executions, setExecutions] = useState<ScheduledTaskExecution[]>([])
+  const [executionsTotal, setExecutionsTotal] = useState(0)
+  const [executionsPage, setExecutionsPage] = useState(1)
+  const [executionsPageSize, setExecutionsPageSize] = useState(20)
   const [executionsLoading, setExecutionsLoading] = useState(false)
   const [expandedLogs, setExpandedLogs] = useState<Set<number>>(new Set())
   const [form] = Form.useForm()
@@ -100,14 +118,15 @@ const ScheduledTaskList = () => {
   const fetchTasks = useCallback(async () => {
     setLoading(true)
     try {
-      const response = await scheduledTaskApi.list(1, 100)
+      const response = await scheduledTaskApi.list(page, pageSize)
       setTasks(response.data.data || [])
+      setTotal(response.data.total || 0)
     } catch (error: any) {
       message.error('获取任务列表失败')
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [page, pageSize])
 
   // 获取模板列表
   const fetchTemplates = useCallback(async () => {
@@ -149,6 +168,13 @@ const ScheduledTaskList = () => {
     fetchAssets()
     fetchProjectsAndEnvironments()
   }, [fetchTasks, fetchTemplates, fetchAssets, fetchProjectsAndEnvironments])
+
+  // 当删除或更新任务后，如果当前页没有数据了，回到上一页
+  useEffect(() => {
+    if (total > 0 && page > 1 && (page - 1) * pageSize >= total) {
+      setPage(page - 1)
+    }
+  }, [total, page, pageSize])
 
   // 构建资产树
   const buildAssetTree = (): DataNode[] => {
@@ -290,12 +316,74 @@ const ScheduledTaskList = () => {
         try {
           await scheduledTaskApi.delete(id)
           message.success('删除成功')
-          fetchTasks()
+          // 如果当前页只剩一条数据，删除后回到上一页
+          if (tasks.length === 1 && page > 1) {
+            setPage(page - 1)
+          } else {
+            fetchTasks()
+          }
         } catch (error: any) {
           message.error('删除失败')
         }
       },
     })
+  }
+
+  // 导出配置
+  const handleExport = async () => {
+    try {
+      const config = await scheduledTaskApi.exportConfig()
+      const blob = new Blob([JSON.stringify(config.data, null, 2)], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `scheduled-tasks-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5)}.json`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+      message.success('导出成功')
+    } catch (error: any) {
+      message.error('导出失败: ' + (error.response?.data?.error || error.message))
+    }
+  }
+
+  // 导入配置
+  const handleImport = async (file: File) => {
+    try {
+      const text = await file.text()
+      const config: ImportScheduledTasksConfig = JSON.parse(text)
+      
+      // 验证配置格式
+      if (!config.tasks || !Array.isArray(config.tasks)) {
+        message.error('无效的导入配置格式')
+        return false
+      }
+
+      // 执行导入
+      const result = await scheduledTaskApi.importConfig(config)
+      setImportResult(result.data)
+      setImportResultVisible(true)
+      
+      // 如果导入成功，刷新列表
+      if (result.data.success > 0) {
+        fetchTasks()
+      }
+      
+      return false // 阻止默认上传行为
+    } catch (error: any) {
+      message.error('导入失败: ' + (error.response?.data?.error || error.message))
+      return false
+    }
+  }
+
+  const uploadProps = {
+    beforeUpload: (file: File) => {
+      handleImport(file)
+      return false // 阻止默认上传行为
+    },
+    accept: '.json',
+    showUploadList: false,
   }
 
   // 启用/禁用任务
@@ -323,17 +411,38 @@ const ScheduledTaskList = () => {
   const handleViewHistory = async (task: ScheduledTask) => {
     setSelectedTask(task)
     setHistoryModalVisible(true)
-    setExecutionsLoading(true)
+    setExecutionsPage(1)
+    setExecutionsPageSize(20)
     setExpandedLogs(new Set()) // 重置展开状态
+    await fetchTaskExecutions(task.id)
+  }
+
+  // 获取任务执行历史
+  const fetchTaskExecutions = useCallback(async (taskId: number) => {
+    setExecutionsLoading(true)
     try {
-      const response = await scheduledTaskApi.getExecutions(task.id, 1, 50)
+      const response = await scheduledTaskApi.getExecutions(taskId, executionsPage, executionsPageSize)
       setExecutions(response.data.data || [])
+      setExecutionsTotal(response.data.total || 0)
     } catch (error) {
       message.error('获取执行历史失败')
     } finally {
       setExecutionsLoading(false)
     }
+  }, [executionsPage, executionsPageSize])
+
+  // 执行历史分页变更
+  const handleExecutionsTableChange = (newPage: number, newPageSize: number) => {
+    setExecutionsPage(newPage)
+    setExecutionsPageSize(newPageSize)
   }
+
+  useEffect(() => {
+    if (selectedTask && historyModalVisible) {
+      fetchTaskExecutions(selectedTask.id)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [executionsPage, executionsPageSize, selectedTask, historyModalVisible])
 
   // 提交表单
   const handleSubmit = async (
@@ -353,7 +462,12 @@ const ScheduledTaskList = () => {
         message.success('创建成功')
       }
       setModalVisible(false)
-      fetchTasks()
+      // 如果是创建新任务且不在第一页，回到第一页查看新数据
+      if (!editingTask && page !== 1) {
+        setPage(1)
+      } else {
+        fetchTasks()
+      }
     } catch (error: any) {
       message.error(error.response?.data?.error || '操作失败')
     }
@@ -414,7 +528,7 @@ const ScheduledTaskList = () => {
               {record.last_status && getStatusTag(record.last_status)}
             </>
           ) : (
-            <span style={{ color: '#999' }}>从未执行</span>
+            <span style={{ color: token.colorTextTertiary }}>从未执行</span>
           )}
         </Space>
       ),
@@ -440,43 +554,59 @@ const ScheduledTaskList = () => {
       title: '操作',
       key: 'action',
       width: 280,
-      render: (_: any, record: ScheduledTask) => (
-        <Space size="small">
-          <Tooltip title={record.enabled ? '禁用' : '启用'}>
-            <Button
-              type="text"
-              size="small"
-              icon={record.enabled ? <PauseOutlined /> : <PlayCircleOutlined />}
-              onClick={() => handleToggleEnabled(record)}
-            />
-          </Tooltip>
-          <Tooltip title="执行历史">
-            <Button
-              type="text"
-              size="small"
-              icon={<HistoryOutlined />}
-              onClick={() => handleViewHistory(record)}
-            />
-          </Tooltip>
-          <Tooltip title="编辑">
-            <Button
-              type="text"
-              size="small"
-              icon={<EditOutlined />}
-              onClick={() => handleEdit(record)}
-            />
-          </Tooltip>
-          <Tooltip title="删除">
-            <Button
-              type="text"
-              danger
-              size="small"
-              icon={<DeleteOutlined />}
-              onClick={() => handleDelete(record.id)}
-            />
-          </Tooltip>
-        </Space>
-      ),
+      render: (_: any, record: ScheduledTask) => {
+        const actions = []
+        if (hasPermission('tasks', 'update')) {
+          actions.push(
+            <Tooltip key="toggle" title={record.enabled ? '禁用' : '启用'}>
+              <Button
+                type="text"
+                size="small"
+                icon={record.enabled ? <PauseOutlined /> : <PlayCircleOutlined />}
+                onClick={() => handleToggleEnabled(record)}
+              />
+            </Tooltip>
+          )
+        }
+        if (hasPermission('tasks', 'read')) {
+          actions.push(
+            <Tooltip key="history" title="执行历史">
+              <Button
+                type="text"
+                size="small"
+                icon={<HistoryOutlined />}
+                onClick={() => handleViewHistory(record)}
+              />
+            </Tooltip>
+          )
+        }
+        if (hasPermission('tasks', 'update')) {
+          actions.push(
+            <Tooltip key="edit" title="编辑">
+              <Button
+                type="text"
+                size="small"
+                icon={<EditOutlined />}
+                onClick={() => handleEdit(record)}
+              />
+            </Tooltip>
+          )
+        }
+        if (hasPermission('tasks', 'delete')) {
+          actions.push(
+            <Tooltip key="delete" title="删除">
+              <Button
+                type="text"
+                danger
+                size="small"
+                icon={<DeleteOutlined />}
+                onClick={() => handleDelete(record.id)}
+              />
+            </Tooltip>
+          )
+        }
+        return actions.length > 0 ? <Space size="small">{actions}</Space> : '-'
+      },
     },
   ]
 
@@ -491,9 +621,17 @@ const ScheduledTaskList = () => {
         }}
       >
         <h2 style={{ margin: 0 }}>任务管理</h2>
-        <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate}>
-          新建任务
-        </Button>
+        <Space>
+          <Button icon={<DownloadOutlined />} onClick={handleExport}>
+            导出配置
+          </Button>
+          <Upload {...uploadProps}>
+            <Button icon={<UploadOutlined />}>导入配置</Button>
+          </Upload>
+          <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate}>
+            新建任务
+          </Button>
+        </Space>
       </div>
 
       <Table
@@ -503,8 +641,21 @@ const ScheduledTaskList = () => {
         loading={loading}
         scroll={{ x: 'max-content' }}
         pagination={{
+          current: page,
+          pageSize: pageSize,
+          total: total,
           showSizeChanger: true,
-          showTotal: (total) => `共 ${total} 条`,
+          showQuickJumper: true,
+          showTotal: (total, range) => `第 ${range[0]}-${range[1]} 条/共 ${total} 条`,
+          responsive: true,
+          onChange: (newPage, newPageSize) => {
+            setPage(newPage)
+            setPageSize(newPageSize || 20)
+          },
+          onShowSizeChange: (current, size) => {
+            setPage(1)
+            setPageSize(size)
+          },
         }}
       />
 
@@ -515,7 +666,7 @@ const ScheduledTaskList = () => {
         onCancel={() => setModalVisible(false)}
         footer={null}
         width={800}
-        destroyOnClose
+        destroyOnHidden
       >
         <Form form={form} layout="vertical" onFinish={handleSubmit}>
           <Tabs
@@ -552,14 +703,14 @@ const ScheduledTaskList = () => {
                         cronValidation && (
                           <div style={{ marginTop: 8 }}>
                             {cronValidation.valid ? (
-                              <span style={{ color: '#52c41a' }}>
+                              <span style={{ color: token.colorSuccess }}>
                                 <ClockCircleOutlined /> 下次执行时间：
                                 {moment(cronValidation.next_run_at).format(
                                   'YYYY-MM-DD HH:mm:ss'
                                 )}
                               </span>
                             ) : (
-                              <span style={{ color: '#ff4d4f' }}>
+                              <span style={{ color: token.colorError }}>
                                 {cronValidation.error || '无效的 Cron 表达式'}
                               </span>
                             )}
@@ -759,7 +910,7 @@ const ScheduledTaskList = () => {
                           </Button>
                         )}
                       </div>
-                      <div style={{ color: '#999', fontSize: '12px', marginTop: 4 }}>
+                      <div style={{ color: token.colorTextTertiary, fontSize: '12px', marginTop: 4 }}>
                         {moment(exec.created_at).format('YYYY-MM-DD HH:mm:ss')}
                         {exec.finished_at && (
                           <span>
@@ -777,7 +928,7 @@ const ScheduledTaskList = () => {
                         )}
                       </div>
                       {exec.error && (
-                        <div style={{ color: '#ff4d4f', marginTop: 4 }}>
+                        <div style={{ color: token.colorError, marginTop: 4 }}>
                           错误: {exec.error}
                         </div>
                       )}
@@ -786,10 +937,11 @@ const ScheduledTaskList = () => {
                           style={{
                             marginTop: 8,
                             padding: 12,
-                            background: '#1e1e1e',
+                            background: token.colorFillQuaternary,
                             borderRadius: 6,
                             maxHeight: 300,
                             overflow: 'auto',
+                            border: `1px solid ${token.colorBorderSecondary}`,
                           }}
                         >
                           <pre
@@ -797,7 +949,7 @@ const ScheduledTaskList = () => {
                               margin: 0,
                               fontSize: 12,
                               fontFamily: 'Monaco, Menlo, "Ubuntu Mono", monospace',
-                              color: '#d4d4d4',
+                              color: token.colorText,
                               whiteSpace: 'pre-wrap',
                               wordBreak: 'break-all',
                             }}
@@ -815,6 +967,48 @@ const ScheduledTaskList = () => {
               <Empty description="暂无执行记录" />
             )}
           </>
+        )}
+      </Modal>
+
+      {/* 导入结果 Modal */}
+      <Modal
+        title="导入结果"
+        open={importResultVisible}
+        onCancel={() => setImportResultVisible(false)}
+        footer={[
+          <Button key="close" onClick={() => setImportResultVisible(false)}>
+            关闭
+          </Button>,
+        ]}
+      >
+        {importResult && (
+          <Descriptions bordered column={1}>
+            <Descriptions.Item label="总数">{importResult.total}</Descriptions.Item>
+            <Descriptions.Item label="成功">
+              <Tag color="success">{importResult.success}</Tag>
+            </Descriptions.Item>
+            <Descriptions.Item label="失败">
+              <Tag color="error">{importResult.failed}</Tag>
+            </Descriptions.Item>
+            {importResult.errors && importResult.errors.length > 0 && (
+              <Descriptions.Item label="错误信息">
+                <ul style={{ margin: 0, paddingLeft: 20 }}>
+                  {importResult.errors.map((error, index) => (
+                    <li key={index} style={{ color: 'red' }}>{error}</li>
+                  ))}
+                </ul>
+              </Descriptions.Item>
+            )}
+            {importResult.skipped && importResult.skipped.length > 0 && (
+              <Descriptions.Item label="跳过项">
+                <ul style={{ margin: 0, paddingLeft: 20 }}>
+                  {importResult.skipped.map((item, index) => (
+                    <li key={index} style={{ color: 'orange' }}>{item}</li>
+                  ))}
+                </ul>
+              </Descriptions.Item>
+            )}
+          </Descriptions>
         )}
       </Modal>
     </div>

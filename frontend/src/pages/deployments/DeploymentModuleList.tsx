@@ -53,6 +53,7 @@ import { projectApi, Project } from '@/api/project'
 import { environmentApi, Environment } from '@/api/environment'
 import { assetApi, Asset } from '@/api/asset'
 import { useThemeStore } from '@/stores/theme'
+import { usePermissionStore } from '@/stores/permission'
 
 const { TextArea } = Input
 
@@ -64,6 +65,7 @@ const SHEBANGS: Record<string, string> = {
 
 const DeploymentModuleList = () => {
   const { mode } = useThemeStore()
+  const { hasPermission } = usePermissionStore()
   const isDark = mode === 'dark'
 
   const [modules, setModules] = useState<DeploymentModule[]>([])
@@ -550,43 +552,63 @@ const DeploymentModuleList = () => {
       title: '操作',
       key: 'action',
       width: 220,
-      render: (_: any, record: DeploymentModule) => (
-        <Space size="small">
-          <Button
-            type="primary"
-            size="small"
-            icon={<RocketOutlined />}
-            onClick={() => handleOpenDeploy(record)}
-          >
-            部署
-          </Button>
-          <Button
-            type="link"
-            size="small"
-            icon={<HistoryOutlined />}
-            onClick={() => handleOpenHistory(record)}
-          >
-            历史
-          </Button>
-          <Button
-            type="link"
-            size="small"
-            icon={<EditOutlined />}
-            onClick={() => handleEditModule(record)}
-          >
-            编辑
-          </Button>
-          <Button
-            type="link"
-            danger
-            size="small"
-            icon={<DeleteOutlined />}
-            onClick={() => handleDeleteModule(record.id)}
-          >
-            删除
-          </Button>
-        </Space>
-      ),
+      render: (_: any, record: DeploymentModule) => {
+        const actions = []
+        if (hasPermission('deployments', 'create')) {
+          actions.push(
+            <Button
+              key="deploy"
+              type="primary"
+              size="small"
+              icon={<RocketOutlined />}
+              onClick={() => handleOpenDeploy(record)}
+            >
+              部署
+            </Button>
+          )
+        }
+        if (hasPermission('deployments', 'read')) {
+          actions.push(
+            <Button
+              key="history"
+              type="link"
+              size="small"
+              icon={<HistoryOutlined />}
+              onClick={() => handleOpenHistory(record)}
+            >
+              历史
+            </Button>
+          )
+        }
+        if (hasPermission('deployments', 'update')) {
+          actions.push(
+            <Button
+              key="edit"
+              type="link"
+              size="small"
+              icon={<EditOutlined />}
+              onClick={() => handleEditModule(record)}
+            >
+              编辑
+            </Button>
+          )
+        }
+        if (hasPermission('deployments', 'delete')) {
+          actions.push(
+            <Button
+              key="delete"
+              type="link"
+              danger
+              size="small"
+              icon={<DeleteOutlined />}
+              onClick={() => handleDeleteModule(record.id)}
+            >
+              删除
+            </Button>
+          )
+        }
+        return actions.length > 0 ? <Space size="small">{actions}</Space> : '-'
+      },
     },
   ]
 
@@ -615,25 +637,33 @@ const DeploymentModuleList = () => {
           <Button icon={<ReloadOutlined />} onClick={fetchModules}>
             刷新
           </Button>
-          <Button icon={<ExportOutlined />} onClick={handleExport}>
-            导出配置
-          </Button>
-          <Button
-            icon={<ImportOutlined />}
-            onClick={() => document.getElementById('import-file-input')?.click()}
-          >
-            导入配置
-          </Button>
-          <input
-            id="import-file-input"
-            type="file"
-            accept=".json"
-            style={{ display: 'none' }}
-            onChange={handleImportFileSelect}
-          />
-          <Button type="primary" icon={<PlusOutlined />} onClick={handleCreateModule}>
-            新增模块
-          </Button>
+          {hasPermission('deployments', 'export') && (
+            <Button icon={<ExportOutlined />} onClick={handleExport}>
+              导出配置
+            </Button>
+          )}
+          {hasPermission('deployments', 'import') && (
+            <>
+              <Button
+                icon={<ImportOutlined />}
+                onClick={() => document.getElementById('import-file-input')?.click()}
+              >
+                导入配置
+              </Button>
+              <input
+                id="import-file-input"
+                type="file"
+                accept=".json"
+                style={{ display: 'none' }}
+                onChange={handleImportFileSelect}
+              />
+            </>
+          )}
+          {hasPermission('deployments', 'create') && (
+            <Button type="primary" icon={<PlusOutlined />} onClick={handleCreateModule}>
+              新增模块
+            </Button>
+          )}
         </Space>
       </div>
 
@@ -655,7 +685,7 @@ const DeploymentModuleList = () => {
         }}
         onOk={() => moduleForm.submit()}
         width={700}
-        destroyOnClose
+        destroyOnHidden
       >
         <Form form={moduleForm} layout="vertical" onFinish={handleModuleSubmit}>
           <Form.Item

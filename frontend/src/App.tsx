@@ -30,6 +30,7 @@ const ScheduledTaskList = lazy(() => import('./pages/tasks/ScheduledTaskList'))
 const SSHKeyList = lazy(() => import('./pages/ssh/SSHKeyList'))
 const WebSSHTerminal = lazy(() => import('./pages/ssh/WebSSHTerminal'))
 const AuditLogList = lazy(() => import('./pages/audit/AuditLogList'))
+const OperationToolList = lazy(() => import('./pages/operationTools/OperationToolList'))
 
 // Loading component
 const PageLoading = () => (
@@ -51,7 +52,7 @@ function App() {
         <Route
           path="/dashboard"
           element={
-            <ProtectedRoute>
+            <ProtectedRoute requiredPermission="dashboard:read">
               <MainLayout>
                 <Suspense fallback={<PageLoading />}>
                   <Dashboard />
@@ -61,9 +62,21 @@ function App() {
           }
         />
         <Route
+          path="/operation-tools"
+          element={
+            <ProtectedRoute requiredPermission="operation-tools:read">
+              <MainLayout>
+                <Suspense fallback={<PageLoading />}>
+                  <OperationToolList />
+                </Suspense>
+              </MainLayout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
           path="/users"
           element={
-            <ProtectedRoute>
+            <ProtectedRoute requiredPermission="users:*">
               <MainLayout>
                 <Suspense fallback={<PageLoading />}>
                   <UserList />
@@ -75,7 +88,7 @@ function App() {
         <Route
           path="/roles"
           element={
-            <ProtectedRoute>
+            <ProtectedRoute requiredPermission="roles:*">
               <MainLayout>
                 <Suspense fallback={<PageLoading />}>
                   <RoleList />
@@ -87,7 +100,7 @@ function App() {
         <Route
           path="/assets"
           element={
-            <ProtectedRoute>
+            <ProtectedRoute requiredPermission="assets:*">
               <MainLayout>
                 <Suspense fallback={<PageLoading />}>
                   <AssetList />
@@ -99,7 +112,7 @@ function App() {
         <Route
           path="/assets/:id"
           element={
-            <ProtectedRoute>
+            <ProtectedRoute requiredPermission="assets:*">
               <MainLayout>
                 <Suspense fallback={<PageLoading />}>
                   <AssetDetail />
@@ -111,7 +124,7 @@ function App() {
         <Route
           path="/projects"
           element={
-            <ProtectedRoute>
+            <ProtectedRoute requiredPermission="projects:*">
               <MainLayout>
                 <Suspense fallback={<PageLoading />}>
                   <ProjectList />
@@ -123,7 +136,7 @@ function App() {
         <Route
           path="/environments"
           element={
-            <ProtectedRoute>
+            <ProtectedRoute requiredPermission="environments:*">
               <MainLayout>
                 <Suspense fallback={<PageLoading />}>
                   <EnvironmentList />
@@ -135,7 +148,7 @@ function App() {
         <Route
           path="/cloud-platforms"
           element={
-            <ProtectedRoute>
+            <ProtectedRoute requiredPermission="cloud-platforms:*">
               <MainLayout>
                 <Suspense fallback={<PageLoading />}>
                   <CloudPlatformList />
@@ -171,7 +184,7 @@ function App() {
         <Route
           path="/templates"
           element={
-            <ProtectedRoute>
+            <ProtectedRoute requiredPermission="templates:*">
               <MainLayout>
                 <Suspense fallback={<PageLoading />}>
                   <TemplateList />
@@ -183,7 +196,7 @@ function App() {
         <Route
           path="/executions"
           element={
-            <ProtectedRoute>
+            <ProtectedRoute requiredPermission="executions:*">
               <MainLayout>
                 <Suspense fallback={<PageLoading />}>
                   <ExecutionOperatorPage />
@@ -217,7 +230,7 @@ function App() {
         <Route
           path="/deployments"
           element={
-            <ProtectedRoute>
+            <ProtectedRoute requiredPermission="deployments:*">
               <MainLayout>
                 <Suspense fallback={<PageLoading />}>
                   <DeploymentModuleList />
@@ -229,7 +242,7 @@ function App() {
         <Route
           path="/tasks"
           element={
-            <ProtectedRoute>
+            <ProtectedRoute requiredPermission="tasks:*">
               <MainLayout>
                 <Suspense fallback={<PageLoading />}>
                   <ScheduledTaskList />
@@ -241,7 +254,7 @@ function App() {
         <Route
           path="/ssh/keys"
           element={
-            <ProtectedRoute>
+            <ProtectedRoute requiredPermission="ssh-keys:*">
               <MainLayout>
                 <Suspense fallback={<PageLoading />}>
                   <SSHKeyList />
@@ -263,7 +276,7 @@ function App() {
         <Route
           path="/audit-logs"
           element={
-            <ProtectedRoute>
+            <ProtectedRoute requiredPermission="audit-logs:read">
               <MainLayout>
                 <Suspense fallback={<PageLoading />}>
                   <AuditLogList />

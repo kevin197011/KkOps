@@ -31,10 +31,13 @@ import {
   SafetyOutlined,
   SettingOutlined,
   ApartmentOutlined,
+  AppstoreOutlined,
 } from '@ant-design/icons'
 import { useThemeStore } from '@/stores/theme'
 import { useAuthStore } from '@/stores/auth'
+import { usePermissionStore } from '@/stores/permission'
 import { authApi } from '@/api/auth'
+import { userApi } from '@/api/user'
 
 const { Header, Sider, Content, Footer } = Layout
 
@@ -53,6 +56,21 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
   const location = useLocation()
   const { mode, toggleMode } = useThemeStore()
   const { user, clearAuth } = useAuthStore()
+  const { hasPermission, isAdmin, permissions } = usePermissionStore()
+
+  // 获取用户权限（如果还没有加载）
+  useEffect(() => {
+    if (user && permissions.length === 0) {
+      userApi.getPermissions()
+        .then((response) => {
+          const { setPermissions } = usePermissionStore.getState()
+          setPermissions(response.data.permissions || [])
+        })
+        .catch((error) => {
+          console.error('Failed to fetch user permissions:', error)
+        })
+    }
+  }, [user, permissions.length])
   const {
     token: { colorBgContainer },
   } = theme.useToken()
@@ -70,7 +88,67 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
     return () => window.removeEventListener('resize', checkMobile)
   }, [])
 
-  const menuItems: MenuProps['items'] = [
+  // 菜单权限映射
+  const menuPermissionMap: Record<string, string> = {
+    '/dashboard': 'dashboard:read',
+    '/operation-tools': 'operation-tools:read',
+    '/projects': 'projects:*',
+    '/environments': 'environments:*',
+    '/cloud-platforms': 'cloud-platforms:*',
+    '/assets': 'assets:*',
+    '/executions': 'executions:*',
+    '/templates': 'templates:*',
+    '/tasks': 'tasks:*',
+    '/deployments': 'deployments:*',
+    '/ssh/keys': 'ssh-keys:*',
+    '/users': 'users:*',
+    '/roles': 'roles:*',
+    '/audit-logs': 'audit-logs:read',
+  }
+
+  // 根据权限过滤菜单项
+  const filterMenuItems = (items: MenuProps['items']): MenuProps['items'] => {
+    if (!items) return []
+    
+    return items
+      .map((item) => {
+        if (!item) return null
+        
+        // 处理分隔符
+        if (item.type === 'divider') {
+          return item
+        }
+        
+        // 如果是子菜单，过滤子项
+        if (item.children && Array.isArray(item.children)) {
+          const filteredChildren = filterMenuItems(item.children)
+          // 如果子菜单没有可用项，不显示父菜单
+          if (filteredChildren.length === 0) {
+            return null
+          }
+          return {
+            ...item,
+            children: filteredChildren,
+          }
+        }
+        
+        // 检查权限
+        if (item.key && typeof item.key === 'string' && item.key.startsWith('/')) {
+          const requiredPermission = menuPermissionMap[item.key]
+          if (requiredPermission) {
+            const [resource, action] = requiredPermission.split(':')
+            if (!isAdmin && !hasPermission(resource, action)) {
+              return null // 无权限，不显示
+            }
+          }
+        }
+        
+        return item
+      })
+      .filter((item) => item !== null) as MenuProps['items']
+  }
+
+  const allMenuItems: MenuProps['items'] = [
     {
       key: '/dashboard',
       icon: <DashboardOutlined />,
@@ -78,6 +156,11 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
     },
     {
       type: 'divider',
+    },
+    {
+      key: '/operation-tools',
+      icon: <AppstoreOutlined />,
+      label: '运维导航',
     },
     {
       key: 'infrastructure',
@@ -169,6 +252,11 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
     },
   ]
 
+  // 根据权限过滤菜单
+  const menuItems = isAdmin || permissions.length === 0 
+    ? allMenuItems 
+    : filterMenuItems(allMenuItems)
+
   const handleMenuClick = ({ key }: { key: string }) => {
     // 只导航到具体的路由，忽略分类键（如 'infrastructure', 'operations' 等）
     if (key.startsWith('/')) {
@@ -184,8 +272,10 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
       // Ignore API errors, proceed with client-side logout
     }
     
-    // Clear authentication state
+    // Clear authentication and permission state
     clearAuth()
+    const { clearPermissions } = usePermissionStore.getState()
+    clearPermissions()
     
     // Show success message
     message.success('已成功登出')
@@ -245,6 +335,16 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
         }}
       >
         <div
+          role="button"
+          tabIndex={0}
+          aria-label="返回仪表盘"
+          onClick={() => navigate('/dashboard')}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault()
+              navigate('/dashboard')
+            }
+          }}
           style={{
             height: 64,
             display: 'flex',
@@ -252,6 +352,14 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
             justifyContent: 'center',
             borderBottom: `1px solid ${mode === 'dark' ? '#334155' : '#E2E8F0'}`,
             padding: collapsed ? '0 16px' : '0 20px',
+            cursor: 'pointer',
+            transition: 'background-color 0.2s',
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.backgroundColor = mode === 'dark' ? '#334155' : '#F1F5F9'
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.backgroundColor = 'transparent'
           }}
         >
           {collapsed ? (
@@ -429,7 +537,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
           passwordForm.resetFields()
         }}
         footer={null}
-        destroyOnClose
+        destroyOnHidden
       >
         <Form
           form={passwordForm}

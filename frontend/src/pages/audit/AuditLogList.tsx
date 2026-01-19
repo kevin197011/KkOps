@@ -21,6 +21,7 @@ import {
   Col,
   Tooltip,
   Typography,
+  theme,
 } from 'antd'
 import {
   SearchOutlined,
@@ -47,6 +48,7 @@ const { RangePicker } = DatePicker
 const { Text } = Typography
 
 const AuditLogList = () => {
+  const { token } = theme.useToken()
   const [loading, setLoading] = useState(false)
   const [logs, setLogs] = useState<AuditLog[]>([])
   const [total, setTotal] = useState(0)
@@ -397,11 +399,12 @@ const AuditLogList = () => {
                   overflow: 'auto',
                   margin: 0,
                   padding: 12,
-                  background: '#f5f5f5',
+                  background: token.colorFillTertiary,
                   borderRadius: 4,
                   fontSize: 12,
                   whiteSpace: 'pre-wrap',
                   wordBreak: 'break-all',
+                  border: `1px solid ${token.colorBorderSecondary}`,
                 }}
               >
                 {formatDetail(selectedLog.detail)}

@@ -17,6 +17,7 @@ import {
   Empty,
   Button,
   Space,
+  theme,
 } from 'antd'
 import type { DataNode } from 'antd/es/tree'
 import { executionApi, Execution, templateApi, ExecutionTemplate } from '@/api/execution'
@@ -50,6 +51,7 @@ const TaskEditModal = ({
   onClose,
   onSave,
 }: TaskEditModalProps) => {
+  const { token } = theme.useToken()
   const { mode } = useThemeStore()
   const isDark = mode === 'dark'
   const [form] = Form.useForm()
@@ -373,18 +375,18 @@ const TaskEditModal = ({
                 </Button>
               </Space>
             </div>
-            <div style={{ marginBottom: 8, fontSize: 12, color: '#888' }}>
+            <div style={{ marginBottom: 8, fontSize: 12, color: token.colorTextSecondary }}>
               已选择 {selectedAssetIds.length} 个主机
             </div>
 
             <div
               style={{
-                border: isDark ? '1px solid #303030' : '1px solid #d9d9d9',
+                border: `1px solid ${token.colorBorder}`,
                 borderRadius: 6,
                 padding: 12,
                 maxHeight: 250,
                 overflow: 'auto',
-                background: isDark ? '#141414' : '#fafafa',
+                background: token.colorFillTertiary,
               }}
             >
               {treeData.length === 0 ? (
@@ -399,7 +401,7 @@ const TaskEditModal = ({
                 />
               )}
             </div>
-            <div style={{ marginTop: 8, color: '#8c8c8c' }}>
+            <div style={{ marginTop: 8, color: token.colorTextTertiary }}>
               已选择 {selectedAssetIds.length} 台主机
             </div>
           </Form.Item>

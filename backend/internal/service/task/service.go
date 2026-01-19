@@ -7,8 +7,10 @@ package task
 
 import (
 	"errors"
+	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"gorm.io/gorm"
 
@@ -397,4 +399,121 @@ func (s *Service) taskToResponse(task model.Task) *TaskResponse {
 	}
 
 	return resp
+}
+
+// ExportTemplateConfig 导出模板配置结构
+type ExportTemplateConfig struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Content     string `json:"content"`
+	Type        string `json:"type"`
+}
+
+// ExportTemplatesConfig 导出模板配置根结构
+type ExportTemplatesConfig struct {
+	Version  string                `json:"version"`
+	ExportAt string                `json:"export_at"`
+	Templates []ExportTemplateConfig `json:"templates"`
+}
+
+// ImportTemplateConfig 导入模板配置结构
+type ImportTemplateConfig struct {
+	Name        string `json:"name" binding:"required"`
+	Description string `json:"description"`
+	Content     string `json:"content" binding:"required"`
+	Type        string `json:"type"`
+}
+
+// ImportTemplatesConfig 导入模板配置根结构
+type ImportTemplatesConfig struct {
+	Version  string                `json:"version"`
+	Templates []ImportTemplateConfig `json:"templates" binding:"required"`
+}
+
+// ImportResult 导入结果
+type ImportResult struct {
+	Total     int      `json:"total"`
+	Success   int      `json:"success"`
+	Failed    int      `json:"failed"`
+	Errors    []string `json:"errors,omitempty"`
+	Skipped   []string `json:"skipped,omitempty"`
+}
+
+// ExportTemplates 导出所有任务模板
+func (s *Service) ExportTemplates() (*ExportTemplatesConfig, error) {
+	templates, err := s.ListTemplates()
+	if err != nil {
+		return nil, err
+	}
+
+	exportTemplates := make([]ExportTemplateConfig, len(templates))
+	for i, t := range templates {
+		exportTemplates[i] = ExportTemplateConfig{
+			Name:        t.Name,
+			Description: t.Description,
+			Content:     t.Content,
+			Type:        t.Type,
+		}
+	}
+
+	return &ExportTemplatesConfig{
+		Version:   "1.0",
+		ExportAt: time.Now().Format(time.RFC3339),
+		Templates: exportTemplates,
+	}, nil
+}
+
+// ImportTemplates 导入任务模板
+func (s *Service) ImportTemplates(config *ImportTemplatesConfig, userID uint) (*ImportResult, error) {
+	result := &ImportResult{
+		Total:   len(config.Templates),
+		Errors:  []string{},
+		Skipped: []string{},
+	}
+
+	for _, t := range config.Templates {
+		// 验证必填字段
+		if t.Name == "" {
+			result.Failed++
+			result.Errors = append(result.Errors, fmt.Sprintf("模板缺少必填字段 'name'"))
+			continue
+		}
+		if t.Content == "" {
+			result.Failed++
+			result.Errors = append(result.Errors, fmt.Sprintf("模板 '%s': 缺少必填字段 'content'", t.Name))
+			continue
+		}
+
+		// 检查是否已存在同名模板
+		var existingTemplate model.TaskTemplate
+		if err := s.db.Where("name = ?", t.Name).First(&existingTemplate).Error; err == nil {
+			// 模板已存在，跳过
+			result.Skipped = append(result.Skipped, fmt.Sprintf("模板 '%s': 已存在，已跳过", t.Name))
+			continue
+		}
+
+		// 创建新模板
+		templateType := t.Type
+		if templateType == "" {
+			templateType = "shell"
+		}
+
+		template := model.TaskTemplate{
+			Name:        t.Name,
+			Description: t.Description,
+			Content:     t.Content,
+			Type:        templateType,
+			CreatedBy:   userID,
+		}
+
+		if err := s.db.Create(&template).Error; err != nil {
+			result.Failed++
+			result.Errors = append(result.Errors, fmt.Sprintf("模板 '%s': 创建失败: %v", t.Name, err))
+			continue
+		}
+
+		result.Success++
+	}
+
+	return result, nil
 }

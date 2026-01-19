@@ -4,9 +4,11 @@
 // https://opensource.org/licenses/MIT
 
 import { useState, useEffect } from 'react'
-import { Table, Button, Space, message, Modal, Form, Input, Select, Tag } from 'antd'
-import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons'
-import { executionTemplateApi, ExecutionTemplate, CreateTemplateRequest, UpdateTemplateRequest } from '@/api/execution'
+import { Table, Button, Space, message, Modal, Form, Input, Select, Tag, Upload, Descriptions } from 'antd'
+import { PlusOutlined, EditOutlined, DeleteOutlined, DownloadOutlined, UploadOutlined } from '@ant-design/icons'
+import { executionTemplateApi, ExecutionTemplate, CreateTemplateRequest, UpdateTemplateRequest, ExportTemplatesConfig, ImportTemplatesConfig, ImportResult } from '@/api/execution'
+import type { UploadFile } from 'antd/es/upload/interface'
+import { usePermissionStore } from '@/stores/permission'
 
 const { TextArea } = Input
 
@@ -17,10 +19,16 @@ const SHEBANGS: Record<string, string> = {
 }
 
 const TemplateList = () => {
+  const { hasPermission } = usePermissionStore()
   const [templates, setTemplates] = useState<ExecutionTemplate[]>([])
   const [loading, setLoading] = useState(false)
+  const [total, setTotal] = useState(0)
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(20)
   const [modalVisible, setModalVisible] = useState(false)
   const [editingTemplate, setEditingTemplate] = useState<ExecutionTemplate | null>(null)
+  const [importResultVisible, setImportResultVisible] = useState(false)
+  const [importResult, setImportResult] = useState<ImportResult | null>(null)
   const [form] = Form.useForm()
 
   // 处理类型变更，自动插入对应的 shebang
@@ -51,21 +59,33 @@ const TemplateList = () => {
     }
   }
 
-  useEffect(() => {
-    fetchTemplates()
-  }, [])
 
   const fetchTemplates = async () => {
     setLoading(true)
     try {
-      const response = await executionTemplateApi.list()
-      setTemplates(response.data)
+      const response = await executionTemplateApi.list(page, pageSize)
+      // 处理不同的响应格式
+      if (Array.isArray(response.data)) {
+        setTemplates(response.data)
+        setTotal(response.data.length)
+      } else if (response.data?.data) {
+        setTemplates(response.data.data)
+        setTotal(response.data.total || response.data.data.length)
+      } else {
+        setTemplates([])
+        setTotal(0)
+      }
     } catch (error: any) {
       message.error('获取模板列表失败')
     } finally {
       setLoading(false)
     }
   }
+
+  useEffect(() => {
+    fetchTemplates()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, pageSize])
 
   const handleCreate = () => {
     setEditingTemplate(null)
@@ -108,10 +128,72 @@ const TemplateList = () => {
       }
       setModalVisible(false)
       form.resetFields()
-      fetchTemplates()
+      // 如果是第一页或数据量少，直接刷新；否则回到第一页查看新数据
+      if (page === 1) {
+        fetchTemplates()
+      } else {
+        setPage(1)
+      }
     } catch (error: any) {
       message.error(error.response?.data?.error || '操作失败')
     }
+  }
+
+  // 导出配置
+  const handleExport = async () => {
+    try {
+      const config = await executionTemplateApi.exportConfig()
+      const blob = new Blob([JSON.stringify(config.data, null, 2)], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `task-templates-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5)}.json`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+      message.success('导出成功')
+    } catch (error: any) {
+      message.error('导出失败: ' + (error.response?.data?.error || error.message))
+    }
+  }
+
+  // 导入配置
+  const handleImport = async (file: File) => {
+    try {
+      const text = await file.text()
+      const config: ImportTemplatesConfig = JSON.parse(text)
+      
+      // 验证配置格式
+      if (!config.templates || !Array.isArray(config.templates)) {
+        message.error('无效的导入配置格式')
+        return false
+      }
+
+      // 执行导入
+      const result = await executionTemplateApi.importConfig(config)
+      setImportResult(result.data)
+      setImportResultVisible(true)
+      
+      // 如果导入成功，刷新列表
+      if (result.data.success > 0) {
+        fetchTemplates()
+      }
+      
+      return false // 阻止默认上传行为
+    } catch (error: any) {
+      message.error('导入失败: ' + (error.response?.data?.error || error.message))
+      return false
+    }
+  }
+
+  const uploadProps = {
+    beforeUpload: (file: File) => {
+      handleImport(file)
+      return false // 阻止默认上传行为
+    },
+    accept: '.json',
+    showUploadList: false,
   }
 
   const columns = [
@@ -146,16 +228,24 @@ const TemplateList = () => {
       title: '操作',
       key: 'action',
       width: 150,
-      render: (_: any, record: ExecutionTemplate) => (
-        <Space size="small">
-          <Button type="link" size="small" icon={<EditOutlined />} onClick={() => handleEdit(record)}>
-            编辑
-          </Button>
-          <Button type="link" danger size="small" icon={<DeleteOutlined />} onClick={() => handleDelete(record.id)}>
-            删除
-          </Button>
-        </Space>
-      ),
+      render: (_: any, record: ExecutionTemplate) => {
+        const actions = []
+        if (hasPermission('templates', 'update')) {
+          actions.push(
+            <Button key="edit" type="link" size="small" icon={<EditOutlined />} onClick={() => handleEdit(record)}>
+              编辑
+            </Button>
+          )
+        }
+        if (hasPermission('templates', 'delete')) {
+          actions.push(
+            <Button key="delete" type="link" danger size="small" icon={<DeleteOutlined />} onClick={() => handleDelete(record.id)}>
+              删除
+            </Button>
+          )
+        }
+        return actions.length > 0 ? <Space size="small">{actions}</Space> : '-'
+      },
     },
   ]
 
@@ -170,9 +260,25 @@ const TemplateList = () => {
         gap: 8
       }}>
         <h2>任务模板管理</h2>
-        <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate} aria-label="新增模板">
-          新增模板
-        </Button>
+        <Space>
+          {hasPermission('templates', 'export') && (
+            <Button icon={<DownloadOutlined />} onClick={handleExport}>
+              导出配置
+            </Button>
+          )}
+          {hasPermission('templates', 'import') && (
+            <Upload {...uploadProps}>
+              <Button icon={<UploadOutlined />}>
+                导入配置
+              </Button>
+            </Upload>
+          )}
+          {hasPermission('templates', 'create') && (
+            <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate} aria-label="新增模板">
+              新增模板
+            </Button>
+          )}
+        </Space>
       </div>
       <Table
         columns={columns}
@@ -180,6 +286,23 @@ const TemplateList = () => {
         loading={loading}
         rowKey="id"
         scroll={{ x: 'max-content' }}
+        pagination={{
+          current: page,
+          pageSize: pageSize,
+          total: total,
+          showSizeChanger: true,
+          showQuickJumper: true,
+          showTotal: (total, range) => `第 ${range[0]}-${range[1]} 条/共 ${total} 条`,
+          responsive: true,
+          onChange: (newPage, newPageSize) => {
+            setPage(newPage)
+            setPageSize(newPageSize || 20)
+          },
+          onShowSizeChange: (current, size) => {
+            setPage(1)
+            setPageSize(size)
+          },
+        }}
       />
       <Modal
         title={editingTemplate ? '编辑模板' : '新增模板'}
@@ -217,6 +340,46 @@ const TemplateList = () => {
             <TextArea rows={3} placeholder="模板描述" />
           </Form.Item>
         </Form>
+      </Modal>
+      <Modal
+        title="导入结果"
+        open={importResultVisible}
+        onCancel={() => setImportResultVisible(false)}
+        footer={[
+          <Button key="close" onClick={() => setImportResultVisible(false)}>
+            关闭
+          </Button>,
+        ]}
+      >
+        {importResult && (
+          <Descriptions bordered column={1}>
+            <Descriptions.Item label="总数">{importResult.total}</Descriptions.Item>
+            <Descriptions.Item label="成功">
+              <Tag color="success">{importResult.success}</Tag>
+            </Descriptions.Item>
+            <Descriptions.Item label="失败">
+              <Tag color="error">{importResult.failed}</Tag>
+            </Descriptions.Item>
+            {importResult.errors && importResult.errors.length > 0 && (
+              <Descriptions.Item label="错误信息">
+                <ul style={{ margin: 0, paddingLeft: 20 }}>
+                  {importResult.errors.map((error, index) => (
+                    <li key={index} style={{ color: 'red' }}>{error}</li>
+                  ))}
+                </ul>
+              </Descriptions.Item>
+            )}
+            {importResult.skipped && importResult.skipped.length > 0 && (
+              <Descriptions.Item label="跳过项">
+                <ul style={{ margin: 0, paddingLeft: 20 }}>
+                  {importResult.skipped.map((item, index) => (
+                    <li key={index} style={{ color: 'orange' }}>{item}</li>
+                  ))}
+                </ul>
+              </Descriptions.Item>
+            )}
+          </Descriptions>
+        )}
       </Modal>
     </div>
   )

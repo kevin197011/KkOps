@@ -7,8 +7,10 @@ import { useState, useEffect } from 'react'
 import { Table, Button, Space, message, Modal, Form, Input, Select } from 'antd'
 import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons'
 import { categoryApi, Category, CreateCategoryRequest, UpdateCategoryRequest } from '@/api/category'
+import { usePermissionStore } from '@/stores/permission'
 
 const CategoryList = () => {
+  const { hasPermission } = usePermissionStore()
   const [categories, setCategories] = useState<Category[]>([])
   const [loading, setLoading] = useState(false)
   const [modalVisible, setModalVisible] = useState(false)
@@ -113,16 +115,24 @@ const CategoryList = () => {
       title: '操作',
       key: 'action',
       width: 150,
-      render: (_: any, record: Category) => (
-        <Space size="small">
-          <Button type="link" size="small" icon={<EditOutlined />} onClick={() => handleEdit(record)}>
-            编辑
-          </Button>
-          <Button type="link" danger size="small" icon={<DeleteOutlined />} onClick={() => handleDelete(record.id)}>
-            删除
-          </Button>
-        </Space>
-      ),
+      render: (_: any, record: Category) => {
+        const actions = []
+        if (hasPermission('assets', 'update')) {
+          actions.push(
+            <Button key="edit" type="link" size="small" icon={<EditOutlined />} onClick={() => handleEdit(record)}>
+              编辑
+            </Button>
+          )
+        }
+        if (hasPermission('assets', 'delete')) {
+          actions.push(
+            <Button key="delete" type="link" danger size="small" icon={<DeleteOutlined />} onClick={() => handleDelete(record.id)}>
+              删除
+            </Button>
+          )
+        }
+        return actions.length > 0 ? <Space size="small">{actions}</Space> : '-'
+      },
     },
   ]
 

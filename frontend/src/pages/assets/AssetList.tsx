@@ -12,10 +12,12 @@ import { environmentApi, Environment } from '@/api/environment'
 import { cloudPlatformApi, CloudPlatform } from '@/api/cloudPlatform'
 import { sshkeyApi, SSHKey } from '@/api/sshkey'
 import { tagApi, Tag as TagType, CreateTagRequest } from '@/api/tag'
+import { usePermissionStore } from '@/stores/permission'
 
 const { Search } = Input
 
 const AssetList = () => {
+  const { hasPermission } = usePermissionStore()
   const [assets, setAssets] = useState<Asset[]>([])
   const [loading, setLoading] = useState(false)
   const [total, setTotal] = useState(0)
@@ -365,19 +367,30 @@ const AssetList = () => {
       title: '操作',
       key: 'action',
       width: 180,
-      render: (_: any, record: Asset) => (
-        <Space size="small">
-          <Button type="link" size="small" onClick={() => handleViewDetail(record)} aria-label={`查看资产详情 ${record.hostName}`}>
+      render: (_: any, record: Asset) => {
+        const actions = []
+        // 查看详情不需要特殊权限（已有该页面访问权限即可）
+        actions.push(
+          <Button key="detail" type="link" size="small" onClick={() => handleViewDetail(record)} aria-label={`查看资产详情 ${record.hostName}`}>
             详情
           </Button>
-          <Button type="link" size="small" icon={<EditOutlined />} onClick={() => handleEdit(record)} aria-label={`编辑资产 ${record.hostName}`}>
-            编辑
-          </Button>
-          <Button type="link" danger size="small" icon={<DeleteOutlined />} onClick={() => handleDelete(record.id)} aria-label={`删除资产 ${record.hostName}`}>
-            删除
-          </Button>
-        </Space>
-      ),
+        )
+        if (hasPermission('assets', 'update')) {
+          actions.push(
+            <Button key="edit" type="link" size="small" icon={<EditOutlined />} onClick={() => handleEdit(record)} aria-label={`编辑资产 ${record.hostName}`}>
+              编辑
+            </Button>
+          )
+        }
+        if (hasPermission('assets', 'delete')) {
+          actions.push(
+            <Button key="delete" type="link" danger size="small" icon={<DeleteOutlined />} onClick={() => handleDelete(record.id)} aria-label={`删除资产 ${record.hostName}`}>
+              删除
+            </Button>
+          )
+        }
+        return actions.length > 0 ? <Space size="small">{actions}</Space> : '-'
+      },
     },
   ]
 
@@ -395,15 +408,21 @@ const AssetList = () => {
       >
         <h2>资产管理</h2>
         <Space wrap>
-          <Button icon={<UploadOutlined />} onClick={handleImport} aria-label="导入资产">
-            导入
-          </Button>
-          <Button icon={<DownloadOutlined />} onClick={handleExport} aria-label="导出资产">
-            导出
-          </Button>
-          <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate} aria-label="新增资产">
-            新增资产
-          </Button>
+          {hasPermission('assets', 'import') && (
+            <Button icon={<UploadOutlined />} onClick={handleImport} aria-label="导入资产">
+              导入
+            </Button>
+          )}
+          {hasPermission('assets', 'export') && (
+            <Button icon={<DownloadOutlined />} onClick={handleExport} aria-label="导出资产">
+              导出
+            </Button>
+          )}
+          {hasPermission('assets', 'create') && (
+            <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate} aria-label="新增资产">
+              新增资产
+            </Button>
+          )}
         </Space>
       </div>
       <div style={{ marginBottom: 16, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -442,7 +461,8 @@ const AssetList = () => {
           pageSize: pageSize,
           total: total,
           showSizeChanger: true,
-          showTotal: (total) => `共 ${total} 条`,
+          showQuickJumper: true,
+          showTotal: (total, range) => `第 ${range[0]}-${range[1]} 条/共 ${total} 条`,
           responsive: true,
           onChange: (page, pageSize) => {
             setPage(page)

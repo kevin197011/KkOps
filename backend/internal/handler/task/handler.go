@@ -6,8 +6,10 @@
 package task
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -351,4 +353,53 @@ func (h *Handler) GetTaskExecutionLogs(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"data": gin.H{"logs": logs}})
+}
+
+// ExportTemplates handles template export
+// @Summary Export task templates
+// @Description Export all task templates to JSON
+// @Tags Templates
+// @Produce json
+// @Success 200 {object} task.ExportTemplatesConfig
+// @Router /templates/export [get]
+func (h *Handler) ExportTemplates(c *gin.Context) {
+	config, err := h.service.ExportTemplates()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Set response headers for file download
+	filename := fmt.Sprintf("task-templates-%s.json", time.Now().Format("20060102-150405"))
+	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s", filename))
+	c.Header("Content-Type", "application/json")
+
+	c.JSON(http.StatusOK, config)
+}
+
+// ImportTemplates handles template import
+// @Summary Import task templates
+// @Description Import task templates from JSON
+// @Tags Templates
+// @Accept json
+// @Produce json
+// @Param request body task.ImportTemplatesConfig true "Import config"
+// @Success 200 {object} task.ImportResult
+// @Failure 400 {object} map[string]string
+// @Router /templates/import [post]
+func (h *Handler) ImportTemplates(c *gin.Context) {
+	var config task.ImportTemplatesConfig
+	if err := c.ShouldBindJSON(&config); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的导入配置: " + err.Error()})
+		return
+	}
+
+	userID := c.MustGet("user_id").(uint)
+	result, err := h.service.ImportTemplates(&config, userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, result)
 }

@@ -7,10 +7,12 @@ import { useState, useEffect } from 'react'
 import { Table, Button, Space, message, Modal, Form, Input, Tag, Descriptions } from 'antd'
 import { PlusOutlined, EditOutlined, DeleteOutlined, EyeOutlined } from '@ant-design/icons'
 import { sshkeyApi, SSHKey, CreateSSHKeyRequest, UpdateSSHKeyRequest } from '@/api/sshkey'
+import { usePermissionStore } from '@/stores/permission'
 
 const { TextArea } = Input
 
 const SSHKeyList = () => {
+  const { hasPermission } = usePermissionStore()
   const [keys, setKeys] = useState<SSHKey[]>([])
   const [loading, setLoading] = useState(false)
   const [modalVisible, setModalVisible] = useState(false)
@@ -131,19 +133,30 @@ const SSHKeyList = () => {
       title: '操作',
       key: 'action',
       width: 200,
-      render: (_: any, record: SSHKey) => (
-        <Space size="small">
-          <Button type="link" size="small" icon={<EyeOutlined />} onClick={() => handleViewDetail(record)}>
+      render: (_: any, record: SSHKey) => {
+        const actions = []
+        // 查看详情不需要特殊权限
+        actions.push(
+          <Button key="detail" type="link" size="small" icon={<EyeOutlined />} onClick={() => handleViewDetail(record)}>
             详情
           </Button>
-          <Button type="link" size="small" icon={<EditOutlined />} onClick={() => handleEdit(record)}>
-            编辑
-          </Button>
-          <Button type="link" danger size="small" icon={<DeleteOutlined />} onClick={() => handleDelete(record.id)}>
-            删除
-          </Button>
-        </Space>
-      ),
+        )
+        if (hasPermission('ssh-keys', 'update')) {
+          actions.push(
+            <Button key="edit" type="link" size="small" icon={<EditOutlined />} onClick={() => handleEdit(record)}>
+              编辑
+            </Button>
+          )
+        }
+        if (hasPermission('ssh-keys', 'delete')) {
+          actions.push(
+            <Button key="delete" type="link" danger size="small" icon={<DeleteOutlined />} onClick={() => handleDelete(record.id)}>
+              删除
+            </Button>
+          )
+        }
+        return <Space size="small">{actions}</Space>
+      },
     },
   ]
 

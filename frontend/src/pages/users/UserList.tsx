@@ -8,8 +8,10 @@ import { Table, Button, Space, message, Modal, Form, Input, Select, Tag, Tooltip
 import { PlusOutlined, EditOutlined, DeleteOutlined, TeamOutlined, LockOutlined } from '@ant-design/icons'
 import { userApi, User, CreateUserRequest, UpdateUserRequest, UserRoleInfo } from '@/api/user'
 import { roleApi, Role } from '@/api/role'
+import { usePermissionStore } from '@/stores/permission'
 
 const UserList = () => {
+  const { hasPermission } = usePermissionStore()
   const [users, setUsers] = useState<User[]>([])
   const [loading, setLoading] = useState(false)
   const [modalVisible, setModalVisible] = useState(false)
@@ -239,40 +241,54 @@ const UserList = () => {
       title: '操作',
       key: 'action',
       width: 200,
-      render: (_: any, record: User) => (
-        <Space size="small">
-          <Tooltip title="角色分配">
+      render: (_: any, record: User) => {
+        const actions = []
+        if (hasPermission('users', 'update')) {
+          actions.push(
+            <Tooltip key="role" title="角色分配">
+              <Button
+                type="link"
+                size="small"
+                icon={<TeamOutlined />}
+                onClick={() => handleOpenRoleModal(record)}
+                aria-label={`角色分配 ${record.username}`}
+              >
+                角色
+              </Button>
+            </Tooltip>
+          )
+        }
+        if (hasPermission('users', 'update')) {
+          actions.push(
             <Button
+              key="edit"
               type="link"
               size="small"
-              icon={<TeamOutlined />}
-              onClick={() => handleOpenRoleModal(record)}
-              aria-label={`角色分配 ${record.username}`}
+              icon={<EditOutlined />}
+              onClick={() => handleEdit(record)}
+              aria-label={`编辑用户 ${record.username}`}
             >
-              角色
+              编辑
             </Button>
-          </Tooltip>
-          <Button
-            type="link"
-            size="small"
-            icon={<EditOutlined />}
-            onClick={() => handleEdit(record)}
-            aria-label={`编辑用户 ${record.username}`}
-          >
-            编辑
-          </Button>
-          <Button
-            type="link"
-            danger
-            size="small"
-            icon={<DeleteOutlined />}
-            onClick={() => handleDelete(record.id)}
-            aria-label={`删除用户 ${record.username}`}
-          >
-            删除
-          </Button>
-        </Space>
-      ),
+          )
+        }
+        if (hasPermission('users', 'delete')) {
+          actions.push(
+            <Button
+              key="delete"
+              type="link"
+              danger
+              size="small"
+              icon={<DeleteOutlined />}
+              onClick={() => handleDelete(record.id)}
+              aria-label={`删除用户 ${record.username}`}
+            >
+              删除
+            </Button>
+          )
+        }
+        return actions.length > 0 ? <Space size="small">{actions}</Space> : '-'
+      },
     },
   ]
 
@@ -289,9 +305,11 @@ const UserList = () => {
         }}
       >
         <h2>用户管理</h2>
-        <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate} aria-label="新增用户">
-          新增用户
-        </Button>
+        {hasPermission('users', 'create') && (
+          <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate} aria-label="新增用户">
+            新增用户
+          </Button>
+        )}
       </div>
       <Table
         columns={columns}
@@ -304,7 +322,8 @@ const UserList = () => {
           pageSize: pageSize,
           total: total,
           showSizeChanger: true,
-          showTotal: (total) => `共 ${total} 条`,
+          showQuickJumper: true,
+          showTotal: (total, range) => `第 ${range[0]}-${range[1]} 条/共 ${total} 条`,
           responsive: true,
           onChange: (page, pageSize) => {
             setPage(page)

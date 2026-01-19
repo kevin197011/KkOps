@@ -7,8 +7,10 @@ import { useState, useEffect } from 'react'
 import { Table, Button, Space, message, Modal, Form, Input, Tag, ColorPicker } from 'antd'
 import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons'
 import { tagApi, Tag as TagType, CreateTagRequest, UpdateTagRequest } from '@/api/tag'
+import { usePermissionStore } from '@/stores/permission'
 
 const TagList = () => {
+  const { hasPermission } = usePermissionStore()
   const [tags, setTags] = useState<TagType[]>([])
   const [loading, setLoading] = useState(false)
   const [modalVisible, setModalVisible] = useState(false)
@@ -110,16 +112,24 @@ const TagList = () => {
       title: '操作',
       key: 'action',
       width: 150,
-      render: (_: any, record: TagType) => (
-        <Space size="small">
-          <Button type="link" size="small" icon={<EditOutlined />} onClick={() => handleEdit(record)}>
-            编辑
-          </Button>
-          <Button type="link" danger size="small" icon={<DeleteOutlined />} onClick={() => handleDelete(record.id)}>
-            删除
-          </Button>
-        </Space>
-      ),
+      render: (_: any, record: TagType) => {
+        const actions = []
+        if (hasPermission('assets', 'update')) {
+          actions.push(
+            <Button key="edit" type="link" size="small" icon={<EditOutlined />} onClick={() => handleEdit(record)}>
+              编辑
+            </Button>
+          )
+        }
+        if (hasPermission('assets', 'delete')) {
+          actions.push(
+            <Button key="delete" type="link" danger size="small" icon={<DeleteOutlined />} onClick={() => handleDelete(record.id)}>
+              删除
+            </Button>
+          )
+        }
+        return actions.length > 0 ? <Space size="small">{actions}</Space> : '-'
+      },
     },
   ]
 

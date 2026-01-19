@@ -4,17 +4,20 @@
 // https://opensource.org/licenses/MIT
 
 import { useState, useEffect, useCallback } from 'react'
-import { Table, Button, Space, message, Modal, Form, Input, Tag, Checkbox, Transfer, Select, Divider, Tooltip } from 'antd'
-import { PlusOutlined, EditOutlined, DeleteOutlined, CrownOutlined, SafetyCertificateOutlined, AppstoreAddOutlined } from '@ant-design/icons'
+import { Table, Button, Space, message, Modal, Form, Input, Tag, Checkbox, Transfer, Select, Divider, Tooltip, theme } from 'antd'
+import { PlusOutlined, EditOutlined, DeleteOutlined, CrownOutlined, SafetyCertificateOutlined, AppstoreAddOutlined, LockOutlined } from '@ant-design/icons'
 import type { TransferItem } from 'antd/es/transfer'
-import { roleApi, Role, CreateRoleRequest, UpdateRoleRequest, RoleAssetInfo } from '@/api/role'
+import { roleApi, Role, CreateRoleRequest, UpdateRoleRequest, RoleAssetInfo, Permission } from '@/api/role'
 import { assetApi, Asset } from '@/api/asset'
 import { projectApi, Project } from '@/api/project'
 import { environmentApi, Environment } from '@/api/environment'
+import { usePermissionStore } from '@/stores/permission'
 
 const { TextArea } = Input
 
 const RoleList = () => {
+  const { token } = theme.useToken()
+  const { hasPermission } = usePermissionStore()
   const [roles, setRoles] = useState<Role[]>([])
   const [loading, setLoading] = useState(false)
   const [modalVisible, setModalVisible] = useState(false)
@@ -35,8 +38,27 @@ const RoleList = () => {
   const [selectedProjectId, setSelectedProjectId] = useState<number | undefined>()
   const [selectedEnvId, setSelectedEnvId] = useState<number | undefined>()
 
+  // 权限分配相关状态
+  const [permissionModalVisible, setPermissionModalVisible] = useState(false)
+  const [permissionRole, setPermissionRole] = useState<Role | null>(null)
+  const [allPermissions, setAllPermissions] = useState<Permission[]>([])
+  const [rolePermissions, setRolePermissions] = useState<Permission[]>([])
+  const [selectedPermissionIds, setSelectedPermissionIds] = useState<number[]>([])
+  const [permissionLoading, setPermissionLoading] = useState(false)
+
   useEffect(() => {
     fetchRoles()
+    fetchAllPermissions()
+  }, [])
+
+  // 获取所有权限
+  const fetchAllPermissions = useCallback(async () => {
+    try {
+      const response = await roleApi.listPermissions()
+      setAllPermissions(response.data || [])
+    } catch (error: any) {
+      console.error('获取权限列表失败', error)
+    }
   }, [])
 
   const fetchRoles = async () => {
@@ -70,6 +92,18 @@ const RoleList = () => {
       setTargetKeys(assets.map((a) => String(a.id)))
     } catch (error: any) {
       message.error('获取角色授权资产失败')
+    }
+  }, [])
+
+  // 获取角色已分配的权限
+  const fetchRolePermissions = useCallback(async (roleId: number) => {
+    try {
+      const response = await roleApi.getRolePermissions(roleId)
+      const permissions = response.data || []
+      setRolePermissions(permissions)
+      setSelectedPermissionIds(permissions.map((p) => p.id))
+    } catch (error: any) {
+      message.error('获取角色权限失败')
     }
   }, [])
 
@@ -152,6 +186,53 @@ const RoleList = () => {
     await Promise.all([fetchAllAssets(), fetchRoleAssets(role.id), fetchProjects(), fetchEnvironments()])
     setAuthzLoading(false)
   }
+
+  // 打开权限分配弹窗
+  const handleOpenPermissionModal = async (role: Role) => {
+    setPermissionRole(role)
+    setPermissionLoading(true)
+    setPermissionModalVisible(true)
+    await Promise.all([fetchAllPermissions(), fetchRolePermissions(role.id)])
+    setPermissionLoading(false)
+  }
+
+  // 保存权限分配
+  const handleSavePermissions = async () => {
+    if (!permissionRole) return
+
+    setPermissionLoading(true)
+    try {
+      // 计算需要新增和移除的权限
+      const currentPermissionIds = new Set(rolePermissions.map((p) => p.id))
+      const newPermissionIds = new Set(selectedPermissionIds)
+
+      const toAssign = selectedPermissionIds.filter((id) => !currentPermissionIds.has(id))
+      const toRemove = rolePermissions.filter((p) => !newPermissionIds.has(p.id)).map((p) => p.id)
+
+      // 执行权限分配和移除
+      await Promise.all([
+        ...toAssign.map((permissionId) => roleApi.assignPermissionToRole(permissionRole.id, permissionId)),
+        ...toRemove.map((permissionId) => roleApi.removePermissionFromRole(permissionRole.id, permissionId)),
+      ])
+
+      message.success('权限分配成功')
+      setPermissionModalVisible(false)
+      fetchRoles()
+    } catch (error: any) {
+      message.error(error.response?.data?.error || '权限分配失败')
+    } finally {
+      setPermissionLoading(false)
+    }
+  }
+
+  // 按资源分组权限
+  const groupedPermissions = allPermissions.reduce((acc, perm) => {
+    if (!acc[perm.resource]) {
+      acc[perm.resource] = []
+    }
+    acc[perm.resource].push(perm)
+    return acc
+  }, {} as Record<string, Permission[]>)
 
   // 批量添加资产到授权列表
   const handleBatchAdd = () => {
@@ -310,10 +391,11 @@ const RoleList = () => {
       title: '操作',
       key: 'action',
       width: 200,
-      render: (_: any, record: Role) => (
-        <Space size="small">
-          {!record.is_admin && (
-            <Tooltip title="资产授权">
+      render: (_: any, record: Role) => {
+        const actions = []
+        if (!record.is_admin && hasPermission('roles', 'update')) {
+          actions.push(
+            <Tooltip key="asset" title="资产授权">
               <Button
                 type="link"
                 size="small"
@@ -321,31 +403,57 @@ const RoleList = () => {
                 onClick={() => handleOpenAuthzModal(record)}
                 aria-label={`资产授权 ${record.name}`}
               >
-                授权
+                资产
               </Button>
             </Tooltip>
-          )}
-          <Button
-            type="link"
-            size="small"
-            icon={<EditOutlined />}
-            onClick={() => handleEdit(record)}
-            aria-label={`编辑角色 ${record.name}`}
-          >
-            编辑
-          </Button>
-          <Button
-            type="link"
-            danger
-            size="small"
-            icon={<DeleteOutlined />}
-            onClick={() => handleDelete(record.id)}
-            aria-label={`删除角色 ${record.name}`}
-          >
-            删除
-          </Button>
-        </Space>
-      ),
+          )
+        }
+        if (!record.is_admin && hasPermission('roles', 'update')) {
+          actions.push(
+            <Tooltip key="permission" title="权限分配">
+              <Button
+                type="link"
+                size="small"
+                icon={<LockOutlined />}
+                onClick={() => handleOpenPermissionModal(record)}
+                aria-label={`权限分配 ${record.name}`}
+              >
+                权限
+              </Button>
+            </Tooltip>
+          )
+        }
+        if (hasPermission('roles', 'update')) {
+          actions.push(
+            <Button
+              key="edit"
+              type="link"
+              size="small"
+              icon={<EditOutlined />}
+              onClick={() => handleEdit(record)}
+              aria-label={`编辑角色 ${record.name}`}
+            >
+              编辑
+            </Button>
+          )
+        }
+        if (hasPermission('roles', 'delete')) {
+          actions.push(
+            <Button
+              key="delete"
+              type="link"
+              danger
+              size="small"
+              icon={<DeleteOutlined />}
+              onClick={() => handleDelete(record.id)}
+              aria-label={`删除角色 ${record.name}`}
+            >
+              删除
+            </Button>
+          )
+        }
+        return actions.length > 0 ? <Space size="small">{actions}</Space> : '-'
+      },
     },
   ]
 
@@ -401,7 +509,7 @@ const RoleList = () => {
               </Space>
             </Checkbox>
           </Form.Item>
-          <div style={{ color: '#888', fontSize: 12, marginTop: -16, marginBottom: 16 }}>
+          <div style={{ color: token.colorTextSecondary, fontSize: 12, marginTop: -16, marginBottom: 16 }}>
             管理员角色可访问所有资产，无需单独授权
           </div>
         </Form>
@@ -424,8 +532,14 @@ const RoleList = () => {
         cancelText="取消"
       >
         {/* 快速授权区域 */}
-        <div style={{ marginBottom: 16, padding: '12px 16px', background: '#f5f5f5', borderRadius: 6 }}>
-          <div style={{ marginBottom: 8, fontWeight: 500 }}>
+        <div style={{ 
+          marginBottom: 16, 
+          padding: '12px 16px', 
+          background: token.colorFillTertiary, 
+          borderRadius: 6,
+          border: `1px solid ${token.colorBorderSecondary}`
+        }}>
+          <div style={{ marginBottom: 8, fontWeight: 500, color: token.colorText }}>
             <AppstoreAddOutlined style={{ marginRight: 8 }} />
             快速授权
           </div>
@@ -463,7 +577,7 @@ const RoleList = () => {
               选择所有主机
             </Button>
           </Space>
-          <div style={{ marginTop: 8, color: '#888', fontSize: 12 }}>
+          <div style={{ marginTop: 8, color: token.colorTextSecondary, fontSize: 12 }}>
             选择项目和/或环境后点击"添加到授权"，或点击"选择所有主机"授权全部资产
           </div>
         </div>
@@ -505,6 +619,74 @@ const RoleList = () => {
             notFoundContent: '无数据',
           }}
         />
+      </Modal>
+
+      {/* 权限分配弹窗 */}
+      <Modal
+        title={
+          <Space>
+            <LockOutlined />
+            <span>权限分配 - {permissionRole?.name}</span>
+          </Space>
+        }
+        open={permissionModalVisible}
+        onCancel={() => setPermissionModalVisible(false)}
+        onOk={handleSavePermissions}
+        confirmLoading={permissionLoading}
+        width={700}
+        okText="保存"
+        cancelText="取消"
+      >
+        <div style={{ marginBottom: 16 }}>
+          <Tag color="blue">拥有此角色的用户将可以使用以下功能模块</Tag>
+          {permissionRole?.is_admin && (
+            <Tag color="red" style={{ marginLeft: 8 }}>
+              管理员角色自动拥有所有权限
+            </Tag>
+          )}
+        </div>
+
+        {permissionRole?.is_admin ? (
+          <div style={{ padding: '40px 0', textAlign: 'center', color: token.colorTextTertiary }}>
+            管理员角色自动拥有所有权限，无需单独分配
+          </div>
+        ) : (
+          <div style={{ maxHeight: 500, overflowY: 'auto' }}>
+            {Object.entries(groupedPermissions).map(([resource, perms]) => (
+              <div key={resource} style={{ marginBottom: 24 }}>
+                <div style={{ marginBottom: 8, fontWeight: 500, fontSize: 14, color: token.colorText }}>
+                  {perms[0]?.name?.replace(/管理|查看/g, '').replace(/所有操作/, '') || resource}
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {perms.map((perm) => (
+                    <Checkbox
+                      key={perm.id}
+                      checked={selectedPermissionIds.includes(perm.id)}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setSelectedPermissionIds([...selectedPermissionIds, perm.id])
+                        } else {
+                          setSelectedPermissionIds(selectedPermissionIds.filter((id) => id !== perm.id))
+                        }
+                      }}
+                    >
+                      <Space>
+                        <span style={{ fontWeight: 500 }}>{perm.name}</span>
+                        <Tag size="small" color={perm.action === '*' ? 'blue' : 'default'}>
+                          {perm.action === '*' ? '所有操作' : perm.action}
+                        </Tag>
+                        {perm.description && (
+                          <span style={{ fontSize: 12, color: token.colorTextTertiary }}>{perm.description}</span>
+                        )}
+                      </Space>
+                    </Checkbox>
+                  ))}
+                </div>
+                <Divider style={{ margin: '16px 0' }} />
+              </div>
+            ))}
+          </div>
+        )}
       </Modal>
     </div>
   )

@@ -7,8 +7,10 @@ import { useState, useEffect } from 'react'
 import { Table, Button, Space, message, Modal, Form, Input } from 'antd'
 import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons'
 import { projectApi, Project, CreateProjectRequest, UpdateProjectRequest } from '@/api/project'
+import { usePermissionStore } from '@/stores/permission'
 
 const ProjectList = () => {
+  const { hasPermission } = usePermissionStore()
   const [projects, setProjects] = useState<Project[]>([])
   const [loading, setLoading] = useState(false)
   const [modalVisible, setModalVisible] = useState(false)
@@ -104,16 +106,24 @@ const ProjectList = () => {
       title: '操作',
       key: 'action',
       width: 150,
-      render: (_: any, record: Project) => (
-        <Space size="small">
-          <Button type="link" size="small" icon={<EditOutlined />} onClick={() => handleEdit(record)}>
-            编辑
-          </Button>
-          <Button type="link" danger size="small" icon={<DeleteOutlined />} onClick={() => handleDelete(record.id)}>
-            删除
-          </Button>
-        </Space>
-      ),
+      render: (_: any, record: Project) => {
+        const actions = []
+        if (hasPermission('projects', 'update')) {
+          actions.push(
+            <Button key="edit" type="link" size="small" icon={<EditOutlined />} onClick={() => handleEdit(record)}>
+              编辑
+            </Button>
+          )
+        }
+        if (hasPermission('projects', 'delete')) {
+          actions.push(
+            <Button key="delete" type="link" danger size="small" icon={<DeleteOutlined />} onClick={() => handleDelete(record.id)}>
+              删除
+            </Button>
+          )
+        }
+        return actions.length > 0 ? <Space size="small">{actions}</Space> : '-'
+      },
     },
   ]
 

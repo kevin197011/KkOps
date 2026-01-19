@@ -17,12 +17,14 @@ import ExecutionOptions from './components/operator/ExecutionOptions'
 import ExecutionResults from './components/operator/ExecutionResults'
 import { useThemeStore } from '@/stores/theme'
 import { useNavigate } from 'react-router-dom'
+import { usePermissionStore } from '@/stores/permission'
 
 const { Content } = Layout
 const { Text } = Typography
 
 const ExecutionOperatorPage = () => {
   const { mode } = useThemeStore()
+  const { hasPermission } = usePermissionStore()
   const navigate = useNavigate()
   const [form] = Form.useForm()
 
@@ -331,28 +333,30 @@ const ExecutionOperatorPage = () => {
           />
 
           {/* 执行按钮 */}
-          <div style={{ textAlign: 'center', padding: '16px 0' }}>
-            <Button
-              type="primary"
-              size="large"
-              icon={<ThunderboltOutlined />}
-              onClick={handleExecute}
-              loading={isExecuting}
-              disabled={isExecuting}
-            >
-              {isExecuting ? '执行中...' : '执行'}
-            </Button>
-            {currentTaskId && saveAsTask && (
+          {hasPermission('executions', 'create') && (
+            <div style={{ textAlign: 'center', padding: '16px 0' }}>
               <Button
-                type="link"
-                icon={<LinkOutlined />}
-                onClick={handleViewTaskHistory}
-                style={{ marginLeft: 16 }}
+                type="primary"
+                size="large"
+                icon={<ThunderboltOutlined />}
+                onClick={handleExecute}
+                loading={isExecuting}
+                disabled={isExecuting}
               >
-                查看任务历史
+                {isExecuting ? '执行中...' : '执行'}
               </Button>
-            )}
-          </div>
+              {currentTaskId && saveAsTask && hasPermission('tasks', 'read') && (
+                <Button
+                  type="link"
+                  icon={<LinkOutlined />}
+                  onClick={handleViewTaskHistory}
+                  style={{ marginLeft: 16 }}
+                >
+                  查看任务历史
+                </Button>
+              )}
+            </div>
+          )}
 
           {/* 执行结果 */}
           {executionRecords.length > 0 && (

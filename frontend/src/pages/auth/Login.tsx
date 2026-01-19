@@ -4,63 +4,116 @@
 // https://opensource.org/licenses/MIT
 
 import { useState, useEffect, useRef } from 'react'
-import { Form, Input, Button, Card, message, ConfigProvider } from 'antd'
+import { Form, Input, Button, Card, ConfigProvider, App } from 'antd'
 import { UserOutlined, LockOutlined } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
 import { authApi, LoginRequest } from '@/api/auth'
 import { useAuthStore } from '@/stores/auth'
+import { usePermissionStore } from '@/stores/permission'
+import { userApi } from '@/api/user'
 import { lightTheme } from '@/themes'
 
 const Login = () => {
+  const { message } = App.useApp()
   const [loading, setLoading] = useState(false)
   const navigate = useNavigate()
   const setAuth = useAuthStore((state) => state.setAuth)
+  const setPermissions = usePermissionStore((state) => state.setPermissions)
   const containerRef = useRef<HTMLDivElement>(null)
-  const particlesRef = useRef<HTMLDivElement[]>([])
+  const canvasRef = useRef<HTMLCanvasElement | null>(null)
 
-  // 创建粒子节点
+  // Matrix 代码雨效果
   useEffect(() => {
     if (!containerRef.current) return
 
     const container = containerRef.current
-    const particleCount = 15
-    particlesRef.current = []
+    const canvas = document.createElement('canvas')
+    canvas.style.position = 'absolute'
+    canvas.style.top = '0'
+    canvas.style.left = '0'
+    canvas.style.width = '100%'
+    canvas.style.height = '100%'
+    canvas.style.pointerEvents = 'none'
+    canvas.style.zIndex = '0'
+    canvas.width = container.offsetWidth || window.innerWidth
+    canvas.height = container.offsetHeight || window.innerHeight
+    container.appendChild(canvas)
+    canvasRef.current = canvas
 
-    for (let i = 0; i < particleCount; i++) {
-      const particle = document.createElement('div')
-      const x = Math.random() * 100
-      const y = Math.random() * 100
-      const dx = (Math.random() - 0.5) * 40
-      const dy = (Math.random() - 0.5) * 40
-      const delay = Math.random() * 5
-      const duration = 8 + Math.random() * 4
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
 
-      particle.style.cssText = `
-        position: absolute;
-        left: ${x}%;
-        top: ${y}%;
-        width: 4px;
-        height: 4px;
-        background: rgba(59, 130, 246, 0.8);
-        border-radius: 50%;
-        box-shadow: 0 0 10px rgba(59, 130, 246, 0.6);
-        pointer-events: none;
-        --dx: ${dx}px;
-        --dy: ${dy}px;
-        animation: login-particle-float ${duration}s ease-in-out infinite;
-        animation-delay: ${delay}s;
-      `
-      container.appendChild(particle)
-      particlesRef.current.push(particle)
+    // Matrix 字符集
+    const chars = '01アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲン'
+    const fontSize = 14
+    let columns = Math.floor(canvas.width / fontSize)
+    const drops: number[] = []
+    const speeds: number[] = []
+
+    // 初始化每列的起始位置和速度
+    const initColumns = () => {
+      columns = Math.floor(canvas.width / fontSize)
+      while (drops.length < columns) {
+        drops.push(Math.random() * -100)
+        speeds.push(0.5 + Math.random() * 2)
+      }
+      drops.splice(columns)
+      speeds.splice(columns)
     }
 
-    return () => {
-      particlesRef.current.forEach(particle => {
-        if (particle.parentNode) {
-          particle.parentNode.removeChild(particle)
+    initColumns()
+
+    const draw = () => {
+      // 半透明黑色背景（产生拖尾效果）
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.05)'
+      ctx.fillRect(0, 0, canvas.width, canvas.height)
+
+      // Matrix 绿色
+      ctx.fillStyle = '#00ff41'
+      ctx.font = `${fontSize}px monospace`
+
+      // 绘制每列字符
+      for (let i = 0; i < drops.length; i++) {
+        // 随机字符
+        const char = chars[Math.floor(Math.random() * chars.length)]
+        const x = i * fontSize
+        const y = drops[i] * fontSize
+
+        // 绘制字符（透明度渐变）
+        const opacity = Math.min(1, (canvas.height - y) / (fontSize * 10))
+        ctx.globalAlpha = opacity
+        ctx.fillText(char, x, y)
+
+        // 重置位置并随机速度
+        if (y > canvas.height && Math.random() > 0.975) {
+          drops[i] = 0
+          speeds[i] = 0.5 + Math.random() * 2
         }
-      })
-      particlesRef.current = []
+
+        // 移动位置
+        drops[i] += speeds[i]
+      }
+
+      ctx.globalAlpha = 1
+      requestAnimationFrame(draw)
+    }
+
+    // 窗口大小变化时更新画布尺寸
+    const handleResize = () => {
+      canvas.width = container.offsetWidth || window.innerWidth
+      canvas.height = container.offsetHeight || window.innerHeight
+      initColumns()
+    }
+
+    window.addEventListener('resize', handleResize)
+    draw()
+
+    return () => {
+      window.removeEventListener('resize', handleResize)
+      if (canvas.parentNode) {
+        canvas.parentNode.removeChild(canvas)
+      }
+      canvasRef.current = null
     }
   }, [])
 
@@ -73,6 +126,17 @@ const Login = () => {
       // Store auth state
       setAuth(token, user)
 
+      // Fetch and store user permissions
+      try {
+        const permResponse = await userApi.getPermissions()
+        setPermissions(permResponse.data.permissions || [])
+      } catch (permError) {
+        // If permission fetch fails, continue but log error
+        console.error('Failed to fetch user permissions:', permError)
+        // Set empty permissions (user will see limited menu)
+        setPermissions([])
+      }
+
       message.success('登录成功')
       navigate('/dashboard')
     } catch (error: any) {
@@ -84,7 +148,8 @@ const Login = () => {
 
   return (
     <ConfigProvider theme={lightTheme}>
-      <div 
+      <App>
+        <div 
         ref={containerRef}
         style={{
           display: 'flex',
@@ -93,43 +158,11 @@ const Login = () => {
           minHeight: '100vh',
           padding: '16px',
           position: 'relative',
-          background: 'linear-gradient(135deg, #0F172A 0%, #1E293B 50%, #0F172A 100%)',
+          background: '#000000',
           overflow: 'hidden',
         }}
       >
-      {/* 扫描线效果 */}
-      <div style={{
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        right: 0,
-        height: '2px',
-        background: 'linear-gradient(90deg, transparent, rgba(59, 130, 246, 0.5), transparent)',
-        animation: 'login-scanline 3s linear infinite',
-        pointerEvents: 'none',
-        zIndex: 0,
-      }} />
-
-      {/* 数据流动效果 */}
-      {[...Array(3)].map((_, i) => (
-        <div
-          key={`data-flow-${i}`}
-          style={{
-            position: 'absolute',
-            top: `${20 + i * 30}%`,
-            left: 0,
-            width: '200px',
-            height: '1px',
-            background: 'linear-gradient(90deg, transparent, rgba(37, 99, 235, 0.6), transparent)',
-            boxShadow: '0 0 10px rgba(37, 99, 235, 0.4)',
-            animation: `login-data-flow ${8 + i * 2}s linear infinite`,
-            animationDelay: `${i * 2}s`,
-            pointerEvents: 'none',
-            zIndex: 0,
-          }}
-        />
-      ))}
-      {/* 网格背景 */}
+      {/* Matrix 网格背景 */}
       <div style={{
         position: 'absolute',
         top: 0,
@@ -137,55 +170,13 @@ const Login = () => {
         right: 0,
         bottom: 0,
         backgroundImage: `
-          linear-gradient(rgba(37, 99, 235, 0.1) 1px, transparent 1px),
-          linear-gradient(90deg, rgba(37, 99, 235, 0.1) 1px, transparent 1px)
+          linear-gradient(rgba(0, 255, 65, 0.05) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(0, 255, 65, 0.05) 1px, transparent 1px)
         `,
         backgroundSize: '40px 40px',
-        opacity: 0.5,
+        opacity: 0.3,
         pointerEvents: 'none',
-        animation: 'login-fade-in 1s ease-out, login-grid-move 20s linear infinite',
-      }} />
-      
-      {/* 渐变光晕效果 */}
-      <div style={{
-        position: 'absolute',
-        top: '-50%',
-        left: '-50%',
-        width: '200%',
-        height: '200%',
-        background: 'radial-gradient(circle, rgba(37, 99, 235, 0.15) 0%, transparent 70%)',
-        animation: 'login-pulse 8s ease-in-out infinite',
-        pointerEvents: 'none',
-      }} />
-      
-      {/* 右上角光晕 */}
-      <div style={{
-        position: 'absolute',
-        top: '-30%',
-        right: '-30%',
-        width: '60%',
-        height: '60%',
-        background: 'radial-gradient(circle, rgba(59, 130, 246, 0.2) 0%, transparent 70%)',
-        borderRadius: '50%',
-        filter: 'blur(60px)',
-        pointerEvents: 'none',
-        animation: 'login-float 15s ease-in-out infinite, login-glow-pulse 4s ease-in-out infinite',
-        animationDelay: '0s, 1s',
-      }} />
-      
-      {/* 左下角光晕 */}
-      <div style={{
-        position: 'absolute',
-        bottom: '-30%',
-        left: '-30%',
-        width: '60%',
-        height: '60%',
-        background: 'radial-gradient(circle, rgba(37, 99, 235, 0.15) 0%, transparent 70%)',
-        borderRadius: '50%',
-        filter: 'blur(60px)',
-        pointerEvents: 'none',
-        animation: 'login-float 18s ease-in-out infinite reverse, login-glow-pulse 5s ease-in-out infinite',
-        animationDelay: '0s, 2s',
+        zIndex: 0,
       }} />
       <Card
         style={{ 
@@ -296,6 +287,7 @@ const Login = () => {
         系统运行部驱动 © {new Date().getFullYear()} KkOps
       </div>
       </div>
+      </App>
     </ConfigProvider>
   )
 }

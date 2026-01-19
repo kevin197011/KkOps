@@ -3,42 +3,55 @@
 // This software is released under the MIT License.
 // https://opensource.org/licenses/MIT
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { Table, Button, Space, message, Tag, Spin } from 'antd'
 import { ArrowLeftOutlined, PlayCircleOutlined, EyeOutlined, StopOutlined } from '@ant-design/icons'
 import { executionApi, executionRecordApi, ExecutionRecord, Execution } from '@/api/execution'
 import { assetApi, Asset } from '@/api/asset'
+import { usePermissionStore } from '@/stores/permission'
 
 const TaskExecutionList = () => {
   const { executionId } = useParams<{ executionId: string }>()
   const navigate = useNavigate()
+  const { hasPermission } = usePermissionStore()
   const [executions, setExecutions] = useState<ExecutionRecord[]>([])
   const [execution, setExecution] = useState<Execution | null>(null)
   const [assets, setAssets] = useState<Map<number, Asset>>(new Map())
   const [loading, setLoading] = useState(true)
+  const [total, setTotal] = useState(0)
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(20)
 
-  useEffect(() => {
+  const fetchExecutions = useCallback(async () => {
+    if (!executionId) return
+    try {
+      const historyResponse = await executionApi.getHistory(parseInt(executionId))
+      // API 返回的是数组，需要前端分页
+      const allExecutions = historyResponse.data.data || []
+      const start = (page - 1) * pageSize
+      const end = start + pageSize
+      setExecutions(allExecutions.slice(start, end))
+      setTotal(allExecutions.length)
+    } catch (error: any) {
+      message.error('获取执行历史失败')
+    }
+  }, [executionId, page, pageSize])
+
+  const fetchData = useCallback(async () => {
     if (!executionId) {
       navigate('/executions')
       return
     }
-    fetchData()
-  }, [executionId])
-
-  const fetchData = async () => {
-    if (!executionId) return
     
     setLoading(true)
     try {
-      const [executionResponse, historyResponse, assetsResponse] = await Promise.all([
+      const [executionResponse, assetsResponse] = await Promise.all([
         executionApi.get(parseInt(executionId)),
-        executionApi.getHistory(parseInt(executionId)),
         assetApi.list({ page: 1, page_size: 1000 }),
       ])
       
       setExecution(executionResponse.data)
-      setExecutions(historyResponse.data.data || [])
       
       // Build asset lookup map
       const assetMap = new Map<number, Asset>()
@@ -46,12 +59,27 @@ const TaskExecutionList = () => {
         assetMap.set(asset.id, asset)
       })
       setAssets(assetMap)
+      
+      // 获取执行历史（分页）
+      await fetchExecutions()
     } catch (error: any) {
       message.error('获取执行记录失败')
     } finally {
       setLoading(false)
     }
-  }
+  }, [executionId, fetchExecutions, navigate])
+
+  useEffect(() => {
+    if (executionId) {
+      fetchData()
+    }
+  }, [executionId, fetchData])
+
+  useEffect(() => {
+    if (executionId) {
+      fetchExecutions()
+    }
+  }, [executionId, fetchExecutions])
 
   const handleViewLogs = (recordId: number) => {
     navigate(`/execution-records/${recordId}/logs`)
@@ -148,9 +176,12 @@ const TaskExecutionList = () => {
       title: '操作',
       key: 'action',
       width: 150,
-      render: (_: any, record: ExecutionRecord) => (
-        <Space size="small">
+      render: (_: any, record: ExecutionRecord) => {
+        const actions = []
+        // 查看日志不需要特殊权限（已有该页面访问权限即可）
+        actions.push(
           <Button
+            key="logs"
             type="link"
             size="small"
             icon={<EyeOutlined />}
@@ -158,8 +189,11 @@ const TaskExecutionList = () => {
           >
             日志
           </Button>
-          {record.status === 'running' && (
+        )
+        if (record.status === 'running' && hasPermission('executions', 'update')) {
+          actions.push(
             <Button
+              key="cancel"
               type="link"
               danger
               size="small"
@@ -168,9 +202,10 @@ const TaskExecutionList = () => {
             >
               取消
             </Button>
-          )}
-        </Space>
-      ),
+          )
+        }
+        return <Space size="small">{actions}</Space>
+      },
     },
   ]
 
@@ -202,21 +237,23 @@ const TaskExecutionList = () => {
             {execution?.name || '执行任务'} - 执行历史
           </h2>
         </Space>
-        <Space>
-          <Button
-            type="primary"
-            icon={<PlayCircleOutlined />}
-            onClick={() => handleExecuteTask('sync')}
-          >
-            同步执行
-          </Button>
-          <Button
-            icon={<PlayCircleOutlined />}
-            onClick={() => handleExecuteTask('async')}
-          >
-            异步执行
-          </Button>
-        </Space>
+        {hasPermission('executions', 'create') && (
+          <Space>
+            <Button
+              type="primary"
+              icon={<PlayCircleOutlined />}
+              onClick={() => handleExecuteTask('sync')}
+            >
+              同步执行
+            </Button>
+            <Button
+              icon={<PlayCircleOutlined />}
+              onClick={() => handleExecuteTask('async')}
+            >
+              异步执行
+            </Button>
+          </Space>
+        )}
       </div>
 
       <Table
@@ -225,9 +262,21 @@ const TaskExecutionList = () => {
         rowKey="id"
         scroll={{ x: 'max-content' }}
         pagination={{
+          current: page,
+          pageSize: pageSize,
+          total: total,
           showSizeChanger: true,
-          showTotal: (total) => `共 ${total} 条`,
+          showQuickJumper: true,
+          showTotal: (total, range) => `第 ${range[0]}-${range[1]} 条/共 ${total} 条`,
           responsive: true,
+          onChange: (newPage, newPageSize) => {
+            setPage(newPage)
+            setPageSize(newPageSize || 20)
+          },
+          onShowSizeChange: (current, size) => {
+            setPage(1)
+            setPageSize(size)
+          },
         }}
         locale={{
           emptyText: '暂无执行记录',

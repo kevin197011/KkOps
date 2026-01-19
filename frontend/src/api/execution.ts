@@ -99,6 +99,40 @@ export interface ListTemplatesResponse {
   size: number
 }
 
+// 导入导出相关接口
+export interface ExportTemplateConfig {
+  name: string
+  description: string
+  content: string
+  type: string
+}
+
+export interface ExportTemplatesConfig {
+  version: string
+  export_at: string
+  templates: ExportTemplateConfig[]
+}
+
+export interface ImportTemplateConfig {
+  name: string
+  description?: string
+  content: string
+  type?: string
+}
+
+export interface ImportTemplatesConfig {
+  version: string
+  templates: ImportTemplateConfig[]
+}
+
+export interface ImportResult {
+  total: number
+  success: number
+  failed: number
+  errors?: string[]
+  skipped?: string[]
+}
+
 // 执行模板 API (原 task-templates)
 export const executionTemplateApi = {
   list: (page?: number, pageSize?: number) => {
@@ -112,6 +146,11 @@ export const executionTemplateApi = {
   create: (data: CreateTemplateRequest) => apiClient.post<ExecutionTemplate>('/templates', data),
   update: (id: number, data: UpdateTemplateRequest) => apiClient.put<ExecutionTemplate>(`/templates/${id}`, data),
   delete: (id: number) => apiClient.delete(`/templates/${id}`),
+  // 导出配置
+  exportConfig: () => apiClient.get<ExportTemplatesConfig>('/templates/export'),
+  // 导入配置
+  importConfig: (data: ImportTemplatesConfig) =>
+    apiClient.post<ImportResult>('/templates/import', data),
 }
 
 // 运维执行 API (原 tasks)

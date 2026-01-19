@@ -134,6 +134,59 @@ export const scheduledTaskApi = {
     apiClient.get<ValidateCronResponse>(
       `/tasks/validate-cron?cron_expression=${encodeURIComponent(cronExpression)}`
     ),
+
+  // 导出配置
+  exportConfig: () => apiClient.get<ExportScheduledTasksConfig>('/tasks/export'),
+
+  // 导入配置
+  importConfig: (data: ImportScheduledTasksConfig) =>
+    apiClient.post<ImportScheduledTasksResult>('/tasks/import', data),
+}
+
+// 导入导出相关接口
+export interface ExportScheduledTaskConfig {
+  name: string
+  description: string
+  cron_expression: string
+  template_name?: string
+  content: string
+  type: string
+  timeout: number
+  enabled: boolean
+  update_assets: boolean
+  target_hosts: string[]
+}
+
+export interface ExportScheduledTasksConfig {
+  version: string
+  export_at: string
+  tasks: ExportScheduledTaskConfig[]
+}
+
+export interface ImportScheduledTaskConfig {
+  name: string
+  description?: string
+  cron_expression: string
+  template_name?: string
+  content?: string
+  type?: string
+  timeout?: number
+  enabled?: boolean
+  update_assets?: boolean
+  target_hosts?: string[]
+}
+
+export interface ImportScheduledTasksConfig {
+  version: string
+  tasks: ImportScheduledTaskConfig[]
+}
+
+export interface ImportScheduledTasksResult {
+  total: number
+  success: number
+  failed: number
+  errors?: string[]
+  skipped?: string[]
 }
 
 // 导出默认 API

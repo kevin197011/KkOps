@@ -7,10 +7,12 @@ import { useState, useEffect } from 'react'
 import { Table, Button, Space, message, Modal, Form, Input, Tag } from 'antd'
 import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons'
 import { cloudPlatformApi, CloudPlatform, CreateCloudPlatformRequest, UpdateCloudPlatformRequest } from '@/api/cloudPlatform'
+import { usePermissionStore } from '@/stores/permission'
 
 const { TextArea } = Input
 
 const CloudPlatformList = () => {
+  const { hasPermission } = usePermissionStore()
   const [cloudPlatforms, setCloudPlatforms] = useState<CloudPlatform[]>([])
   const [loading, setLoading] = useState(false)
   const [modalVisible, setModalVisible] = useState(false)
@@ -103,29 +105,39 @@ const CloudPlatformList = () => {
       title: '操作',
       key: 'action',
       width: 150,
-      render: (_: any, record: CloudPlatform) => (
-        <Space size="small">
-          <Button
-            type="link"
-            size="small"
-            icon={<EditOutlined />}
-            onClick={() => handleEdit(record)}
-            aria-label={`编辑云平台 ${record.name}`}
-          >
-            编辑
-          </Button>
-          <Button
-            type="link"
-            danger
-            size="small"
-            icon={<DeleteOutlined />}
-            onClick={() => handleDelete(record.id)}
-            aria-label={`删除云平台 ${record.name}`}
-          >
-            删除
-          </Button>
-        </Space>
-      ),
+      render: (_: any, record: CloudPlatform) => {
+        const actions = []
+        if (hasPermission('cloud-platforms', 'update')) {
+          actions.push(
+            <Button
+              key="edit"
+              type="link"
+              size="small"
+              icon={<EditOutlined />}
+              onClick={() => handleEdit(record)}
+              aria-label={`编辑云平台 ${record.name}`}
+            >
+              编辑
+            </Button>
+          )
+        }
+        if (hasPermission('cloud-platforms', 'delete')) {
+          actions.push(
+            <Button
+              key="delete"
+              type="link"
+              danger
+              size="small"
+              icon={<DeleteOutlined />}
+              onClick={() => handleDelete(record.id)}
+              aria-label={`删除云平台 ${record.name}`}
+            >
+              删除
+            </Button>
+          )
+        }
+        return actions.length > 0 ? <Space size="small">{actions}</Space> : '-'
+      },
     },
   ]
 
