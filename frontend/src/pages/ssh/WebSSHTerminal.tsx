@@ -8,19 +8,30 @@ import { useNavigate } from 'react-router-dom'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import '@xterm/xterm/css/xterm.css'
-import { Layout, Button, message, Space, Tag, Input, Tree, Spin, Typography, theme as antdTheme, Dropdown } from 'antd'
+import { Layout, Button, message, Space, Tag, Input, Tree, Spin, Typography, theme as antdTheme, Dropdown, Modal, Progress } from 'antd'
 import type { MenuProps } from 'antd'
-import { DisconnectOutlined, ArrowLeftOutlined, CheckCircleOutlined, ReloadOutlined, FolderOutlined, FolderOpenOutlined, DatabaseOutlined, CloseOutlined, HomeOutlined, SunOutlined, MoonOutlined, CopyOutlined, CloseCircleOutlined, UserOutlined, LogoutOutlined } from '@ant-design/icons'
+import { DisconnectOutlined, ArrowLeftOutlined, CheckCircleOutlined, ReloadOutlined, FolderOutlined, FolderOpenOutlined, DatabaseOutlined, CloseOutlined, HomeOutlined, SunOutlined, MoonOutlined, CopyOutlined, CloseCircleOutlined, UserOutlined, LogoutOutlined, UploadOutlined, DownloadOutlined } from '@ant-design/icons'
 import { useAuthStore } from '@/stores/auth'
 import { authApi } from '@/api/auth'
 import { assetApi, Asset } from '@/api/asset'
 import { projectApi, Project } from '@/api/project'
 import { environmentApi, Environment } from '@/api/environment'
 import { useThemeStore } from '@/stores/theme'
+import { detectZmodemSequence, formatBytes, calculateProgress } from '@/utils/zmodem'
 
 const { Header, Sider, Content } = Layout
 const { Search } = Input
 const { Text } = Typography
+
+// ZMODEM transfer state interface
+interface ZmodemTransfer {
+  active: boolean
+  direction: 'upload' | 'download'
+  mode: 'zmodem' | 'trzsz'
+  filename?: string
+  totalBytes: number
+  bytesTransferred: number
+}
 
 // Connection state interface
 interface SSHConnection {
@@ -33,6 +44,8 @@ interface SSHConnection {
   status: 'connecting' | 'connected' | 'disconnected' | 'error'
   createdAt: number
   containerRef: React.RefObject<HTMLDivElement>
+  zmodemTransfer?: ZmodemTransfer
+  downloadChunks?: Blob[]
 }
 
 const MAX_CONNECTIONS = 10
@@ -335,6 +348,18 @@ const WebSSHTerminal = () => {
                         console.warn(`[Terminal ${terminalConnId}] Connection not found when sending input`)
                         return prev2
                       }
+                      // Check if ZMODEM transfer is active - don't send normal input during transfer
+                      if (currentConn.zmodemTransfer?.active) {
+                        // Filter out ZMODEM sequences from terminal input
+                        const zmodemCheck = detectZmodemSequence(data)
+                        if (zmodemCheck.detected) {
+                          // Don't send ZMODEM sequence to server (backend should handle it)
+                          return prev2
+                        }
+                        // During active transfer, also skip normal input
+                        return prev2
+                      }
+                      
                       if (currentConn?.ws && currentConn.ws.readyState === WebSocket.OPEN) {
                         try {
                           console.log(`[Terminal ${terminalConnId}] Sending input to WebSocket`)
@@ -568,6 +593,33 @@ const WebSSHTerminal = () => {
       // Create message handler with explicitly captured connId
       const messageConnId = connId
       ws.onmessage = (event) => {
+        // Handle binary messages (ZMODEM file data)
+        if (event.data instanceof Blob || event.data instanceof ArrayBuffer) {
+          setConnections((prev) => {
+            const conn = prev.get(messageConnId)
+            if (!conn || !conn.zmodemTransfer?.active || conn.zmodemTransfer.direction !== 'download') {
+              return prev
+            }
+            
+            // Collect download chunks
+            const blob = event.data instanceof Blob ? event.data : new Blob([event.data])
+            const newChunks = [...(conn.downloadChunks || []), blob]
+            
+            // Update bytes received
+            const newConnections = new Map(prev)
+            newConnections.set(messageConnId, {
+              ...conn,
+              downloadChunks: newChunks,
+              zmodemTransfer: {
+                ...conn.zmodemTransfer,
+                bytesTransferred: newChunks.reduce((sum, chunk) => sum + chunk.size, 0),
+              },
+            })
+            return newConnections
+          })
+          return
+        }
+        
         try {
           const msg = JSON.parse(event.data)
           console.log(`[WebSocket ${messageConnId}] Message received:`, msg.type, msg)
@@ -705,6 +757,16 @@ const WebSSHTerminal = () => {
               
               const data = msg.data || msg.content || ''
               const dataStr = typeof data === 'string' ? data : String(data)
+              
+              // Check if this looks like a rz/sz waiting message that should be hidden
+              const isWaitingMessage = /(rz|sz)\s+waiting\s+(to\s+)?(receive|send)/i.test(dataStr)
+              
+              if (isWaitingMessage) {
+                // Don't write waiting messages immediately - they will be cleared when zmodem_start arrives
+                // Just skip this output
+                return shouldUpdateStatus ? newConnections : prev
+              }
+              
               // Write to this specific terminal instance directly
               if (dataStr) {
                 updatedConn.terminal.write(dataStr)
@@ -723,6 +785,432 @@ const WebSSHTerminal = () => {
                 }
               }
               return shouldUpdateStatus ? newConnections : prev
+            })
+          } else if (msg.type === 'zmodem_start') {
+            // ZMODEM transfer started
+            const direction = msg.data?.direction || 'upload'
+            const mode = msg.data?.mode || 'zmodem'
+            
+            console.log(`[ZMODEM ${messageConnId}] Transfer started: ${direction} (${mode})`)
+            
+            // Clear any rz/sz waiting messages from terminal
+            setConnections((prev) => {
+              const conn = prev.get(messageConnId)
+              if (conn?.terminal) {
+                // Clear the line that contains "rz waiting" or "sz waiting"
+                // Use ANSI escape sequences to clear the current and previous lines
+                // First, move cursor up one line (in case waiting message is on previous line)
+                conn.terminal.write('\x1b[1A') // Move cursor up one line
+                conn.terminal.write('\x1b[2K') // Clear entire line (from cursor to end)
+                conn.terminal.write('\r') // Move cursor to beginning of line
+                // Also clear current line in case message is there
+                conn.terminal.write('\x1b[2K') // Clear entire current line
+                conn.terminal.write('\r') // Move cursor to beginning
+              }
+              return prev
+            })
+            
+            if (direction === 'upload') {
+              // For upload, show modal to get user activation before triggering file picker
+              // This is required due to browser security: "File chooser dialog can only be shown with a user activation"
+              
+              // Helper function to trigger file upload with user activation
+              const triggerFileUploadWithUserActivation = (connId: string, uploadMode: string) => {
+                // Create hidden file input
+                const fileInput = document.createElement('input')
+                fileInput.type = 'file'
+                fileInput.style.display = 'none'
+                fileInput.style.position = 'fixed'
+                fileInput.style.top = '-1000px'
+                document.body.appendChild(fileInput)
+                
+                // Use a flag to track if file was selected
+                let fileSelected = false
+              
+                fileInput.onchange = (e) => {
+                  fileSelected = true
+                  const target = e.target as HTMLInputElement
+                  const file = target.files?.[0]
+                  if (!file) {
+                    if (document.body.contains(fileInput)) {
+                      document.body.removeChild(fileInput)
+                    }
+                    // Cancel transfer if no file selected
+                    setConnections((prev) => {
+                      const conn = prev.get(connId)
+                      if (conn?.ws && conn.ws.readyState === WebSocket.OPEN) {
+                        conn.ws.send(JSON.stringify({ type: 'zmodem_cancel' }))
+                      }
+                      return prev
+                    })
+                    return
+                  }
+                  
+                  // Get the latest connection state and start file upload
+                  setConnections((prev) => {
+                    const currentConn = prev.get(connId)
+                    if (!currentConn?.ws) {
+                      if (document.body.contains(fileInput)) {
+                        document.body.removeChild(fileInput)
+                      }
+                      return prev
+                    }
+                    
+                    console.log(`[ZMODEM ${connId}] File selected: ${file.name}, size: ${file.size} bytes`)
+                    
+                    // Update state with transfer info
+                    const newMap = new Map(prev)
+                    newMap.set(connId, {
+                      ...currentConn,
+                      zmodemTransfer: {
+                        active: true,
+                        direction: 'upload',
+                        mode: uploadMode as 'zmodem' | 'trzsz',
+                        filename: file.name,
+                        totalBytes: file.size,
+                        bytesTransferred: 0,
+                      },
+                      downloadChunks: undefined,
+                    })
+                    
+                    // Send file size to backend
+                    currentConn.ws.send(JSON.stringify({
+                      type: 'zmodem_data_size',
+                      data: {
+                        filename: file.name,
+                        size: file.size,
+                      },
+                    }))
+                    
+                    // Read and send file in chunks
+                    const chunkSize = 32768 // 32KB chunks
+                    const fileReader = new FileReader()
+                    let offset = 0
+                    
+                    fileReader.onload = (loadEvent) => {
+                      setConnections((prev2) => {
+                        const conn = prev2.get(connId)
+                        if (!conn?.ws || !loadEvent.target?.result) return prev2
+                        
+                        const chunk = loadEvent.target.result as ArrayBuffer
+                        conn.ws.send(chunk)
+                        
+                        offset += chunk.byteLength
+                        
+                        // Update progress
+                        const newMap2 = new Map(prev2)
+                        const updatedConn = newMap2.get(connId)
+                        if (updatedConn) {
+                          newMap2.set(connId, {
+                            ...updatedConn,
+                            zmodemTransfer: {
+                              ...updatedConn.zmodemTransfer!,
+                              bytesTransferred: offset,
+                            },
+                          })
+                        }
+                        return newMap2
+                      })
+                      
+                      // Continue reading if more data
+                      if (offset < file.size) {
+                        const slice = file.slice(offset, offset + chunkSize)
+                        fileReader.readAsArrayBuffer(slice)
+                      } else {
+                        // File upload complete - all data sent
+                        console.log(`[ZMODEM ${connId}] File upload completed: ${file.size} bytes sent`)
+                        
+                        // Update state to reflect completion
+                        setConnections((prev2) => {
+                          const newMap2 = new Map(prev2)
+                          const updatedConn = newMap2.get(connId)
+                          if (updatedConn) {
+                            newMap2.set(connId, {
+                              ...updatedConn,
+                              zmodemTransfer: {
+                                ...updatedConn.zmodemTransfer!,
+                                bytesTransferred: file.size,
+                              },
+                            })
+                          }
+                          return newMap2
+                        })
+                        
+                        // Wait a short time for server to process, then notify backend
+                        setTimeout(() => {
+                          setConnections((prev2) => {
+                            const conn = prev2.get(connId)
+                            if (conn?.ws && conn.ws.readyState === WebSocket.OPEN) {
+                              conn.ws.send(JSON.stringify({
+                                type: 'zmodem_complete',
+                              }))
+                              console.log(`[ZMODEM ${connId}] Sent zmodem_complete to backend`)
+                            }
+                            return prev2
+                          })
+                        }, 500)
+                        
+                        // Set up timeout to auto-clear transfer state if no response
+                        const timeoutId = setTimeout(() => {
+                          setConnections((prev2) => {
+                            const conn = prev2.get(connId)
+                            if (conn?.zmodemTransfer?.active) {
+                              console.warn(`[ZMODEM ${connId}] Transfer timeout, clearing state`)
+                              const newMap2 = new Map(prev2)
+                              newMap2.set(connId, {
+                                ...conn,
+                                zmodemTransfer: undefined,
+                                downloadChunks: undefined,
+                              })
+                              message.warning('文件上传超时，但可能已完成')
+                              return newMap2
+                            }
+                            return prev2
+                          })
+                        }, 5000)
+                        
+                        // Store timeout ID
+                        setConnections((prev2) => {
+                          const conn = prev2.get(connId)
+                          if (conn) {
+                            const newMap2 = new Map(prev2)
+                            // @ts-ignore
+                            newMap2.set(connId, {
+                              ...conn,
+                              _zmodemTimeoutId: timeoutId,
+                            })
+                            return newMap2
+                          }
+                          return prev2
+                        })
+                        
+                        // Clean up file input
+                        if (document.body.contains(fileInput)) {
+                          document.body.removeChild(fileInput)
+                        }
+                        
+                        message.success('文件上传中，等待服务器确认...')
+                      }
+                    }
+                    
+                    fileReader.onerror = () => {
+                      console.error(`[ZMODEM ${connId}] File read error`)
+                      message.error('文件读取失败')
+                      if (document.body.contains(fileInput)) {
+                        document.body.removeChild(fileInput)
+                      }
+                      setConnections((prev2) => {
+                        const updatedConn = prev2.get(connId)
+                        if (!updatedConn) return prev2
+                        const newMap2 = new Map(prev2)
+                        newMap2.set(connId, {
+                          ...updatedConn,
+                          zmodemTransfer: undefined,
+                        })
+                        return newMap2
+                      })
+                    }
+                    
+                    // Start reading file
+                    const firstSlice = file.slice(0, Math.min(chunkSize, file.size))
+                    fileReader.readAsArrayBuffer(firstSlice)
+                    
+                    return newMap
+                  })
+                }
+                
+                fileInput.oncancel = () => {
+                  console.log(`[ZMODEM ${connId}] File picker canceled`)
+                  // Cancel transfer on backend
+                  setConnections((prev) => {
+                    const conn = prev.get(connId)
+                    if (conn?.ws && conn.ws.readyState === WebSocket.OPEN) {
+                      conn.ws.send(JSON.stringify({ type: 'zmodem_cancel' }))
+                    }
+                    
+                    // Clean up
+                    const newMap = new Map(prev)
+                    const updatedConn = newMap.get(connId)
+                    if (updatedConn) {
+                      newMap.set(connId, {
+                        ...updatedConn,
+                        zmodemTransfer: undefined,
+                        downloadChunks: undefined,
+                      })
+                    }
+                    
+                    if (document.body.contains(fileInput)) {
+                      document.body.removeChild(fileInput)
+                    }
+                    return newMap
+                  })
+                }
+                
+                // Trigger file picker immediately (we have user activation from modal)
+                try {
+                  fileInput.click()
+                  console.log(`[ZMODEM ${connId}] File picker triggered`)
+                  
+                  // Cleanup if no file selected after 5 seconds
+                  setTimeout(() => {
+                    if (document.body.contains(fileInput) && !fileSelected) {
+                      console.warn(`[ZMODEM ${connId}] File picker timeout, cleaning up`)
+                      document.body.removeChild(fileInput)
+                      // Cancel transfer
+                      setConnections((prev) => {
+                        const conn = prev.get(connId)
+                        if (conn?.ws && conn.ws.readyState === WebSocket.OPEN) {
+                          conn.ws.send(JSON.stringify({ type: 'zmodem_cancel' }))
+                        }
+                        return prev
+                      })
+                    }
+                  }, 5000)
+                } catch (error) {
+                  console.error(`[ZMODEM ${connId}] Error triggering file picker:`, error)
+                  message.error('无法打开文件选择器')
+                  // Cancel transfer on error
+                  setConnections((prev) => {
+                    const conn = prev.get(connId)
+                    if (conn?.ws && conn.ws.readyState === WebSocket.OPEN) {
+                      conn.ws.send(JSON.stringify({ type: 'zmodem_cancel' }))
+                    }
+                    return prev
+                  })
+                }
+              }
+              
+              // Show modal to get user activation
+              Modal.confirm({
+                title: '文件上传',
+                content: '服务器正在等待接收文件，请点击"选择文件"按钮来选择要上传的文件。',
+                okText: '选择文件',
+                cancelText: '取消',
+                onOk: () => {
+                  // Now we have user activation, trigger file picker
+                  triggerFileUploadWithUserActivation(messageConnId, mode)
+                },
+                onCancel: () => {
+                  // User canceled, send cancel message to backend
+                  setConnections((prev) => {
+                    const conn = prev.get(messageConnId)
+                    if (conn?.ws && conn.ws.readyState === WebSocket.OPEN) {
+                      conn.ws.send(JSON.stringify({ type: 'zmodem_cancel' }))
+                    }
+                    return prev
+                  })
+                },
+              })
+            } else if (direction === 'download') {
+              // Update connection state for download direction
+              setConnections((prev) => {
+                const conn = prev.get(messageConnId)
+                if (!conn) return prev
+                
+                const newConnections = new Map(prev)
+                // For download, initialize state and prepare to receive chunks
+                newConnections.set(messageConnId, {
+                  ...conn,
+                  zmodemTransfer: {
+                    active: true,
+                    direction: 'download',
+                    mode: mode as 'zmodem' | 'trzsz',
+                    totalBytes: 0, // Will be updated when we know the size
+                    bytesTransferred: 0,
+                  },
+                  downloadChunks: [],
+                })
+                
+                return newConnections
+              })
+            }
+          } else if (msg.type === 'zmodem_progress') {
+            // Update transfer progress
+            const bytesTransferred = msg.data?.bytes_transferred || 0
+            const totalBytes = msg.data?.total_bytes || 0
+            
+            setConnections((prev) => {
+              const conn = prev.get(messageConnId)
+              if (!conn || !conn.zmodemTransfer) return prev
+              
+              const newConnections = new Map(prev)
+              newConnections.set(messageConnId, {
+                ...conn,
+                zmodemTransfer: {
+                  ...conn.zmodemTransfer,
+                  bytesTransferred,
+                  totalBytes,
+                },
+              })
+              return newConnections
+            })
+          } else if (msg.type === 'zmodem_end') {
+            // Transfer completed or canceled
+            const success = msg.data?.success !== false
+            const messageText = msg.data?.message || (success ? '传输完成' : '传输已取消')
+            
+            console.log(`[ZMODEM ${messageConnId}] Transfer ended: ${success ? 'success' : 'failed'}`)
+            
+            setConnections((prev) => {
+              const conn = prev.get(messageConnId)
+              if (!conn) return prev
+              
+              // Clear timeout if exists
+              // @ts-ignore
+              if (conn._zmodemTimeoutId) {
+                clearTimeout(conn._zmodemTimeoutId)
+              }
+              
+              // If download, assemble chunks and trigger download
+              if (conn.zmodemTransfer?.direction === 'download' && conn.downloadChunks && conn.downloadChunks.length > 0) {
+                const blob = new Blob(conn.downloadChunks, { type: 'application/octet-stream' })
+                const url = URL.createObjectURL(blob)
+                const a = document.createElement('a')
+                a.href = url
+                a.download = conn.zmodemTransfer.filename || 'download'
+                document.body.appendChild(a)
+                a.click()
+                document.body.removeChild(a)
+                URL.revokeObjectURL(url)
+                
+                if (success) {
+                  message.success('文件下载完成')
+                }
+              } else if (success && conn.zmodemTransfer?.direction === 'upload') {
+                // Update success message
+                message.success('文件上传完成')
+              } else if (!success) {
+                message.error(messageText)
+              }
+              
+              // Clear transfer state
+              const newConnections = new Map(prev)
+              newConnections.set(messageConnId, {
+                ...conn,
+                zmodemTransfer: undefined,
+                downloadChunks: undefined,
+                // @ts-ignore
+                _zmodemTimeoutId: undefined,
+              })
+              return newConnections
+            })
+          } else if (msg.type === 'zmodem_error') {
+            // Transfer error
+            const errorMsg = msg.data?.message || '传输失败'
+            console.error(`[ZMODEM ${messageConnId}] Error:`, errorMsg)
+            message.error(errorMsg)
+            
+            setConnections((prev) => {
+              const conn = prev.get(messageConnId)
+              if (!conn) return prev
+              
+              const newConnections = new Map(prev)
+              newConnections.set(messageConnId, {
+                ...conn,
+                zmodemTransfer: undefined,
+                downloadChunks: undefined,
+              })
+              return newConnections
             })
           } else if (msg.type === 'error') {
             const errorMsg = msg.data || msg.message || '连接错误'
@@ -865,6 +1353,33 @@ const WebSSHTerminal = () => {
   // Check if asset has active connections
   const hasActiveConnection = (assetId: number): boolean => {
     return getConnectionCount(assetId) > 0
+  }
+
+  // Handle ZMODEM transfer cancellation
+  const handleZmodemCancel = (connId: string) => {
+    const conn = connections.get(connId)
+    if (!conn || !conn.ws || !conn.zmodemTransfer?.active) return
+    
+    // Send cancel message to backend
+    if (conn.ws.readyState === WebSocket.OPEN) {
+      conn.ws.send(JSON.stringify({ type: 'zmodem_cancel' }))
+    }
+    
+    // Clear transfer state
+    setConnections((prev) => {
+      const newConnections = new Map(prev)
+      const updatedConn = newConnections.get(connId)
+      if (updatedConn) {
+        newConnections.set(connId, {
+          ...updatedConn,
+          zmodemTransfer: undefined,
+          downloadChunks: undefined,
+        })
+      }
+      return newConnections
+    })
+    
+    message.info('传输已取消')
   }
 
   const handleDisconnect = (connId?: string) => {
@@ -2152,6 +2667,69 @@ const WebSSHTerminal = () => {
           </div>
         </Content>
       </Layout>
+      
+      {/* ZMODEM Transfer Progress Modal */}
+      {activeConnection?.zmodemTransfer?.active && (
+        <Modal
+          title={
+            <Space>
+              {activeConnection.zmodemTransfer.direction === 'upload' ? (
+                <UploadOutlined />
+              ) : (
+                <DownloadOutlined />
+              )}
+              {activeConnection.zmodemTransfer.direction === 'upload' ? '文件上传中' : '文件下载中'}
+            </Space>
+          }
+          open={true}
+          closable={false}
+          maskClosable={false}
+          footer={null}
+          width={400}
+          centered
+          destroyOnHidden
+          styles={{
+            content: {
+              backgroundColor: token.colorBgContainer,
+              borderRadius: token.borderRadiusLG,
+              boxShadow: token.boxShadowSecondary,
+            },
+            header: {
+              borderBottom: `1px solid ${token.colorBorderSecondary}`,
+              padding: '16px 24px',
+            },
+          }}
+        >
+          <div style={{ padding: '16px 0' }}>
+            <Text strong>{activeConnection.zmodemTransfer.filename || '未知文件'}</Text>
+            <Progress
+              percent={calculateProgress(
+                activeConnection.zmodemTransfer.bytesTransferred,
+                activeConnection.zmodemTransfer.totalBytes
+              )}
+              status="active"
+              showInfo
+              style={{ marginTop: 16 }}
+            />
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8 }}>
+              <Text type="secondary">
+                已传输: {formatBytes(activeConnection.zmodemTransfer.bytesTransferred)}
+              </Text>
+              <Text type="secondary">
+                总大小: {formatBytes(activeConnection.zmodemTransfer.totalBytes)}
+              </Text>
+            </div>
+            <Button
+              danger
+              block
+              style={{ marginTop: 24 }}
+              onClick={() => handleZmodemCancel(activeConnection.id)}
+            >
+              取消传输
+            </Button>
+          </div>
+        </Modal>
+      )}
     </Layout>
   )
 }

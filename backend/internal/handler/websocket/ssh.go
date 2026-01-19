@@ -6,8 +6,11 @@
 package websocket
 
 import (
+	"bytes"
+	"encoding/json"
 	"io"
 	"log"
+	"strings"
 	"sync"
 	"time"
 
@@ -21,6 +24,78 @@ import (
 	"github.com/kkops/backend/internal/service/sshkey"
 	"github.com/kkops/backend/internal/utils"
 )
+
+// zmodemState tracks ZMODEM file transfer state
+type zmodemState struct {
+	mu            sync.Mutex
+	active        bool
+	direction     string // "upload" or "download"
+	mode          string // "zmodem" or "trzsz"
+	filename      string
+	totalSize     int64
+	bytesSent     int64
+	bytesReceived int64
+	canceled      bool
+}
+
+// detectZmodemSequence detects ZMODEM protocol initiation sequences
+// Returns: detected, direction, mode, sequence position
+// ZMODEM sequences can be:
+//   - **B (two asterisks followed by B) for upload/rz
+//   - **G (two asterisks followed by G) for download/sz
+//   - **\x18B (may include control characters like CAN 0x18) for upload
+//   - **\x18G (may include control characters like CAN 0x18) for download
+func detectZmodemSequence(data []byte) (bool, string, string, int) {
+	// Check for classic ZMODEM: **B or **G
+	// Also handle cases where there may be control characters between ** and B/G
+	// Search for pattern: ** followed by optional control chars, then B or G
+	// Limit search to reasonable length to avoid false positives
+	const maxSequenceLen = 10 // Maximum length of sequence including control chars
+
+	for i := 0; i < len(data)-2 && i < len(data); i++ {
+		if data[i] == 0x2A && data[i+1] == 0x2A {
+			// Found **, now look for B or G, possibly with control chars in between
+			// Check direct match first: **B or **G
+			if i+2 < len(data) {
+				if data[i+2] == 0x42 { // 'B'
+					return true, "upload", "zmodem", i
+				}
+				if data[i+2] == 0x47 { // 'G'
+					return true, "download", "zmodem", i
+				}
+			}
+
+			// Then check for pattern with control characters: **[\x00-\x1F]*B or **[\x00-\x1F]*G
+			// Look ahead up to maxSequenceLen bytes
+			j := i + 2
+			for j < len(data) && j < i+maxSequenceLen {
+				if data[j] == 0x42 { // 'B'
+					return true, "upload", "zmodem", i
+				}
+				if data[j] == 0x47 { // 'G'
+					return true, "download", "zmodem", i
+				}
+				// If we encounter a printable character (not B/G), stop searching
+				if data[j] >= 0x20 {
+					break
+				}
+				j++
+			}
+		}
+	}
+
+	// Also check as string for trzsz protocol
+	dataStr := string(data)
+	if pos := strings.Index(dataStr, "::TRZSZ:"); pos >= 0 {
+		if strings.Contains(dataStr[pos:], "TRANSFER:UPLOAD") || strings.Contains(dataStr, "trz") {
+			return true, "upload", "trzsz", pos
+		}
+		if strings.Contains(dataStr[pos:], "TRANSFER:DOWNLOAD") || strings.Contains(dataStr, "tsz") {
+			return true, "download", "trzsz", pos
+		}
+	}
+	return false, "", "", -1
+}
 
 // SSHTerminalHandler handles SSH terminal WebSocket connections
 // WS /ws/ssh/connect
@@ -140,6 +215,10 @@ func handleSSHConnect(conn *websocket.Conn, msg map[string]interface{}, db *gorm
 		return
 	}
 
+	// Log asset configuration for debugging
+	log.Printf("Asset loaded: id=%d, hostname=%s, ip=%s, ssh_port=%d, ssh_user=%s",
+		asset.ID, asset.HostName, asset.IP, asset.SSHPort, asset.SSHUser)
+
 	// Check asset status
 	if asset.Status != "active" {
 		conn.WriteJSON(map[string]interface{}{
@@ -170,11 +249,15 @@ func handleSSHConnect(conn *websocket.Conn, msg map[string]interface{}, db *gorm
 		return
 	}
 
-	// Establish SSH connection
+	// Establish SSH connection - use asset's configured SSH port
 	port := asset.SSHPort
 	if port == 0 {
-		port = 22
+		port = 22 // Default SSH port
+		log.Printf("SSH port not configured for asset %d, using default port 22", assetID)
 	}
+
+	log.Printf("Connecting to SSH: %s@%s:%d (asset_id=%d, configured_ssh_port=%d)",
+		username, asset.IP, port, assetID, asset.SSHPort)
 
 	var sshClient *utils.SSHClient
 	timeout := 30 * time.Second
@@ -308,9 +391,17 @@ func handleSSHConnect(conn *websocket.Conn, msg map[string]interface{}, db *gorm
 		},
 	})
 
+	// Initialize ZMODEM state
+	zmodemState := &zmodemState{}
+
 	// Set up bidirectional data streaming
 	var wg sync.WaitGroup
 	done := make(chan bool, 1)
+
+	// Buffers for detecting ZMODEM sequences (separate for stdout and stderr)
+	stdoutBuffer := &bytes.Buffer{}
+	stderrBuffer := &bytes.Buffer{}
+	const bufferSize = 1024
 
 	// Stream stdout to WebSocket
 	wg.Add(1)
@@ -324,10 +415,274 @@ func handleSSHConnect(conn *websocket.Conn, msg map[string]interface{}, db *gorm
 			default:
 				n, err := stdout.Read(buffer)
 				if n > 0 {
-					conn.WriteJSON(map[string]interface{}{
-						"type": "output",
-						"data": string(buffer[:n]),
-					})
+					data := buffer[:n]
+
+					// Check if ZMODEM transfer is active
+					zmodemState.mu.Lock()
+					isActive := zmodemState.active
+					activeDirection := zmodemState.direction
+					zmodemState.mu.Unlock()
+
+					if isActive {
+
+						if activeDirection == "download" {
+							// During download, send raw binary data
+							if err := conn.WriteMessage(websocket.BinaryMessage, data); err != nil {
+								log.Printf("Error writing binary data: %v", err)
+								return
+							}
+							zmodemState.mu.Lock()
+							zmodemState.bytesReceived += int64(n)
+							zmodemState.mu.Unlock()
+						} else {
+							// During upload, filter out ZMODEM protocol data but allow normal text
+							// This allows completion messages and errors to pass through
+							dataStr := string(data)
+
+							// Check for upload completion indicators
+							// Look for shell prompt patterns that indicate command completion
+							hasCompletionIndicator := false
+
+							// Check for common shell prompt patterns
+							promptPatterns := []string{
+								"root@", // root user prompt
+								"# ",    // root prompt ending
+								"$ ",    // regular user prompt
+								"~#",    // home directory + root prompt
+								"~$",    // home directory + user prompt
+								":~# ",  // full path prompt
+								":~$ ",  // full path prompt
+							}
+
+							for _, pattern := range promptPatterns {
+								if strings.Contains(dataStr, pattern) {
+									// Additional check: make sure it's not part of "waiting" message
+									if !strings.Contains(dataStr, "waiting") {
+										hasCompletionIndicator = true
+										break
+									}
+								}
+							}
+
+							// Check for ZMODEM protocol sequences
+							hasZmodemProtocol := false
+							if strings.Contains(dataStr, "**") {
+								// Check if it's actually a ZMODEM sequence start
+								for i := 0; i <= len(data)-3; i++ {
+									if data[i] == 0x2A && data[i+1] == 0x2A {
+										// Check if followed by B or G (with optional control chars)
+										j := i + 2
+										for j < len(data) && j < i+10 {
+											if data[j] == 0x42 || data[j] == 0x47 { // B or G
+												hasZmodemProtocol = true
+												break
+											}
+											if data[j] >= 0x20 {
+												break // Printable char that's not B/G, not protocol
+											}
+											j++
+										}
+										if hasZmodemProtocol {
+											break
+										}
+									}
+								}
+							}
+
+							if hasZmodemProtocol {
+								// This is ZMODEM protocol data, ignore it
+								continue
+							}
+
+							// If we see completion indicators, auto-deactivate ZMODEM mode
+							if hasCompletionIndicator {
+								zmodemState.mu.Lock()
+								if zmodemState.active && zmodemState.direction == "upload" {
+									log.Printf("Upload completion detected from server output, deactivating ZMODEM mode")
+									zmodemState.active = false
+									stdoutBuffer.Reset()
+									stderrBuffer.Reset()
+
+									// Send completion message
+									conn.WriteJSON(map[string]interface{}{
+										"type": "zmodem_end",
+										"data": map[string]interface{}{
+											"success": true,
+											"message": "Transfer completed",
+										},
+									})
+								}
+								zmodemState.mu.Unlock()
+							}
+
+							// Send output (completion messages, errors, normal output, etc.)
+							conn.WriteJSON(map[string]interface{}{
+								"type": "output",
+								"data": dataStr,
+							})
+							continue
+						}
+					}
+
+					// Normal output processing (when ZMODEM is not active)
+					if !isActive {
+						// For normal output: prioritize immediate sending, with minimal buffering for ZMODEM detection
+						// Strategy: Send new data immediately, but check if it might be start of ZMODEM sequence
+						// Only buffer the tail to check for sequences that span packet boundaries
+
+						var detected bool
+						var direction, mode string
+						var seqPos int
+
+						// First, check if new data itself contains ZMODEM sequence
+						detected, direction, mode, seqPos = detectZmodemSequence(data)
+						if detected {
+							log.Printf("ZMODEM sequence detected in stdout new data: direction=%s, mode=%s, pos=%d", direction, mode, seqPos)
+
+							// Send any buffered data first
+							if stdoutBuffer.Len() > 0 {
+								conn.WriteJSON(map[string]interface{}{
+									"type": "output",
+									"data": stdoutBuffer.String(),
+								})
+								stdoutBuffer.Reset()
+							}
+
+							// Send text before ZMODEM sequence (if any)
+							if seqPos > 0 {
+								conn.WriteJSON(map[string]interface{}{
+									"type": "output",
+									"data": string(data[:seqPos]),
+								})
+							}
+
+							// Activate ZMODEM mode
+							zmodemState.mu.Lock()
+							zmodemState.active = true
+							zmodemState.direction = direction
+							zmodemState.mode = mode
+							zmodemState.bytesReceived = 0
+							zmodemState.bytesSent = 0
+							zmodemState.canceled = false
+							zmodemState.mu.Unlock()
+
+							conn.WriteJSON(map[string]interface{}{
+								"type": "zmodem_start",
+								"data": map[string]interface{}{
+									"direction": direction,
+									"mode":      mode,
+								},
+							})
+
+							stdoutBuffer.Reset()
+							continue
+						}
+
+						// Append new data to buffer (for checking sequences that span boundaries)
+						stdoutBuffer.Write(data)
+						bufBytes := stdoutBuffer.Bytes()
+
+						// Check for ZMODEM sequence in the combined buffer (including previous tail)
+						detected, direction, mode, seqPos = detectZmodemSequence(bufBytes)
+						if detected {
+							log.Printf("ZMODEM sequence detected in stdout buffer: direction=%s, mode=%s, pos=%d", direction, mode, seqPos)
+
+							// Check if text before sequence contains rz/sz waiting messages that should be hidden
+							// Find the start of the waiting message (if any)
+							hideStart := seqPos
+							if seqPos > 0 {
+								textBefore := string(bufBytes[:seqPos])
+								// Look for common rz/sz waiting patterns
+								waitingPatterns := []string{"rz waiting", "sz waiting", "waiting to receive", "waiting to send"}
+								for _, pattern := range waitingPatterns {
+									if idx := strings.LastIndex(textBefore, pattern); idx >= 0 {
+										// Find the start of the line containing this pattern
+										lineStart := strings.LastIndex(textBefore[:idx], "\n")
+										if lineStart >= 0 {
+											hideStart = lineStart + 1
+										} else {
+											hideStart = idx
+										}
+										break
+									}
+								}
+							}
+
+							// Send text before the hiding point (if any)
+							if hideStart > 0 {
+								conn.WriteJSON(map[string]interface{}{
+									"type": "output",
+									"data": string(bufBytes[:hideStart]),
+								})
+							}
+
+							// Activate ZMODEM mode
+							zmodemState.mu.Lock()
+							zmodemState.active = true
+							zmodemState.direction = direction
+							zmodemState.mode = mode
+							zmodemState.bytesReceived = 0
+							zmodemState.bytesSent = 0
+							zmodemState.canceled = false
+							zmodemState.mu.Unlock()
+
+							conn.WriteJSON(map[string]interface{}{
+								"type": "zmodem_start",
+								"data": map[string]interface{}{
+									"direction": direction,
+									"mode":      mode,
+								},
+							})
+
+							stdoutBuffer.Reset()
+							continue
+						}
+
+						// No ZMODEM sequence detected: send data immediately, keep only minimal tail
+						// ZMODEM sequence can be **B, **G, or **\x18B, **\x18G (with control chars)
+						// Keep 3-4 bytes to handle sequences that may span packet boundaries
+						// We keep 3 bytes to cover **X or **\x18 patterns
+						const keepSize = 3
+						if len(bufBytes) > keepSize {
+							// Check if the tail we want to keep starts with ** (potential ZMODEM sequence start)
+							// If not, we can safely send more bytes
+							sendLen := len(bufBytes) - keepSize
+							tail := bufBytes[sendLen:]
+
+							// If tail doesn't start with **, we can send everything
+							// This prevents unnecessary retention of non-ZMODEM data
+							if len(tail) < 2 || !(tail[0] == 0x2A && tail[1] == 0x2A) {
+								// No ** at start of tail, safe to send all
+								conn.WriteJSON(map[string]interface{}{
+									"type": "output",
+									"data": string(bufBytes),
+								})
+								stdoutBuffer.Reset()
+							} else {
+								// Tail starts with **, keep it for next check
+								conn.WriteJSON(map[string]interface{}{
+									"type": "output",
+									"data": string(bufBytes[:sendLen]),
+								})
+								stdoutBuffer.Reset()
+								stdoutBuffer.Write(tail)
+							}
+						} else if len(bufBytes) > 0 {
+							// Buffer is small (<= keepSize): check if it might be start of ZMODEM
+							// Only keep if it starts with **, otherwise send immediately
+							if len(bufBytes) >= 2 && bufBytes[0] == 0x2A && bufBytes[1] == 0x2A {
+								// Might be start of ZMODEM sequence, keep it
+								// Don't send yet
+							} else {
+								// Not a potential ZMODEM sequence, send immediately
+								conn.WriteJSON(map[string]interface{}{
+									"type": "output",
+									"data": string(bufBytes),
+								})
+								stdoutBuffer.Reset()
+							}
+						}
+					}
 				}
 				if err != nil {
 					if err != io.EOF {
@@ -351,10 +706,153 @@ func handleSSHConnect(conn *websocket.Conn, msg map[string]interface{}, db *gorm
 			default:
 				n, err := stderr.Read(buffer)
 				if n > 0 {
-					conn.WriteJSON(map[string]interface{}{
-						"type": "output",
-						"data": string(buffer[:n]),
-					})
+					data := buffer[:n]
+
+					// Check if ZMODEM transfer is active
+					zmodemState.mu.Lock()
+					isActive := zmodemState.active
+					zmodemState.mu.Unlock()
+
+					if isActive {
+						// During ZMODEM transfer, ignore stderr output (it's protocol data)
+						// Only stdout is used for download data
+						continue
+					}
+
+					// Check for ZMODEM sequences in stderr too (use separate buffer)
+					// Strategy same as stdout: prioritize immediate sending
+
+					var detected bool
+					var direction, mode string
+					var seqPos int
+
+					// First, check if new data itself contains ZMODEM sequence
+					detected, direction, mode, seqPos = detectZmodemSequence(data)
+					if detected {
+						log.Printf("ZMODEM sequence detected in stderr new data: direction=%s, mode=%s, pos=%d", direction, mode, seqPos)
+
+						// Send any buffered data first
+						if stderrBuffer.Len() > 0 {
+							conn.WriteJSON(map[string]interface{}{
+								"type": "output",
+								"data": stderrBuffer.String(),
+							})
+							stderrBuffer.Reset()
+						}
+
+						// Send text before ZMODEM sequence (if any)
+						if seqPos > 0 {
+							conn.WriteJSON(map[string]interface{}{
+								"type": "output",
+								"data": string(data[:seqPos]),
+							})
+						}
+
+						// Activate ZMODEM mode
+						zmodemState.mu.Lock()
+						zmodemState.active = true
+						zmodemState.direction = direction
+						zmodemState.mode = mode
+						zmodemState.bytesReceived = 0
+						zmodemState.bytesSent = 0
+						zmodemState.canceled = false
+						zmodemState.mu.Unlock()
+
+						conn.WriteJSON(map[string]interface{}{
+							"type": "zmodem_start",
+							"data": map[string]interface{}{
+								"direction": direction,
+								"mode":      mode,
+							},
+						})
+
+						stderrBuffer.Reset()
+						continue
+					}
+
+					// Append new data to buffer (for checking sequences that span boundaries)
+					stderrBuffer.Write(data)
+					bufBytes := stderrBuffer.Bytes()
+
+					// Check for ZMODEM sequence in the combined buffer
+					detected, direction, mode, seqPos = detectZmodemSequence(bufBytes)
+					if detected {
+						log.Printf("ZMODEM sequence detected in stderr buffer: direction=%s, mode=%s, pos=%d", direction, mode, seqPos)
+
+						// Send text before ZMODEM sequence (if any)
+						if seqPos > 0 {
+							conn.WriteJSON(map[string]interface{}{
+								"type": "output",
+								"data": string(bufBytes[:seqPos]),
+							})
+						}
+
+						// Activate ZMODEM mode
+						zmodemState.mu.Lock()
+						zmodemState.active = true
+						zmodemState.direction = direction
+						zmodemState.mode = mode
+						zmodemState.bytesReceived = 0
+						zmodemState.bytesSent = 0
+						zmodemState.canceled = false
+						zmodemState.mu.Unlock()
+
+						conn.WriteJSON(map[string]interface{}{
+							"type": "zmodem_start",
+							"data": map[string]interface{}{
+								"direction": direction,
+								"mode":      mode,
+							},
+						})
+
+						stderrBuffer.Reset()
+						continue
+					}
+
+					// No ZMODEM sequence detected: send data immediately, keep only minimal tail
+					// ZMODEM sequence can be **B, **G, or **\x18B, **\x18G (with control chars)
+					// Keep 3-4 bytes to handle sequences that may span packet boundaries
+					// We keep 3 bytes to cover **X or **\x18 patterns
+					const keepSize = 3
+					if len(bufBytes) > keepSize {
+						// Check if the tail we want to keep starts with ** (potential ZMODEM sequence start)
+						// If not, we can safely send more bytes
+						sendLen := len(bufBytes) - keepSize
+						tail := bufBytes[sendLen:]
+
+						// If tail doesn't start with **, we can send everything
+						// This prevents unnecessary retention of non-ZMODEM data
+						if len(tail) < 2 || !(tail[0] == 0x2A && tail[1] == 0x2A) {
+							// No ** at start of tail, safe to send all
+							conn.WriteJSON(map[string]interface{}{
+								"type": "output",
+								"data": string(bufBytes),
+							})
+							stderrBuffer.Reset()
+						} else {
+							// Tail starts with **, keep it for next check
+							conn.WriteJSON(map[string]interface{}{
+								"type": "output",
+								"data": string(bufBytes[:sendLen]),
+							})
+							stderrBuffer.Reset()
+							stderrBuffer.Write(tail)
+						}
+					} else if len(bufBytes) > 0 {
+						// Buffer is small (<= keepSize): check if it might be start of ZMODEM
+						// Only keep if it starts with **, otherwise send immediately
+						if len(bufBytes) >= 2 && bufBytes[0] == 0x2A && bufBytes[1] == 0x2A {
+							// Might be start of ZMODEM sequence, keep it
+							// Don't send yet
+						} else {
+							// Not a potential ZMODEM sequence, send immediately
+							conn.WriteJSON(map[string]interface{}{
+								"type": "output",
+								"data": string(bufBytes),
+							})
+							stderrBuffer.Reset()
+						}
+					}
 				}
 				if err != nil {
 					if err != io.EOF {
@@ -366,12 +864,61 @@ func handleSSHConnect(conn *websocket.Conn, msg map[string]interface{}, db *gorm
 		}
 	}()
 
-	// Handle WebSocket messages
+	// Handle WebSocket messages (both JSON and binary)
 	for {
-		var wsMsg map[string]interface{}
-		if err := conn.ReadJSON(&wsMsg); err != nil {
+		messageType, messageData, err := conn.ReadMessage()
+		if err != nil {
 			log.Printf("WebSocket read error: %v", err)
 			break
+		}
+
+		// Check if ZMODEM transfer is active
+		zmodemState.mu.Lock()
+		isZmodemActive := zmodemState.active
+		zmodemState.mu.Unlock()
+
+		if messageType == websocket.BinaryMessage && isZmodemActive {
+			// Binary data during ZMODEM upload: forward to SSH stdin
+			zmodemState.mu.Lock()
+			direction := zmodemState.direction
+			zmodemState.mu.Unlock()
+
+			if direction == "upload" {
+				if _, err := stdin.Write(messageData); err != nil {
+					log.Printf("Error writing to stdin: %v", err)
+					break
+				}
+
+				// Update progress
+				zmodemState.mu.Lock()
+				zmodemState.bytesSent += int64(len(messageData))
+				bytesSent := zmodemState.bytesSent
+				totalSize := zmodemState.totalSize
+				zmodemState.mu.Unlock()
+
+				// Send progress update
+				if totalSize > 0 {
+					conn.WriteJSON(map[string]interface{}{
+						"type": "zmodem_progress",
+						"data": map[string]interface{}{
+							"bytes_transferred": bytesSent,
+							"total_bytes":       totalSize,
+						},
+					})
+				}
+			}
+			continue
+		}
+
+		// Parse JSON message
+		if messageType != websocket.TextMessage {
+			continue // Skip non-text messages when not in ZMODEM mode
+		}
+
+		var wsMsg map[string]interface{}
+		if err := json.Unmarshal(messageData, &wsMsg); err != nil {
+			log.Printf("Error parsing JSON message: %v", err)
+			continue
 		}
 
 		msgType, ok := wsMsg["type"].(string)
@@ -384,7 +931,14 @@ func handleSSHConnect(conn *websocket.Conn, msg map[string]interface{}, db *gorm
 			// Send input to SSH session
 			if inputData, ok := wsMsg["data"].(map[string]interface{}); ok {
 				if data, ok := inputData["data"].(string); ok {
-					stdin.Write([]byte(data))
+					// Check if we should skip input during active transfer
+					zmodemState.mu.Lock()
+					isActive := zmodemState.active
+					zmodemState.mu.Unlock()
+
+					if !isActive {
+						stdin.Write([]byte(data))
+					}
 				}
 			}
 		case "resize":
@@ -403,6 +957,68 @@ func handleSSHConnect(conn *websocket.Conn, msg map[string]interface{}, db *gorm
 					rows = newRows
 				}
 			}
+		case "zmodem_cancel":
+			// Cancel ZMODEM transfer
+			log.Printf("ZMODEM transfer canceled by user")
+			zmodemState.mu.Lock()
+			zmodemState.canceled = true
+			zmodemState.active = false
+			zmodemState.mu.Unlock()
+
+			// Clear buffers
+			stdoutBuffer.Reset()
+			stderrBuffer.Reset()
+
+			conn.WriteJSON(map[string]interface{}{
+				"type": "zmodem_end",
+				"data": map[string]interface{}{
+					"success": false,
+					"message": "Transfer canceled",
+				},
+			})
+		case "zmodem_data_size":
+			// Frontend sends file size for progress tracking
+			if sizeData, ok := wsMsg["data"].(map[string]interface{}); ok {
+				if size, ok := sizeData["size"].(float64); ok {
+					zmodemState.mu.Lock()
+					zmodemState.totalSize = int64(size)
+					if filename, ok := sizeData["filename"].(string); ok {
+						zmodemState.filename = filename
+					}
+					zmodemState.mu.Unlock()
+				}
+			}
+		case "zmodem_complete":
+			// Transfer completed successfully (frontend has sent all file data)
+			log.Printf("ZMODEM transfer completed (file data sent)")
+
+			// Immediately send zmodem_end to frontend for UI update
+			// We'll keep ZMODEM mode active briefly to allow server responses through
+			conn.WriteJSON(map[string]interface{}{
+				"type": "zmodem_end",
+				"data": map[string]interface{}{
+					"success": true,
+					"message": "Transfer completed",
+				},
+			})
+
+			// Set up timeout to deactivate ZMODEM mode after a short delay
+			// This allows server completion responses (prompt, etc.) to pass through
+			go func() {
+				time.Sleep(500 * time.Millisecond) // Short delay to allow server responses
+				zmodemState.mu.Lock()
+				if zmodemState.active && zmodemState.direction == "upload" {
+					log.Printf("ZMODEM upload cleanup: deactivating mode")
+					zmodemState.active = false
+					zmodemState.mu.Unlock()
+
+					// Clear buffers
+					stdoutBuffer.Reset()
+					stderrBuffer.Reset()
+				} else {
+					zmodemState.mu.Unlock()
+				}
+			}()
 		case "disconnect":
 			// User requested disconnect
 			done <- true
