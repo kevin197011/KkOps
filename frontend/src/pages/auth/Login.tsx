@@ -64,12 +64,12 @@ const Login = () => {
     initColumns()
 
     const draw = () => {
-      // 半透明黑色背景（产生拖尾效果）
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.05)'
+      // 半透明白色背景（产生拖尾效果）- 适合浅色背景
+      ctx.fillStyle = 'rgba(241, 245, 249, 0.05)'
       ctx.fillRect(0, 0, canvas.width, canvas.height)
 
-      // Matrix 绿色
-      ctx.fillStyle = '#00ff41'
+      // Matrix 颜色 - 使用更深的灰色以增强可见度
+      ctx.fillStyle = '#94A3B8'
       ctx.font = `${fontSize}px monospace`
 
       // 绘制每列字符
@@ -79,8 +79,8 @@ const Login = () => {
         const x = i * fontSize
         const y = drops[i] * fontSize
 
-        // 绘制字符（透明度渐变）
-        const opacity = Math.min(1, (canvas.height - y) / (fontSize * 10))
+        // 绘制字符（透明度渐变）- 增强可见度
+        const opacity = Math.min(0.5, (canvas.height - y) / (fontSize * 10))
         ctx.globalAlpha = opacity
         ctx.fillText(char, x, y)
 
@@ -149,6 +149,49 @@ const Login = () => {
   return (
     <ConfigProvider theme={lightTheme}>
       <App>
+        <style>{`
+          .login-input.ant-input,
+          .login-input.ant-input-password {
+            background: rgba(255, 255, 255, 0.9) !important;
+            border-color: rgba(226, 232, 240, 0.8) !important;
+            color: #1E293B !important;
+            transition: all 0.3s ease !important;
+          }
+          
+          .login-input.ant-input:hover,
+          .login-input.ant-input-password:hover {
+            border-color: rgba(203, 213, 225, 1) !important;
+            box-shadow: 0 0 0 2px rgba(226, 232, 240, 0.5) !important;
+          }
+          
+          .login-input.ant-input:focus,
+          .login-input.ant-input-password:focus,
+          .login-input.ant-input-focused,
+          .login-input.ant-input-password-focused {
+            border-color: rgba(148, 163, 184, 0.8) !important;
+            box-shadow: 0 0 0 2px rgba(226, 232, 240, 0.6) !important;
+            background: rgba(255, 255, 255, 1) !important;
+          }
+          
+          .login-input.ant-input::placeholder,
+          .login-input.ant-input-password input::placeholder {
+            color: rgba(148, 163, 184, 0.6) !important;
+          }
+          
+          .ant-form-item-label > label {
+            color: #64748B !important;
+          }
+          
+          .ant-form-item-explain-error {
+            color: #EF4444 !important;
+          }
+          
+          .ant-btn-loading {
+            background: #64748B !important;
+            border-color: #64748B !important;
+            opacity: 0.8;
+          }
+        `}</style>
         <div 
         ref={containerRef}
         style={{
@@ -158,11 +201,11 @@ const Login = () => {
           minHeight: '100vh',
           padding: '16px',
           position: 'relative',
-          background: '#000000',
+          background: '#F1F5F9',
           overflow: 'hidden',
         }}
       >
-      {/* Matrix 网格背景 */}
+      {/* 网格背景 */}
       <div style={{
         position: 'absolute',
         top: 0,
@@ -170,11 +213,11 @@ const Login = () => {
         right: 0,
         bottom: 0,
         backgroundImage: `
-          linear-gradient(rgba(0, 255, 65, 0.05) 1px, transparent 1px),
-          linear-gradient(90deg, rgba(0, 255, 65, 0.05) 1px, transparent 1px)
+          linear-gradient(rgba(148, 163, 184, 0.3) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(148, 163, 184, 0.3) 1px, transparent 1px)
         `,
         backgroundSize: '40px 40px',
-        opacity: 0.3,
+        opacity: 0.6,
         pointerEvents: 'none',
         zIndex: 0,
       }} />
@@ -184,20 +227,25 @@ const Login = () => {
           maxWidth: 400,
           position: 'relative',
           zIndex: 1,
-          background: 'rgba(255, 255, 255, 0.95)',
-          backdropFilter: 'blur(10px)',
-          border: '1px solid rgba(226, 232, 240, 0.8)',
-          boxShadow: '0 8px 32px rgba(0, 0, 0, 0.1)',
+          background: 'rgba(255, 255, 255, 0.7)',
+          backdropFilter: 'blur(12px)',
+          border: '1px solid rgba(203, 213, 225, 0.6)',
+          boxShadow: '0 4px 24px rgba(0, 0, 0, 0.08)',
           animation: 'login-fade-in-up 0.6s ease-out',
-          transition: 'transform 0.3s ease, box-shadow 0.3s ease',
+          transition: 'transform 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease',
         }}
         onMouseEnter={(e) => {
           e.currentTarget.style.transform = 'translateY(-2px)'
-          e.currentTarget.style.boxShadow = '0 12px 40px rgba(0, 0, 0, 0.15)'
+          e.currentTarget.style.boxShadow = '0 8px 32px rgba(0, 0, 0, 0.12)'
+          e.currentTarget.style.borderColor = 'rgba(203, 213, 225, 0.8)'
         }}
         onMouseLeave={(e) => {
           e.currentTarget.style.transform = 'translateY(0)'
-          e.currentTarget.style.boxShadow = '0 8px 32px rgba(0, 0, 0, 0.1)'
+          e.currentTarget.style.boxShadow = '0 4px 24px rgba(0, 0, 0, 0.08)'
+          e.currentTarget.style.borderColor = 'rgba(203, 213, 225, 0.6)'
+        }}
+        bodyStyle={{
+          padding: '32px',
         }}
       >
         <div style={{
@@ -206,19 +254,32 @@ const Login = () => {
           alignItems: 'center',
           marginBottom: 24,
         }}>
-          <img
-            src="/logo-light.svg"
-            alt="KkOps"
-            style={{
-              height: 40,
-              width: 'auto',
-              marginBottom: 8,
-            }}
-          />
+          <div style={{
+            padding: '12px',
+            borderRadius: '8px',
+            background: 'rgba(248, 250, 252, 0.6)',
+            backdropFilter: 'blur(4px)',
+            border: '1px solid rgba(226, 232, 240, 0.6)',
+            marginBottom: 16,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}>
+            <img
+              src="/logo-light.svg"
+              alt="KkOps"
+              style={{
+                height: 48,
+                width: 'auto',
+                opacity: 0.9,
+              }}
+            />
+          </div>
           <div style={{
             fontSize: 18,
             fontWeight: 600,
-            color: '#1E293B',
+            color: '#475569',
+            letterSpacing: '0.5px',
           }}>
             智能运维管理平台
           </div>
@@ -231,39 +292,66 @@ const Login = () => {
         >
           <Form.Item
             name="username"
-            label="用户名"
+            label={<span style={{ color: '#64748B' }}>用户名</span>}
             rules={[{ required: true, message: '请输入用户名' }]}
           >
             <Input
-              prefix={<UserOutlined />}
+              prefix={<UserOutlined style={{ color: '#94A3B8' }} />}
               placeholder="用户名"
               size="large"
               autoComplete="username"
               aria-label="用户名输入框"
+              style={{
+                background: 'rgba(255, 255, 255, 0.9)',
+                borderColor: 'rgba(226, 232, 240, 0.8)',
+                color: '#1E293B',
+              }}
+              className="login-input"
             />
           </Form.Item>
 
           <Form.Item
             name="password"
-            label="密码"
+            label={<span style={{ color: '#64748B' }}>密码</span>}
             rules={[{ required: true, message: '请输入密码' }]}
           >
             <Input.Password
-              prefix={<LockOutlined />}
+              prefix={<LockOutlined style={{ color: '#94A3B8' }} />}
               placeholder="密码"
               size="large"
               autoComplete="current-password"
               aria-label="密码输入框"
+              style={{
+                background: 'rgba(255, 255, 255, 0.9)',
+                borderColor: 'rgba(226, 232, 240, 0.8)',
+                color: '#1E293B',
+              }}
+              className="login-input"
             />
           </Form.Item>
 
           <Form.Item>
             <Button
-              type="primary"
               htmlType="submit"
               loading={loading}
               block
               size="large"
+              style={{
+                background: '#64748B',
+                borderColor: '#64748B',
+                color: '#FFFFFF',
+                fontWeight: 500,
+                boxShadow: '0 2px 8px rgba(100, 116, 139, 0.2)',
+                transition: 'all 0.3s ease',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = '#475569'
+                e.currentTarget.style.boxShadow = '0 4px 12px rgba(100, 116, 139, 0.3)'
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = '#64748B'
+                e.currentTarget.style.boxShadow = '0 2px 8px rgba(100, 116, 139, 0.2)'
+              }}
             >
               登录
             </Button>
