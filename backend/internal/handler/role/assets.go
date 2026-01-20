@@ -29,7 +29,7 @@ func NewAssetHandler(authzService *authorization.Service) *AssetHandler {
 // @Security BearerAuth
 // @Param id path int true "角色ID"
 // @Success 200 {object} map[string]interface{}
-// @Router /roles/{id}/assets [get]
+// @Router /api/v1/roles/{id}/assets [get]
 func (h *AssetHandler) GetRoleAssets(c *gin.Context) {
 	roleID, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
@@ -58,7 +58,7 @@ type GrantRoleAssetsRequest struct {
 // @Param id path int true "角色ID"
 // @Param body body GrantRoleAssetsRequest true "资产ID列表"
 // @Success 200 {object} map[string]interface{}
-// @Router /roles/{id}/assets [post]
+// @Router /api/v1/roles/{id}/assets [post]
 func (h *AssetHandler) GrantRoleAssets(c *gin.Context) {
 	roleID, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
@@ -97,7 +97,7 @@ type RevokeRoleAssetsRequest struct {
 // @Param id path int true "角色ID"
 // @Param body body RevokeRoleAssetsRequest true "资产ID列表"
 // @Success 200 {object} map[string]interface{}
-// @Router /roles/{id}/assets [delete]
+// @Router /api/v1/roles/{id}/assets [delete]
 func (h *AssetHandler) RevokeRoleAssets(c *gin.Context) {
 	roleID, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
@@ -130,7 +130,7 @@ func (h *AssetHandler) RevokeRoleAssets(c *gin.Context) {
 // @Param id path int true "角色ID"
 // @Param asset_id path int true "资产ID"
 // @Success 204 "No Content"
-// @Router /roles/{id}/assets/{asset_id} [delete]
+// @Router /api/v1/roles/{id}/assets/{asset_id} [delete]
 func (h *AssetHandler) RevokeSingleRoleAsset(c *gin.Context) {
 	roleID, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {

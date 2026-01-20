@@ -127,6 +127,17 @@ func (h *Handler) ChangePassword(c *gin.Context) {
 }
 
 // CreateAPIToken handles API token creation
+// @Summary Create API token
+// @Description Create a new API token for a user (token is only shown once)
+// @Tags users
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param id path int true "User ID"
+// @Param request body auth.CreateAPITokenRequest true "Create API token request"
+// @Success 201 {object} auth.APITokenResponse
+// @Failure 400 {object} map[string]string
+// @Router /api/v1/users/{id}/tokens [post]
 func (h *Handler) CreateAPIToken(c *gin.Context) {
 	userID, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
@@ -150,6 +161,16 @@ func (h *Handler) CreateAPIToken(c *gin.Context) {
 }
 
 // ListAPITokens handles API token list retrieval
+// @Summary List API tokens
+// @Description Get list of API tokens for a user
+// @Tags users
+// @Produce json
+// @Security BearerAuth
+// @Param id path int true "User ID"
+// @Success 200 {array} auth.APITokenResponse
+// @Failure 400 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Router /api/v1/users/{id}/tokens [get]
 func (h *Handler) ListAPITokens(c *gin.Context) {
 	userID, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
@@ -166,21 +187,91 @@ func (h *Handler) ListAPITokens(c *gin.Context) {
 	c.JSON(http.StatusOK, tokens)
 }
 
-// RevokeAPIToken handles API token revocation
-func (h *Handler) RevokeAPIToken(c *gin.Context) {
-	tokenID, err := strconv.ParseUint(c.Param("id"), 10, 32)
+// GetAPIToken handles API token retrieval
+// @Summary Get API token
+// @Description Get full API token by ID (for the token owner)
+// @Tags users
+// @Produce json
+// @Security BearerAuth
+// @Param id path int true "User ID"
+// @Param token_id path int true "Token ID"
+// @Success 200 {object} auth.APITokenResponse
+// @Failure 400 {object} map[string]string
+// @Failure 401 {object} map[string]string
+// @Failure 404 {object} map[string]string
+// @Router /api/v1/users/{id}/tokens/{token_id} [get]
+func (h *Handler) GetAPIToken(c *gin.Context) {
+	userID, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user ID"})
+		return
+	}
+
+	tokenID, err := strconv.ParseUint(c.Param("token_id"), 10, 32)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid token ID"})
 		return
 	}
 
-	userID, exists := c.Get("user_id")
+	// Verify the requesting user matches the token owner
+	requestingUserID, exists := c.Get("user_id")
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 		return
 	}
 
-	if err := h.service.RevokeAPIToken(userID.(uint), uint(tokenID)); err != nil {
+	if requestingUserID.(uint) != uint(userID) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+		return
+	}
+
+	resp, err := h.service.GetAPIToken(uint(userID), uint(tokenID))
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, resp)
+}
+
+// DeleteAPIToken handles API token deletion
+// @Summary Delete API token
+// @Description Delete an API token by ID
+// @Tags users
+// @Security BearerAuth
+// @Param id path int true "User ID"
+// @Param token_id path int true "Token ID"
+// @Success 204
+// @Failure 400 {object} map[string]string
+// @Failure 401 {object} map[string]string
+// @Failure 404 {object} map[string]string
+// @Router /api/v1/users/{id}/tokens/{token_id} [delete]
+func (h *Handler) DeleteAPIToken(c *gin.Context) {
+	userID, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user ID"})
+		return
+	}
+
+	tokenID, err := strconv.ParseUint(c.Param("token_id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid token ID"})
+		return
+	}
+
+	// Verify the requesting user matches the token owner
+	requestingUserID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
+	if requestingUserID.(uint) != uint(userID) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+		return
+	}
+
+	if err := h.service.DeleteAPIToken(uint(userID), uint(tokenID)); err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "token not found"})
 		return
 	}

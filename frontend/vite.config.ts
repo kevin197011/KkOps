@@ -23,6 +23,10 @@ export default defineConfig({
         target: process.env.API_PROXY_TARGET || 'http://localhost:8080',
         changeOrigin: true,
       },
+      '/swagger': {
+        target: process.env.API_PROXY_TARGET || 'http://localhost:8080',
+        changeOrigin: true,
+      },
       '/ws': {
         target: process.env.WS_PROXY_TARGET || process.env.API_PROXY_TARGET || 'http://localhost:8080',
         ws: true,

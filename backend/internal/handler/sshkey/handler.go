@@ -27,7 +27,15 @@ func NewHandler(service *sshkey.Service) *Handler {
 }
 
 // ListSSHKeys lists all SSH keys for the current user
-// GET /api/v1/ssh/keys
+// @Summary List SSH keys
+// @Description Get list of all SSH keys for the current user
+// @Tags ssh-keys
+// @Produce json
+// @Security BearerAuth
+// @Success 200 {object} map[string]interface{} "Response with data array"
+// @Failure 401 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Router /api/v1/ssh/keys [get]
 func (h *Handler) ListSSHKeys(c *gin.Context) {
 	userID, exists := c.Get("user_id")
 	if !exists {
@@ -45,7 +53,17 @@ func (h *Handler) ListSSHKeys(c *gin.Context) {
 }
 
 // GetSSHKey gets an SSH key by ID
-// GET /api/v1/ssh/keys/:id
+// @Summary Get SSH key
+// @Description Get SSH key by ID for the current user
+// @Tags ssh-keys
+// @Produce json
+// @Security BearerAuth
+// @Param id path int true "SSH Key ID"
+// @Success 200 {object} map[string]interface{} "Response with data object"
+// @Failure 400 {object} map[string]string
+// @Failure 401 {object} map[string]string
+// @Failure 404 {object} map[string]string
+// @Router /api/v1/ssh/keys/{id} [get]
 func (h *Handler) GetSSHKey(c *gin.Context) {
 	userID, exists := c.Get("user_id")
 	if !exists {
@@ -70,7 +88,17 @@ func (h *Handler) GetSSHKey(c *gin.Context) {
 }
 
 // CreateSSHKey creates a new SSH key
-// POST /api/v1/ssh/keys
+// @Summary Create SSH key
+// @Description Create a new SSH key for the current user
+// @Tags ssh-keys
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param request body sshkey.CreateSSHKeyRequest true "Create SSH key request"
+// @Success 201 {object} map[string]interface{} "Response with data object"
+// @Failure 400 {object} map[string]string
+// @Failure 401 {object} map[string]string
+// @Router /api/v1/ssh/keys [post]
 func (h *Handler) CreateSSHKey(c *gin.Context) {
 	userID, exists := c.Get("user_id")
 	if !exists {
@@ -94,7 +122,19 @@ func (h *Handler) CreateSSHKey(c *gin.Context) {
 }
 
 // UpdateSSHKey updates an SSH key
-// PUT /api/v1/ssh/keys/:id
+// @Summary Update SSH key
+// @Description Update an SSH key for the current user
+// @Tags ssh-keys
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param id path int true "SSH Key ID"
+// @Param request body sshkey.UpdateSSHKeyRequest true "Update SSH key request"
+// @Success 200 {object} map[string]interface{} "Response with data object"
+// @Failure 400 {object} map[string]string
+// @Failure 401 {object} map[string]string
+// @Failure 404 {object} map[string]string
+// @Router /api/v1/ssh/keys/{id} [put]
 func (h *Handler) UpdateSSHKey(c *gin.Context) {
 	userID, exists := c.Get("user_id")
 	if !exists {
@@ -125,7 +165,16 @@ func (h *Handler) UpdateSSHKey(c *gin.Context) {
 }
 
 // DeleteSSHKey deletes an SSH key
-// DELETE /api/v1/ssh/keys/:id
+// @Summary Delete SSH key
+// @Description Delete an SSH key for the current user
+// @Tags ssh-keys
+// @Security BearerAuth
+// @Param id path int true "SSH Key ID"
+// @Success 200 {object} map[string]string "Response with message"
+// @Failure 400 {object} map[string]string
+// @Failure 401 {object} map[string]string
+// @Failure 404 {object} map[string]string
+// @Router /api/v1/ssh/keys/{id} [delete]
 func (h *Handler) DeleteSSHKey(c *gin.Context) {
 	userID, exists := c.Get("user_id")
 	if !exists {
@@ -153,7 +202,18 @@ func (h *Handler) DeleteSSHKey(c *gin.Context) {
 }
 
 // TestSSHKey tests an SSH key connection
-// POST /api/v1/ssh/keys/:id/test
+// @Summary Test SSH key connection
+// @Description Test SSH key connection to a host
+// @Tags ssh-keys
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param id path int true "SSH Key ID"
+// @Param request body sshkey.TestSSHKeyRequest true "Test SSH key request"
+// @Success 200 {object} map[string]string "Response with message"
+// @Failure 400 {object} map[string]string
+// @Failure 401 {object} map[string]string
+// @Router /api/v1/ssh/keys/{id}/test [post]
 func (h *Handler) TestSSHKey(c *gin.Context) {
 	userID, exists := c.Get("user_id")
 	if !exists {

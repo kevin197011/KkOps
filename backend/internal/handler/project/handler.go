@@ -25,6 +25,17 @@ func NewHandler(service *project.Service) *Handler {
 }
 
 // CreateProject handles project creation
+// @Summary Create project
+// @Description Create a new project
+// @Tags projects
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param request body project.CreateProjectRequest true "Create project request"
+// @Success 201 {object} project.ProjectResponse
+// @Failure 400 {object} map[string]string
+// @Failure 401 {object} map[string]string
+// @Router /api/v1/projects [post]
 func (h *Handler) CreateProject(c *gin.Context) {
 	userID, exists := c.Get("user_id")
 	if !exists {
@@ -48,6 +59,16 @@ func (h *Handler) CreateProject(c *gin.Context) {
 }
 
 // GetProject handles project retrieval
+// @Summary Get project
+// @Description Get project by ID
+// @Tags projects
+// @Produce json
+// @Security BearerAuth
+// @Param id path int true "Project ID"
+// @Success 200 {object} project.ProjectResponse
+// @Failure 400 {object} map[string]string
+// @Failure 404 {object} map[string]string
+// @Router /api/v1/projects/{id} [get]
 func (h *Handler) GetProject(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
@@ -65,6 +86,14 @@ func (h *Handler) GetProject(c *gin.Context) {
 }
 
 // ListProjects handles project list retrieval
+// @Summary List projects
+// @Description Get list of all projects
+// @Tags projects
+// @Produce json
+// @Security BearerAuth
+// @Success 200 {array} project.ProjectResponse
+// @Failure 500 {object} map[string]string
+// @Router /api/v1/projects [get]
 func (h *Handler) ListProjects(c *gin.Context) {
 	projects, err := h.service.ListProjects()
 	if err != nil {
@@ -76,6 +105,18 @@ func (h *Handler) ListProjects(c *gin.Context) {
 }
 
 // UpdateProject handles project update
+// @Summary Update project
+// @Description Update project information
+// @Tags projects
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param id path int true "Project ID"
+// @Param request body project.UpdateProjectRequest true "Update project request"
+// @Success 200 {object} project.ProjectResponse
+// @Failure 400 {object} map[string]string
+// @Failure 404 {object} map[string]string
+// @Router /api/v1/projects/{id} [put]
 func (h *Handler) UpdateProject(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
@@ -99,6 +140,15 @@ func (h *Handler) UpdateProject(c *gin.Context) {
 }
 
 // DeleteProject handles project deletion
+// @Summary Delete project
+// @Description Delete a project by ID
+// @Tags projects
+// @Security BearerAuth
+// @Param id path int true "Project ID"
+// @Success 204
+// @Failure 400 {object} map[string]string
+// @Failure 404 {object} map[string]string
+// @Router /api/v1/projects/{id} [delete]
 func (h *Handler) DeleteProject(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {

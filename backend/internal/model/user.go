@@ -52,16 +52,17 @@ type Department struct {
 
 // APIToken represents an API token for programmatic access
 type APIToken struct {
-	ID          uint           `gorm:"primaryKey" json:"id"`
-	UserID      uint           `gorm:"not null;index" json:"user_id"`
-	User        User           `gorm:"foreignKey:UserID" json:"user,omitempty"`
-	Name        string         `gorm:"not null;size:100" json:"name"`
-	TokenHash   string         `gorm:"uniqueIndex;not null;size:255" json:"-"`
-	ExpiresAt   *time.Time     `json:"expires_at"`
-	LastUsedAt  *time.Time     `json:"last_used_at"`
-	Status      string         `gorm:"default:active;size:20" json:"status"` // active, disabled
-	Description string         `gorm:"type:text" json:"description"`
-	CreatedAt   time.Time      `json:"created_at"`
-	UpdatedAt   time.Time      `json:"updated_at"`
-	DeletedAt   gorm.DeletedAt `gorm:"index" json:"-"`
+	ID            uint           `gorm:"primaryKey" json:"id"`
+	UserID        uint           `gorm:"not null;index" json:"user_id"`
+	User          User           `gorm:"foreignKey:UserID" json:"user,omitempty"`
+	Name          string         `gorm:"not null;size:100" json:"name"`
+	TokenHash     string         `gorm:"uniqueIndex;not null;size:255" json:"-"`
+	TokenEncrypted string        `gorm:"type:text" json:"-"` // Encrypted token for retrieval
+	ExpiresAt     *time.Time     `json:"expires_at"`
+	LastUsedAt    *time.Time     `json:"last_used_at"`
+	Status        string         `gorm:"default:active;size:20" json:"status"` // active, disabled
+	Description   string         `gorm:"type:text" json:"description"`
+	CreatedAt     time.Time      `json:"created_at"`
+	UpdatedAt     time.Time      `json:"updated_at"`
+	DeletedAt     gorm.DeletedAt `gorm:"index" json:"-"`
 }

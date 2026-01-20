@@ -81,8 +81,10 @@ export const userApi = {
     apiClient.get<APITokenResponse[]>(`/users/${userId}/tokens`),
   createToken: (userId: number, data: CreateAPITokenRequest) =>
     apiClient.post<APITokenResponse>(`/users/${userId}/tokens`, data),
-  revokeToken: (tokenId: number) =>
-    apiClient.delete(`/tokens/${tokenId}`),
+  getToken: (userId: number, tokenId: number) =>
+    apiClient.get<APITokenResponse>(`/users/${userId}/tokens/${tokenId}`),
+  deleteToken: (userId: number, tokenId: number) =>
+    apiClient.delete(`/users/${userId}/tokens/${tokenId}`),
 }
 
 // API Token 相关类型

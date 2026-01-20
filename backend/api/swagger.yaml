@@ -1,5 +1,174 @@
 basePath: /api/v1
 definitions:
+  asset.AssetResponse:
+    properties:
+      cloud_platform:
+        $ref: '#/definitions/asset.CloudPlatformInfo'
+      cloud_platform_id:
+        type: integer
+      cpu:
+        type: string
+      created_at:
+        type: string
+      description:
+        type: string
+      disk:
+        type: string
+      environment_id:
+        type: integer
+      hostName:
+        type: string
+      id:
+        type: integer
+      ip:
+        type: string
+      memory:
+        type: string
+      project_id:
+        type: integer
+      ssh_key_id:
+        type: integer
+      ssh_port:
+        type: integer
+      ssh_user:
+        type: string
+      status:
+        type: string
+      tags:
+        items:
+          $ref: '#/definitions/asset.TagInfo'
+        type: array
+      updated_at:
+        type: string
+    type: object
+  asset.CloudPlatformInfo:
+    properties:
+      description:
+        type: string
+      id:
+        type: integer
+      name:
+        type: string
+    type: object
+  asset.CreateAssetRequest:
+    properties:
+      cloud_platform_id:
+        type: integer
+      cpu:
+        type: string
+      description:
+        type: string
+      disk:
+        type: string
+      environment_id:
+        type: integer
+      hostName:
+        type: string
+      ip:
+        type: string
+      memory:
+        type: string
+      project_id:
+        type: integer
+      ssh_key_id:
+        type: integer
+      ssh_port:
+        type: integer
+      ssh_user:
+        type: string
+      status:
+        type: string
+      tag_ids:
+        items:
+          type: integer
+        type: array
+    required:
+    - hostName
+    type: object
+  asset.TagInfo:
+    properties:
+      color:
+        type: string
+      id:
+        type: integer
+      name:
+        type: string
+    type: object
+  asset.UpdateAssetRequest:
+    properties:
+      cloud_platform_id:
+        type: integer
+      cpu:
+        type: string
+      description:
+        type: string
+      disk:
+        type: string
+      environment_id:
+        type: integer
+      hostName:
+        type: string
+      ip:
+        type: string
+      memory:
+        type: string
+      project_id:
+        type: integer
+      ssh_key_id:
+        type: integer
+      ssh_port:
+        type: integer
+      ssh_user:
+        type: string
+      status:
+        type: string
+      tag_ids:
+        items:
+          type: integer
+        type: array
+    type: object
+  auth.APITokenResponse:
+    properties:
+      created_at:
+        type: string
+      description:
+        type: string
+      expires_at:
+        type: string
+      id:
+        type: integer
+      name:
+        type: string
+      prefix:
+        type: string
+      status:
+        type: string
+      token:
+        description: Only shown once on creation
+        type: string
+    type: object
+  auth.ChangePasswordRequest:
+    properties:
+      new_password:
+        minLength: 6
+        type: string
+      old_password:
+        type: string
+    required:
+    - new_password
+    - old_password
+    type: object
+  auth.CreateAPITokenRequest:
+    properties:
+      description:
+        type: string
+      expires_at:
+        type: string
+      name:
+        type: string
+    required:
+    - name
+    type: object
   auth.LoginRequest:
     properties:
       password:
@@ -36,6 +205,1182 @@ definitions:
       username:
         type: string
     type: object
+  category.CategoryResponse:
+    properties:
+      created_at:
+        type: string
+      description:
+        type: string
+      id:
+        type: integer
+      name:
+        type: string
+      parent_id:
+        type: integer
+      updated_at:
+        type: string
+    type: object
+  category.CreateCategoryRequest:
+    properties:
+      description:
+        type: string
+      name:
+        type: string
+      parent_id:
+        type: integer
+    required:
+    - name
+    type: object
+  category.UpdateCategoryRequest:
+    properties:
+      description:
+        type: string
+      name:
+        type: string
+    type: object
+  cloudplatform.CloudPlatformResponse:
+    properties:
+      created_at:
+        type: string
+      description:
+        type: string
+      id:
+        type: integer
+      name:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  cloudplatform.CreateCloudPlatformRequest:
+    properties:
+      description:
+        type: string
+      name:
+        type: string
+    required:
+    - name
+    type: object
+  cloudplatform.UpdateCloudPlatformRequest:
+    properties:
+      description:
+        type: string
+      name:
+        type: string
+    type: object
+  dashboard.EnvironmentAssetCount:
+    properties:
+      count:
+        type: integer
+      environment_id:
+        type: integer
+      environment_name:
+        type: string
+    type: object
+  dashboard.ProjectAssetCount:
+    properties:
+      count:
+        type: integer
+      project_id:
+        type: integer
+      project_name:
+        type: string
+    type: object
+  dashboard.RecentActivity:
+    properties:
+      created_at:
+        type: string
+      description:
+        type: string
+      id:
+        type: integer
+      status:
+        type: string
+      title:
+        type: string
+      type:
+        description: '"task_execution", "asset_created", "user_login"'
+        type: string
+    type: object
+  dashboard.StatsResponse:
+    properties:
+      assets_by_environment:
+        description: 资产按环境分布
+        items:
+          $ref: '#/definitions/dashboard.EnvironmentAssetCount'
+        type: array
+      assets_by_project:
+        description: 资产按项目分布
+        items:
+          $ref: '#/definitions/dashboard.ProjectAssetCount'
+        type: array
+      assets_by_status:
+        additionalProperties:
+          format: int64
+          type: integer
+        description: 资产状态统计
+        type: object
+      recent_activities:
+        description: 最近活动
+        items:
+          $ref: '#/definitions/dashboard.RecentActivity'
+        type: array
+      task_execution_stats:
+        allOf:
+        - $ref: '#/definitions/dashboard.TaskExecutionStats'
+        description: 任务执行统计
+      total_assets:
+        description: 基础统计
+        type: integer
+      total_projects:
+        type: integer
+      total_tasks:
+        type: integer
+      total_users:
+        type: integer
+    type: object
+  dashboard.TaskExecutionStats:
+    properties:
+      cancelled:
+        type: integer
+      failed:
+        type: integer
+      pending:
+        type: integer
+      running:
+        type: integer
+      success:
+        type: integer
+      total:
+        type: integer
+    type: object
+  deployment.CreateModuleRequest:
+    properties:
+      asset_ids:
+        items:
+          type: integer
+        type: array
+      deploy_script:
+        type: string
+      description:
+        type: string
+      environment_id:
+        type: integer
+      name:
+        type: string
+      project_id:
+        type: integer
+      script_type:
+        type: string
+      template_id:
+        description: 可选：关联执行模板
+        type: integer
+      timeout:
+        type: integer
+      version_source_url:
+        type: string
+    required:
+    - name
+    - project_id
+    type: object
+  deployment.DeployRequest:
+    properties:
+      asset_ids:
+        items:
+          type: integer
+        type: array
+      version:
+        type: string
+    required:
+    - asset_ids
+    - version
+    type: object
+  deployment.DeploymentResponse:
+    properties:
+      asset_ids:
+        items:
+          type: integer
+        type: array
+      created_at:
+        type: string
+      created_by:
+        type: integer
+      creator_name:
+        type: string
+      error:
+        type: string
+      finished_at:
+        type: string
+      id:
+        type: integer
+      module_id:
+        type: integer
+      module_name:
+        type: string
+      output:
+        type: string
+      project_name:
+        type: string
+      started_at:
+        type: string
+      status:
+        type: string
+      version:
+        type: string
+    type: object
+  deployment.ExportConfig:
+    properties:
+      export_at:
+        type: string
+      modules:
+        items:
+          $ref: '#/definitions/deployment.ExportModuleConfig'
+        type: array
+      version:
+        type: string
+    type: object
+  deployment.ExportModuleConfig:
+    properties:
+      deploy_script:
+        type: string
+      description:
+        type: string
+      environment_name:
+        type: string
+      name:
+        type: string
+      project_name:
+        type: string
+      script_type:
+        type: string
+      target_hosts:
+        description: 目标主机列表（主机名或IP）
+        items:
+          type: string
+        type: array
+      template_name:
+        type: string
+      timeout:
+        type: integer
+      version_source_url:
+        type: string
+    type: object
+  deployment.ImportConfig:
+    properties:
+      modules:
+        items:
+          $ref: '#/definitions/deployment.ImportModuleConfig'
+        type: array
+      version:
+        type: string
+    required:
+    - modules
+    type: object
+  deployment.ImportModuleConfig:
+    properties:
+      deploy_script:
+        type: string
+      description:
+        type: string
+      environment_name:
+        type: string
+      name:
+        type: string
+      project_name:
+        type: string
+      script_type:
+        type: string
+      target_hosts:
+        description: 目标主机列表（主机名或IP）
+        items:
+          type: string
+        type: array
+      template_name:
+        type: string
+      timeout:
+        type: integer
+      version_source_url:
+        type: string
+    required:
+    - deploy_script
+    - name
+    - project_name
+    type: object
+  deployment.ImportResult:
+    properties:
+      errors:
+        items:
+          type: string
+        type: array
+      failed:
+        type: integer
+      skipped:
+        items:
+          type: string
+        type: array
+      success:
+        type: integer
+      total:
+        type: integer
+    type: object
+  deployment.ModuleResponse:
+    properties:
+      asset_ids:
+        items:
+          type: integer
+        type: array
+      created_at:
+        type: string
+      created_by:
+        type: integer
+      deploy_script:
+        type: string
+      description:
+        type: string
+      environment_id:
+        type: integer
+      environment_name:
+        type: string
+      id:
+        type: integer
+      name:
+        type: string
+      project_id:
+        type: integer
+      project_name:
+        type: string
+      script_type:
+        type: string
+      template:
+        allOf:
+        - $ref: '#/definitions/deployment.TemplateInfo'
+        description: 关联的执行模板信息
+      template_id:
+        type: integer
+      template_name:
+        description: 模板名称（用于导出）
+        type: string
+      timeout:
+        type: integer
+      updated_at:
+        type: string
+      version_source_url:
+        type: string
+    type: object
+  deployment.TemplateInfo:
+    properties:
+      id:
+        type: integer
+      name:
+        type: string
+      type:
+        type: string
+    type: object
+  deployment.UpdateModuleRequest:
+    properties:
+      asset_ids:
+        items:
+          type: integer
+        type: array
+      deploy_script:
+        type: string
+      description:
+        type: string
+      environment_id:
+        type: integer
+      name:
+        type: string
+      project_id:
+        type: integer
+      script_type:
+        type: string
+      template_id:
+        description: 可选：关联执行模板
+        type: integer
+      timeout:
+        type: integer
+      version_source_url:
+        type: string
+    type: object
+  deployment.VersionSourceResponse:
+    properties:
+      latest:
+        type: string
+      versions:
+        items:
+          type: string
+        type: array
+    type: object
+  environment.CreateEnvironmentRequest:
+    properties:
+      description:
+        type: string
+      name:
+        type: string
+    required:
+    - name
+    type: object
+  environment.EnvironmentResponse:
+    properties:
+      created_at:
+        type: string
+      description:
+        type: string
+      id:
+        type: integer
+      name:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  environment.UpdateEnvironmentRequest:
+    properties:
+      description:
+        type: string
+      name:
+        type: string
+    type: object
+  model.APIToken:
+    properties:
+      created_at:
+        type: string
+      description:
+        type: string
+      expires_at:
+        type: string
+      id:
+        type: integer
+      last_used_at:
+        type: string
+      name:
+        type: string
+      status:
+        description: active, disabled
+        type: string
+      updated_at:
+        type: string
+      user:
+        $ref: '#/definitions/model.User'
+      user_id:
+        type: integer
+    type: object
+  model.Department:
+    properties:
+      children:
+        description: Relationships
+        items:
+          $ref: '#/definitions/model.Department'
+        type: array
+      code:
+        type: string
+      created_at:
+        type: string
+      description:
+        type: string
+      id:
+        type: integer
+      name:
+        type: string
+      parent:
+        $ref: '#/definitions/model.Department'
+      parent_id:
+        type: integer
+      updated_at:
+        type: string
+      users:
+        items:
+          $ref: '#/definitions/model.User'
+        type: array
+    type: object
+  model.Permission:
+    properties:
+      action:
+        description: e.g., "create", "read", "update", "delete"
+        type: string
+      created_at:
+        type: string
+      description:
+        type: string
+      id:
+        type: integer
+      name:
+        type: string
+      resource:
+        description: e.g., "user", "asset", "task"
+        type: string
+      roles:
+        description: Relationships
+        items:
+          $ref: '#/definitions/model.Role'
+        type: array
+      updated_at:
+        type: string
+    type: object
+  model.Role:
+    properties:
+      created_at:
+        type: string
+      description:
+        type: string
+      id:
+        type: integer
+      is_admin:
+        description: 是否为管理员角色，管理员可访问所有资产
+        type: boolean
+      name:
+        type: string
+      permissions:
+        items:
+          $ref: '#/definitions/model.Permission'
+        type: array
+      updated_at:
+        type: string
+      users:
+        description: Relationships
+        items:
+          $ref: '#/definitions/model.User'
+        type: array
+    type: object
+  model.User:
+    properties:
+      api_tokens:
+        items:
+          $ref: '#/definitions/model.APIToken'
+        type: array
+      avatar_url:
+        type: string
+      created_at:
+        type: string
+      department:
+        $ref: '#/definitions/model.Department'
+      department_id:
+        type: integer
+      email:
+        type: string
+      id:
+        type: integer
+      last_login_at:
+        type: string
+      phone:
+        type: string
+      real_name:
+        type: string
+      roles:
+        description: Relationships
+        items:
+          $ref: '#/definitions/model.Role'
+        type: array
+      status:
+        description: active, disabled
+        type: string
+      updated_at:
+        type: string
+      username:
+        type: string
+    type: object
+  operationtool.CreateToolRequest:
+    properties:
+      category:
+        type: string
+      description:
+        type: string
+      enabled:
+        type: boolean
+      icon:
+        type: string
+      name:
+        type: string
+      order:
+        type: integer
+      url:
+        type: string
+    required:
+    - name
+    - url
+    type: object
+  operationtool.UpdateToolRequest:
+    properties:
+      category:
+        type: string
+      description:
+        type: string
+      enabled:
+        type: boolean
+      icon:
+        type: string
+      name:
+        type: string
+      order:
+        type: integer
+      url:
+        type: string
+    type: object
+  project.CreateProjectRequest:
+    properties:
+      description:
+        type: string
+      name:
+        type: string
+    required:
+    - name
+    type: object
+  project.ProjectResponse:
+    properties:
+      created_at:
+        type: string
+      created_by:
+        type: integer
+      description:
+        type: string
+      id:
+        type: integer
+      name:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  project.UpdateProjectRequest:
+    properties:
+      description:
+        type: string
+      name:
+        type: string
+    type: object
+  role.CreateRoleRequest:
+    properties:
+      description:
+        type: string
+      is_admin:
+        description: 是否为管理员角色
+        type: boolean
+      name:
+        type: string
+    required:
+    - name
+    type: object
+  role.GrantRoleAssetsRequest:
+    properties:
+      asset_ids:
+        items:
+          type: integer
+        type: array
+    required:
+    - asset_ids
+    type: object
+  role.RevokeRoleAssetsRequest:
+    properties:
+      asset_ids:
+        items:
+          type: integer
+        type: array
+    required:
+    - asset_ids
+    type: object
+  role.RoleResponse:
+    properties:
+      asset_count:
+        description: 授权资产数量（管理员角色返回-1表示全部）
+        type: integer
+      created_at:
+        type: string
+      description:
+        type: string
+      id:
+        type: integer
+      is_admin:
+        description: 是否为管理员角色
+        type: boolean
+      name:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  role.UpdateRoleRequest:
+    properties:
+      description:
+        type: string
+      is_admin:
+        description: 使用指针以区分未设置和设置为 false
+        type: boolean
+      name:
+        type: string
+    type: object
+  scheduledtask.CreateScheduledTaskRequest:
+    properties:
+      asset_ids:
+        items:
+          type: integer
+        type: array
+      content:
+        type: string
+      cron_expression:
+        type: string
+      description:
+        type: string
+      enabled:
+        type: boolean
+      name:
+        type: string
+      template_id:
+        type: integer
+      timeout:
+        type: integer
+      type:
+        type: string
+      update_assets:
+        description: 是否更新资产信息
+        type: boolean
+    required:
+    - cron_expression
+    - name
+    type: object
+  scheduledtask.ExportScheduledTaskConfig:
+    properties:
+      content:
+        description: 脚本内容（如果没有模板或自定义）
+        type: string
+      cron_expression:
+        type: string
+      description:
+        type: string
+      enabled:
+        type: boolean
+      name:
+        type: string
+      target_hosts:
+        description: 主机名或 IP 列表
+        items:
+          type: string
+        type: array
+      template_name:
+        description: 模板名称（如果有）
+        type: string
+      timeout:
+        type: integer
+      type:
+        type: string
+      update_assets:
+        type: boolean
+    type: object
+  scheduledtask.ExportScheduledTasksConfig:
+    properties:
+      export_at:
+        type: string
+      tasks:
+        items:
+          $ref: '#/definitions/scheduledtask.ExportScheduledTaskConfig'
+        type: array
+      version:
+        type: string
+    type: object
+  scheduledtask.ImportScheduledTaskConfig:
+    properties:
+      content:
+        description: 脚本内容（如果没有模板）
+        type: string
+      cron_expression:
+        type: string
+      description:
+        type: string
+      enabled:
+        type: boolean
+      name:
+        type: string
+      target_hosts:
+        description: 主机名或 IP 列表
+        items:
+          type: string
+        type: array
+      template_name:
+        description: 模板名称（可选）
+        type: string
+      timeout:
+        type: integer
+      type:
+        type: string
+      update_assets:
+        type: boolean
+    required:
+    - cron_expression
+    - name
+    type: object
+  scheduledtask.ImportScheduledTasksConfig:
+    properties:
+      tasks:
+        items:
+          $ref: '#/definitions/scheduledtask.ImportScheduledTaskConfig'
+        type: array
+      version:
+        type: string
+    required:
+    - tasks
+    type: object
+  scheduledtask.ImportScheduledTasksResult:
+    properties:
+      errors:
+        items:
+          type: string
+        type: array
+      failed:
+        type: integer
+      skipped:
+        items:
+          type: string
+        type: array
+      success:
+        type: integer
+      total:
+        type: integer
+    type: object
+  scheduledtask.ListScheduledTasksResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/scheduledtask.ScheduledTaskResponse'
+        type: array
+      page:
+        type: integer
+      size:
+        type: integer
+      total:
+        type: integer
+    type: object
+  scheduledtask.ScheduledTaskResponse:
+    properties:
+      asset_ids:
+        items:
+          type: integer
+        type: array
+      content:
+        type: string
+      created_at:
+        type: string
+      created_by:
+        type: integer
+      creator_name:
+        type: string
+      cron_expression:
+        type: string
+      description:
+        type: string
+      enabled:
+        type: boolean
+      id:
+        type: integer
+      last_run_at:
+        type: string
+      last_status:
+        type: string
+      name:
+        type: string
+      next_run_at:
+        type: string
+      template_id:
+        type: integer
+      template_name:
+        type: string
+      timeout:
+        type: integer
+      type:
+        type: string
+      update_assets:
+        description: 是否更新资产信息
+        type: boolean
+      updated_at:
+        type: string
+    type: object
+  scheduledtask.UpdateScheduledTaskRequest:
+    properties:
+      asset_ids:
+        items:
+          type: integer
+        type: array
+      content:
+        type: string
+      cron_expression:
+        type: string
+      description:
+        type: string
+      enabled:
+        type: boolean
+      name:
+        type: string
+      template_id:
+        type: integer
+      timeout:
+        type: integer
+      type:
+        type: string
+      update_assets:
+        description: 是否更新资产信息
+        type: boolean
+    type: object
+  sshkey.CreateSSHKeyRequest:
+    properties:
+      description:
+        type: string
+      name:
+        type: string
+      passphrase:
+        description: Passphrase for encrypted private key (if provided)
+        type: string
+      private_key:
+        type: string
+      public_key:
+        description: Optional - auto-extracted from private key if empty
+        type: string
+      ssh_user:
+        description: Default SSH username
+        type: string
+      type:
+        description: rsa, ed25519, ecdsa, etc.
+        type: string
+    required:
+    - name
+    - private_key
+    type: object
+  sshkey.TestSSHKeyRequest:
+    properties:
+      host:
+        type: string
+      passphrase:
+        description: Optional, if key has password
+        type: string
+      port:
+        type: integer
+      username:
+        description: Optional, uses key's SSHUser if not provided
+        type: string
+    required:
+    - host
+    type: object
+  sshkey.UpdateSSHKeyRequest:
+    properties:
+      description:
+        type: string
+      name:
+        type: string
+      ssh_user:
+        type: string
+    type: object
+  tag.CreateTagRequest:
+    properties:
+      color:
+        type: string
+      description:
+        type: string
+      name:
+        type: string
+    required:
+    - name
+    type: object
+  tag.TagResponse:
+    properties:
+      color:
+        type: string
+      created_at:
+        type: string
+      description:
+        type: string
+      id:
+        type: integer
+      name:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  tag.UpdateTagRequest:
+    properties:
+      color:
+        type: string
+      description:
+        type: string
+      name:
+        type: string
+    type: object
+  task.CreateTaskRequest:
+    properties:
+      asset_ids:
+        description: Target assets for execution (stored for later use)
+        items:
+          type: integer
+        type: array
+      content:
+        type: string
+      description:
+        type: string
+      name:
+        type: string
+      template_id:
+        type: integer
+      timeout:
+        description: Execution timeout in seconds (default 600)
+        type: integer
+      type:
+        description: shell, python, etc.
+        type: string
+    required:
+    - content
+    - name
+    type: object
+  task.CreateTemplateRequest:
+    properties:
+      content:
+        type: string
+      description:
+        type: string
+      name:
+        type: string
+      type:
+        description: shell, python, etc.
+        type: string
+    required:
+    - content
+    - name
+    type: object
+  task.ExportTemplateConfig:
+    properties:
+      content:
+        type: string
+      description:
+        type: string
+      name:
+        type: string
+      type:
+        type: string
+    type: object
+  task.ExportTemplatesConfig:
+    properties:
+      export_at:
+        type: string
+      templates:
+        items:
+          $ref: '#/definitions/task.ExportTemplateConfig'
+        type: array
+      version:
+        type: string
+    type: object
+  task.ImportResult:
+    properties:
+      errors:
+        items:
+          type: string
+        type: array
+      failed:
+        type: integer
+      skipped:
+        items:
+          type: string
+        type: array
+      success:
+        type: integer
+      total:
+        type: integer
+    type: object
+  task.ImportTemplateConfig:
+    properties:
+      content:
+        type: string
+      description:
+        type: string
+      name:
+        type: string
+      type:
+        type: string
+    required:
+    - content
+    - name
+    type: object
+  task.ImportTemplatesConfig:
+    properties:
+      templates:
+        items:
+          $ref: '#/definitions/task.ImportTemplateConfig'
+        type: array
+      version:
+        type: string
+    required:
+    - templates
+    type: object
+  task.TaskResponse:
+    properties:
+      asset_ids:
+        items:
+          type: integer
+        type: array
+      content:
+        type: string
+      created_at:
+        type: string
+      created_by:
+        type: integer
+      description:
+        type: string
+      finished_at:
+        type: string
+      id:
+        type: integer
+      name:
+        type: string
+      started_at:
+        type: string
+      status:
+        type: string
+      template_id:
+        type: integer
+      timeout:
+        description: Execution timeout in seconds
+        type: integer
+      type:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  task.TemplateResponse:
+    properties:
+      content:
+        type: string
+      created_at:
+        type: string
+      created_by:
+        type: integer
+      description:
+        type: string
+      id:
+        type: integer
+      name:
+        type: string
+      type:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  task.UpdateTaskRequest:
+    properties:
+      content:
+        type: string
+      description:
+        type: string
+      name:
+        type: string
+      status:
+        type: string
+      timeout:
+        description: Execution timeout in seconds
+        type: integer
+      type:
+        type: string
+    type: object
+  task.UpdateTemplateRequest:
+    properties:
+      content:
+        type: string
+      description:
+        type: string
+      name:
+        type: string
+      type:
+        type: string
+    type: object
   user.CreateUserRequest:
     properties:
       department_id:
@@ -43,6 +1388,7 @@ definitions:
       email:
         type: string
       password:
+        minLength: 6
         type: string
       phone:
         type: string
@@ -54,6 +1400,15 @@ definitions:
     - email
     - password
     - username
+    type: object
+  user.SetUserRolesRequest:
+    properties:
+      role_ids:
+        items:
+          type: integer
+        type: array
+    required:
+    - role_ids
     type: object
   user.UpdateUserRequest:
     properties:
@@ -89,12 +1444,12 @@ definitions:
       username:
         type: string
     type: object
-host: localhost:8080
+host: localhost:3000
 info:
   contact:
     email: support@kkops.local
     name: API Support
-  description: Type "Bearer" followed by a space and JWT token.
+  description: Intelligent Operations Management Platform API
   license:
     name: MIT
     url: https://opensource.org/licenses/MIT
@@ -102,6 +1457,473 @@ info:
   title: KkOps API
   version: "1.0"
 paths:
+  /api/v1/asset-categories:
+    get:
+      description: Get list of all asset categories
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/category.CategoryResponse'
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: List categories
+      tags:
+      - categories
+    post:
+      consumes:
+      - application/json
+      description: Create a new asset category
+      parameters:
+      - description: Create category request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/category.CreateCategoryRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/category.CategoryResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Create category
+      tags:
+      - categories
+  /api/v1/asset-categories/{id}:
+    delete:
+      description: Delete an asset category by ID
+      parameters:
+      - description: Category ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Delete category
+      tags:
+      - categories
+    get:
+      description: Get asset category by ID
+      parameters:
+      - description: Category ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/category.CategoryResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get category
+      tags:
+      - categories
+    put:
+      consumes:
+      - application/json
+      description: Update asset category information
+      parameters:
+      - description: Category ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Update category request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/category.UpdateCategoryRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/category.CategoryResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Update category
+      tags:
+      - categories
+  /api/v1/assets:
+    get:
+      description: Get paginated list of assets with filtering and permission check
+      parameters:
+      - default: 1
+        description: Page number
+        in: query
+        name: page
+        type: integer
+      - default: 20
+        description: Page size
+        in: query
+        name: page_size
+        type: integer
+      - description: Filter by project ID
+        in: query
+        name: project_id
+        type: integer
+      - description: Filter by cloud platform ID
+        in: query
+        name: cloud_platform_id
+        type: integer
+      - description: Filter by environment ID
+        in: query
+        name: environment_id
+        type: integer
+      - description: Filter by status
+        in: query
+        name: status
+        type: string
+      - description: Filter by IP address
+        in: query
+        name: ip
+        type: string
+      - description: Filter by SSH key ID
+        in: query
+        name: ssh_key_id
+        type: integer
+      - description: Filter by tag IDs (comma-separated)
+        in: query
+        name: tag_ids
+        type: string
+      - description: Search by hostname or IP
+        in: query
+        name: search
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Response with data, total, page, and size
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: List assets
+      tags:
+      - assets
+    post:
+      consumes:
+      - application/json
+      description: Create a new asset
+      parameters:
+      - description: Create asset request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/asset.CreateAssetRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/asset.AssetResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Create asset
+      tags:
+      - assets
+  /api/v1/assets/{id}:
+    delete:
+      description: Delete an asset by ID
+      parameters:
+      - description: Asset ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Delete asset
+      tags:
+      - assets
+    get:
+      description: Get asset by ID with permission check
+      parameters:
+      - description: Asset ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/asset.AssetResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get asset
+      tags:
+      - assets
+    put:
+      consumes:
+      - application/json
+      description: Update asset information
+      parameters:
+      - description: Asset ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Update asset request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/asset.UpdateAssetRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/asset.AssetResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Update asset
+      tags:
+      - assets
+  /api/v1/assets/export:
+    get:
+      description: Export all assets to CSV format
+      produces:
+      - text/csv
+      responses:
+        "200":
+          description: CSV file
+          schema:
+            type: file
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Export assets
+      tags:
+      - assets
+  /api/v1/assets/import:
+    post:
+      consumes:
+      - multipart/form-data
+      description: Import assets from CSV file
+      parameters:
+      - description: CSV file to import
+        in: formData
+        name: file
+        required: true
+        type: file
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Import result
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Import assets
+      tags:
+      - assets
+  /api/v1/auth/change-password:
+    post:
+      consumes:
+      - application/json
+      description: Change password for the current authenticated user
+      parameters:
+      - description: Change password request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/auth.ChangePasswordRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Change password
+      tags:
+      - auth
   /api/v1/auth/login:
     post:
       consumes:
@@ -136,6 +1958,30 @@ paths:
       summary: User login
       tags:
       - auth
+  /api/v1/auth/logout:
+    post:
+      description: Logout the current authenticated user (JWT is stateless, so logout
+        is primarily client-side)
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: User logout
+      tags:
+      - auth
   /api/v1/auth/me:
     get:
       description: Get current authenticated user information
@@ -157,6 +2003,2137 @@ paths:
       summary: Get current user
       tags:
       - auth
+  /api/v1/cloud-platforms:
+    get:
+      description: Get list of all cloud platforms
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/cloudplatform.CloudPlatformResponse'
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: List cloud platforms
+      tags:
+      - cloud-platforms
+    post:
+      consumes:
+      - application/json
+      description: Create a new cloud platform
+      parameters:
+      - description: Create cloud platform request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/cloudplatform.CreateCloudPlatformRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/cloudplatform.CloudPlatformResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Create cloud platform
+      tags:
+      - cloud-platforms
+  /api/v1/cloud-platforms/{id}:
+    delete:
+      description: Delete a cloud platform by ID
+      parameters:
+      - description: Cloud Platform ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Delete cloud platform
+      tags:
+      - cloud-platforms
+    get:
+      description: Get cloud platform by ID
+      parameters:
+      - description: Cloud Platform ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/cloudplatform.CloudPlatformResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get cloud platform
+      tags:
+      - cloud-platforms
+    put:
+      consumes:
+      - application/json
+      description: Update cloud platform information
+      parameters:
+      - description: Cloud Platform ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Update cloud platform request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/cloudplatform.UpdateCloudPlatformRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/cloudplatform.CloudPlatformResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Update cloud platform
+      tags:
+      - cloud-platforms
+  /api/v1/deployment-modules:
+    get:
+      description: Get list of deployment modules
+      parameters:
+      - description: Filter by project ID
+        in: query
+        name: project_id
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/deployment.ModuleResponse'
+            type: array
+      summary: List deployment modules
+      tags:
+      - deployment
+    post:
+      consumes:
+      - application/json
+      description: Create a new deployment module
+      parameters:
+      - description: Create module request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/deployment.CreateModuleRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/deployment.ModuleResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Create deployment module
+      tags:
+      - deployment
+  /api/v1/deployment-modules/{id}:
+    delete:
+      description: Delete deployment module by ID
+      parameters:
+      - description: Module ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      responses:
+        "204":
+          description: No Content
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Delete deployment module
+      tags:
+      - deployment
+    get:
+      description: Get deployment module by ID
+      parameters:
+      - description: Module ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/deployment.ModuleResponse'
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Get deployment module
+      tags:
+      - deployment
+    put:
+      consumes:
+      - application/json
+      description: Update deployment module by ID
+      parameters:
+      - description: Module ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Update module request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/deployment.UpdateModuleRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/deployment.ModuleResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Update deployment module
+      tags:
+      - deployment
+  /api/v1/deployment-modules/{id}/deploy:
+    post:
+      consumes:
+      - application/json
+      description: Execute deployment for a module with selected version
+      parameters:
+      - description: Module ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Deploy request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/deployment.DeployRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/deployment.DeploymentResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Execute deployment
+      tags:
+      - deployment
+  /api/v1/deployment-modules/{id}/versions:
+    get:
+      description: Get available versions from version source URL
+      parameters:
+      - description: Module ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/deployment.VersionSourceResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Get versions
+      tags:
+      - deployment
+  /api/v1/deployment-modules/export:
+    get:
+      description: Export all deployment modules to JSON
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/deployment.ExportConfig'
+      summary: Export deployment modules
+      tags:
+      - deployment
+  /api/v1/deployment-modules/import:
+    post:
+      consumes:
+      - application/json
+      description: Import deployment modules from JSON
+      parameters:
+      - description: Import config
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/deployment.ImportConfig'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/deployment.ImportResult'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Import deployment modules
+      tags:
+      - deployment
+  /api/v1/deployment-modules/import/preview:
+    post:
+      consumes:
+      - application/json
+      description: Preview import result without actually importing
+      parameters:
+      - description: Import config
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/deployment.ImportConfig'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/deployment.ImportResult'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Preview import deployment modules
+      tags:
+      - deployment
+  /api/v1/deployments:
+    get:
+      description: Get list of deployment records
+      parameters:
+      - description: Filter by module ID
+        in: query
+        name: module_id
+        type: integer
+      - default: 1
+        description: Page number
+        in: query
+        name: page
+        type: integer
+      - default: 20
+        description: Page size
+        in: query
+        name: page_size
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: List deployments
+      tags:
+      - deployment
+  /api/v1/deployments/{id}:
+    get:
+      description: Get deployment record by ID
+      parameters:
+      - description: Deployment ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/deployment.DeploymentResponse'
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Get deployment
+      tags:
+      - deployment
+  /api/v1/deployments/{id}/cancel:
+    post:
+      description: Cancel a running deployment
+      parameters:
+      - description: Deployment ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Cancel deployment
+      tags:
+      - deployment
+  /api/v1/environments:
+    get:
+      description: Get list of all environments
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/environment.EnvironmentResponse'
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: List environments
+      tags:
+      - environments
+    post:
+      consumes:
+      - application/json
+      description: Create a new environment
+      parameters:
+      - description: Create environment request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/environment.CreateEnvironmentRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/environment.EnvironmentResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Create environment
+      tags:
+      - environments
+  /api/v1/environments/{id}:
+    delete:
+      description: Delete an environment by ID
+      parameters:
+      - description: Environment ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Delete environment
+      tags:
+      - environments
+    get:
+      description: Get environment by ID
+      parameters:
+      - description: Environment ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/environment.EnvironmentResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get environment
+      tags:
+      - environments
+    put:
+      consumes:
+      - application/json
+      description: Update environment information
+      parameters:
+      - description: Environment ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Update environment request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/environment.UpdateEnvironmentRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/environment.EnvironmentResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Update environment
+      tags:
+      - environments
+  /api/v1/execution-records/{id}:
+    get:
+      description: Get execution record by ID
+      parameters:
+      - description: Execution Record ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Response with data object
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get execution record
+      tags:
+      - execution-records
+  /api/v1/execution-records/{id}/cancel:
+    post:
+      description: Cancel a running execution record
+      parameters:
+      - description: Execution Record ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      responses:
+        "200":
+          description: Response with message
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Cancel execution record
+      tags:
+      - execution-records
+  /api/v1/execution-records/{id}/logs:
+    get:
+      description: Get logs for an execution record
+      parameters:
+      - description: Execution Record ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Response with data.logs array
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get execution logs
+      tags:
+      - execution-records
+  /api/v1/executions:
+    get:
+      description: Get paginated list of execution tasks
+      parameters:
+      - default: 1
+        description: Page number
+        in: query
+        name: page
+        type: integer
+      - default: 20
+        description: Page size
+        in: query
+        name: page_size
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Response with data, total, page, and size
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: List tasks
+      tags:
+      - executions
+    post:
+      consumes:
+      - application/json
+      description: Create a new execution task
+      parameters:
+      - description: Create task request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/task.CreateTaskRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/task.TaskResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Create task
+      tags:
+      - executions
+  /api/v1/executions/{id}:
+    delete:
+      description: Delete an execution task by ID
+      parameters:
+      - description: Task ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Delete task
+      tags:
+      - executions
+    get:
+      description: Get execution task by ID
+      parameters:
+      - description: Task ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/task.TaskResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get task
+      tags:
+      - executions
+    put:
+      consumes:
+      - application/json
+      description: Update execution task information
+      parameters:
+      - description: Task ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Update task request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/task.UpdateTaskRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/task.TaskResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Update task
+      tags:
+      - executions
+  /api/v1/executions/{id}/cancel:
+    post:
+      description: Cancel all executions for a task
+      parameters:
+      - description: Task ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      responses:
+        "200":
+          description: Response with message
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Cancel task
+      tags:
+      - executions
+  /api/v1/executions/{id}/execute:
+    post:
+      consumes:
+      - application/json
+      description: Execute a task (sync or async)
+      parameters:
+      - description: Task ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Execution request
+        in: body
+        name: request
+        required: true
+        schema:
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Response with message
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Execute task
+      tags:
+      - executions
+  /api/v1/executions/{id}/history:
+    get:
+      description: Get execution history for a task
+      parameters:
+      - description: Task ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Response with data array
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get task execution history
+      tags:
+      - executions
+  /api/v1/permissions:
+    get:
+      description: Get list of all permissions
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/model.Permission'
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: List permissions
+      tags:
+      - roles
+  /api/v1/projects:
+    get:
+      description: Get list of all projects
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/project.ProjectResponse'
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: List projects
+      tags:
+      - projects
+    post:
+      consumes:
+      - application/json
+      description: Create a new project
+      parameters:
+      - description: Create project request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/project.CreateProjectRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/project.ProjectResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Create project
+      tags:
+      - projects
+  /api/v1/projects/{id}:
+    delete:
+      description: Delete a project by ID
+      parameters:
+      - description: Project ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Delete project
+      tags:
+      - projects
+    get:
+      description: Get project by ID
+      parameters:
+      - description: Project ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/project.ProjectResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get project
+      tags:
+      - projects
+    put:
+      consumes:
+      - application/json
+      description: Update project information
+      parameters:
+      - description: Project ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Update project request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/project.UpdateProjectRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/project.ProjectResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Update project
+      tags:
+      - projects
+  /api/v1/roles:
+    get:
+      description: Get list of all roles
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/role.RoleResponse'
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: List roles
+      tags:
+      - roles
+    post:
+      consumes:
+      - application/json
+      description: Create a new role
+      parameters:
+      - description: Create role request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/role.CreateRoleRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/role.RoleResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Create role
+      tags:
+      - roles
+  /api/v1/roles/{id}:
+    delete:
+      description: Delete a role by ID
+      parameters:
+      - description: Role ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Delete role
+      tags:
+      - roles
+    get:
+      description: Get role by ID
+      parameters:
+      - description: Role ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/role.RoleResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get role
+      tags:
+      - roles
+    put:
+      consumes:
+      - application/json
+      description: Update role information
+      parameters:
+      - description: Role ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Update role request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/role.UpdateRoleRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/role.RoleResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Update role
+      tags:
+      - roles
+  /api/v1/roles/{id}/assets:
+    delete:
+      parameters:
+      - description: 角色ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 资产ID列表
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/role.RevokeRoleAssetsRequest'
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: 批量撤销角色的资产授权
+      tags:
+      - Roles
+    get:
+      parameters:
+      - description: 角色ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: 获取角色授权的资产列表
+      tags:
+      - Roles
+    post:
+      parameters:
+      - description: 角色ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 资产ID列表
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/role.GrantRoleAssetsRequest'
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: 为角色授权资产
+      tags:
+      - Roles
+  /api/v1/roles/{id}/assets/{asset_id}:
+    delete:
+      parameters:
+      - description: 角色ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 资产ID
+        in: path
+        name: asset_id
+        required: true
+        type: integer
+      responses:
+        "204":
+          description: No Content
+      security:
+      - BearerAuth: []
+      summary: 撤销角色对单个资产的授权
+      tags:
+      - Roles
+  /api/v1/roles/{id}/permissions:
+    get:
+      description: Get list of permissions for a role
+      parameters:
+      - description: Role ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/model.Permission'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get role permissions
+      tags:
+      - roles
+    post:
+      consumes:
+      - application/json
+      description: Assign a permission to a role
+      parameters:
+      - description: Role ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Permission assignment request
+        in: body
+        name: request
+        required: true
+        schema:
+          type: object
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Assign permission to role
+      tags:
+      - roles
+  /api/v1/roles/{id}/permissions/{permission_id}:
+    delete:
+      description: Remove a permission from a role
+      parameters:
+      - description: Role ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Permission ID
+        in: path
+        name: permission_id
+        required: true
+        type: integer
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Remove permission from role
+      tags:
+      - roles
+  /api/v1/ssh/keys:
+    get:
+      description: Get list of all SSH keys for the current user
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Response with data array
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: List SSH keys
+      tags:
+      - ssh-keys
+    post:
+      consumes:
+      - application/json
+      description: Create a new SSH key for the current user
+      parameters:
+      - description: Create SSH key request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/sshkey.CreateSSHKeyRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Response with data object
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Create SSH key
+      tags:
+      - ssh-keys
+  /api/v1/ssh/keys/{id}:
+    delete:
+      description: Delete an SSH key for the current user
+      parameters:
+      - description: SSH Key ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      responses:
+        "200":
+          description: Response with message
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Delete SSH key
+      tags:
+      - ssh-keys
+    get:
+      description: Get SSH key by ID for the current user
+      parameters:
+      - description: SSH Key ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Response with data object
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get SSH key
+      tags:
+      - ssh-keys
+    put:
+      consumes:
+      - application/json
+      description: Update an SSH key for the current user
+      parameters:
+      - description: SSH Key ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Update SSH key request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/sshkey.UpdateSSHKeyRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Response with data object
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Update SSH key
+      tags:
+      - ssh-keys
+  /api/v1/ssh/keys/{id}/test:
+    post:
+      consumes:
+      - application/json
+      description: Test SSH key connection to a host
+      parameters:
+      - description: SSH Key ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Test SSH key request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/sshkey.TestSSHKeyRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Response with message
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Test SSH key connection
+      tags:
+      - ssh-keys
+  /api/v1/tags:
+    get:
+      description: Get list of all tags
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/tag.TagResponse'
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: List tags
+      tags:
+      - tags
+    post:
+      consumes:
+      - application/json
+      description: Create a new tag
+      parameters:
+      - description: Create tag request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/tag.CreateTagRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/tag.TagResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Create tag
+      tags:
+      - tags
+  /api/v1/tags/{id}:
+    delete:
+      description: Delete a tag by ID
+      parameters:
+      - description: Tag ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Delete tag
+      tags:
+      - tags
+    get:
+      description: Get tag by ID
+      parameters:
+      - description: Tag ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/tag.TagResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get tag
+      tags:
+      - tags
+    put:
+      consumes:
+      - application/json
+      description: Update tag information
+      parameters:
+      - description: Tag ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Update tag request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/tag.UpdateTagRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/tag.TagResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Update tag
+      tags:
+      - tags
+  /api/v1/templates:
+    get:
+      description: Get list of all task templates
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/task.TemplateResponse'
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: List templates
+      tags:
+      - templates
+    post:
+      consumes:
+      - application/json
+      description: Create a new task template
+      parameters:
+      - description: Create template request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/task.CreateTemplateRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/task.TemplateResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Create template
+      tags:
+      - templates
+  /api/v1/templates/{id}:
+    delete:
+      description: Delete a task template by ID
+      parameters:
+      - description: Template ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Delete template
+      tags:
+      - templates
+    get:
+      description: Get task template by ID
+      parameters:
+      - description: Template ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/task.TemplateResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get template
+      tags:
+      - templates
+    put:
+      consumes:
+      - application/json
+      description: Update task template information
+      parameters:
+      - description: Template ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Update template request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/task.UpdateTemplateRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/task.TemplateResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Update template
+      tags:
+      - templates
+  /api/v1/templates/export:
+    get:
+      description: Export all task templates to JSON
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/task.ExportTemplatesConfig'
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Export task templates
+      tags:
+      - templates
+  /api/v1/templates/import:
+    post:
+      consumes:
+      - application/json
+      description: Import task templates from JSON
+      parameters:
+      - description: Import config
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/task.ImportTemplatesConfig'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/task.ImportResult'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Import task templates
+      tags:
+      - templates
+  /api/v1/user/permissions:
+    get:
+      description: Get list of permissions for the current user
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get current user permissions
+      tags:
+      - users
   /api/v1/users:
     get:
       description: Get paginated list of users
@@ -220,7 +4197,7 @@ paths:
         type: integer
       responses:
         "204":
-          description: ""
+          description: No Content
         "404":
           description: Not Found
           schema:
@@ -309,7 +4286,7 @@ paths:
       - application/json
       responses:
         "204":
-          description: ""
+          description: No Content
         "400":
           description: Bad Request
           schema:
@@ -319,8 +4296,1008 @@ paths:
       summary: Reset password
       tags:
       - users
+  /api/v1/users/{id}/roles:
+    post:
+      consumes:
+      - application/json
+      description: Assign a role to a user (deprecated, use /users/{id}/roles instead)
+      parameters:
+      - description: User ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Role assignment request
+        in: body
+        name: request
+        required: true
+        schema:
+          type: object
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Assign role to user
+      tags:
+      - roles
+  /api/v1/users/{id}/tokens:
+    get:
+      description: Get list of API tokens for a user
+      parameters:
+      - description: User ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/auth.APITokenResponse'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: List API tokens
+      tags:
+      - users
+    post:
+      consumes:
+      - application/json
+      description: Create a new API token for a user (token is only shown once)
+      parameters:
+      - description: User ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Create API token request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/auth.CreateAPITokenRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/auth.APITokenResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Create API token
+      tags:
+      - users
+  /api/v1/users/{id}/tokens/{token_id}:
+    delete:
+      description: Delete an API token by ID
+      parameters:
+      - description: User ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Token ID
+        in: path
+        name: token_id
+        required: true
+        type: integer
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Delete API token
+      tags:
+      - users
+    get:
+      description: Get full API token by ID (for the token owner)
+      parameters:
+      - description: User ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Token ID
+        in: path
+        name: token_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/auth.APITokenResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get API token
+      tags:
+      - users
+  /audit-logs:
+    get:
+      consumes:
+      - application/json
+      parameters:
+      - default: 1
+        description: 页码
+        in: query
+        name: page
+        type: integer
+      - default: 20
+        description: 每页数量
+        in: query
+        name: page_size
+        type: integer
+      - description: 用户ID
+        in: query
+        name: user_id
+        type: integer
+      - description: 用户名
+        in: query
+        name: username
+        type: string
+      - description: 模块
+        in: query
+        name: module
+        type: string
+      - description: 操作类型
+        in: query
+        name: action
+        type: string
+      - description: 状态
+        in: query
+        name: status
+        type: string
+      - description: 开始时间
+        in: query
+        name: start_time
+        type: string
+      - description: 结束时间
+        in: query
+        name: end_time
+        type: string
+      - description: 关键词
+        in: query
+        name: keyword
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 获取审计日志列表
+      tags:
+      - 审计日志
+  /audit-logs/{id}:
+    get:
+      consumes:
+      - application/json
+      parameters:
+      - description: 日志ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 获取审计日志详情
+      tags:
+      - 审计日志
+  /audit-logs/actions:
+    get:
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 获取操作类型列表
+      tags:
+      - 审计日志
+  /audit-logs/export:
+    get:
+      consumes:
+      - application/json
+      parameters:
+      - default: csv
+        description: 导出格式
+        enum:
+        - csv
+        - json
+        in: query
+        name: format
+        type: string
+      - description: 用户ID
+        in: query
+        name: user_id
+        type: integer
+      - description: 用户名
+        in: query
+        name: username
+        type: string
+      - description: 模块
+        in: query
+        name: module
+        type: string
+      - description: 操作类型
+        in: query
+        name: action
+        type: string
+      - description: 状态
+        in: query
+        name: status
+        type: string
+      - description: 开始时间
+        in: query
+        name: start_time
+        type: string
+      - description: 结束时间
+        in: query
+        name: end_time
+        type: string
+      - description: 关键词
+        in: query
+        name: keyword
+        type: string
+      produces:
+      - application/octet-stream
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: file
+      summary: 导出审计日志
+      tags:
+      - 审计日志
+  /audit-logs/modules:
+    get:
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 获取模块列表
+      tags:
+      - 审计日志
+  /dashboard/stats:
+    get:
+      consumes:
+      - application/json
+      description: 获取系统概览统计数据，包括资产、用户、任务等信息
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dashboard.StatsResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: 获取仪表板统计数据
+      tags:
+      - Dashboard
+  /operation-tools:
+    get:
+      consumes:
+      - application/json
+      description: 获取运维工具列表，支持按分类过滤
+      parameters:
+      - description: 分类过滤
+        in: query
+        name: category
+        type: string
+      - description: 是否只返回启用的工具（默认 true）
+        in: query
+        name: enabled
+        type: boolean
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: 获取运维工具列表
+      tags:
+      - Operation Tools
+    post:
+      consumes:
+      - application/json
+      description: 创建新的运维工具（管理员）
+      parameters:
+      - description: 工具信息
+        in: body
+        name: tool
+        required: true
+        schema:
+          $ref: '#/definitions/operationtool.CreateToolRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: 创建运维工具
+      tags:
+      - Operation Tools
+  /operation-tools/{id}:
+    delete:
+      consumes:
+      - application/json
+      description: 删除运维工具（管理员）
+      parameters:
+      - description: 工具 ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: 删除运维工具
+      tags:
+      - Operation Tools
+    get:
+      consumes:
+      - application/json
+      description: 根据 ID 获取运维工具详情
+      parameters:
+      - description: 工具 ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: 获取运维工具详情
+      tags:
+      - Operation Tools
+    put:
+      consumes:
+      - application/json
+      description: 更新运维工具信息（管理员）
+      parameters:
+      - description: 工具 ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 工具信息
+        in: body
+        name: tool
+        required: true
+        schema:
+          $ref: '#/definitions/operationtool.UpdateToolRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: 更新运维工具
+      tags:
+      - Operation Tools
+  /tasks:
+    get:
+      consumes:
+      - application/json
+      description: 获取定时任务列表，支持分页和筛选
+      parameters:
+      - default: 1
+        description: 页码
+        in: query
+        name: page
+        type: integer
+      - default: 20
+        description: 每页数量
+        in: query
+        name: page_size
+        type: integer
+      - description: 是否启用
+        in: query
+        name: enabled
+        type: boolean
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/scheduledtask.ListScheduledTasksResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: 获取定时任务列表
+      tags:
+      - Scheduled Tasks
+    post:
+      consumes:
+      - application/json
+      description: 创建一个新的定时任务
+      parameters:
+      - description: 定时任务信息
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/scheduledtask.CreateScheduledTaskRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/scheduledtask.ScheduledTaskResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: 创建定时任务
+      tags:
+      - Scheduled Tasks
+  /tasks/{id}:
+    delete:
+      consumes:
+      - application/json
+      description: 删除定时任务
+      parameters:
+      - description: 任务 ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: 删除定时任务
+      tags:
+      - Scheduled Tasks
+    get:
+      consumes:
+      - application/json
+      description: 根据 ID 获取定时任务详情
+      parameters:
+      - description: 任务 ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/scheduledtask.ScheduledTaskResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: 获取定时任务详情
+      tags:
+      - Scheduled Tasks
+    put:
+      consumes:
+      - application/json
+      description: 更新定时任务信息
+      parameters:
+      - description: 任务 ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 更新信息
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/scheduledtask.UpdateScheduledTaskRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/scheduledtask.ScheduledTaskResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: 更新定时任务
+      tags:
+      - Scheduled Tasks
+  /tasks/{id}/disable:
+    post:
+      consumes:
+      - application/json
+      description: 禁用定时任务
+      parameters:
+      - description: 任务 ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: 禁用定时任务
+      tags:
+      - Scheduled Tasks
+  /tasks/{id}/enable:
+    post:
+      consumes:
+      - application/json
+      description: 启用定时任务
+      parameters:
+      - description: 任务 ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: 启用定时任务
+      tags:
+      - Scheduled Tasks
+  /tasks/{id}/executions:
+    get:
+      consumes:
+      - application/json
+      description: 获取定时任务的执行历史记录
+      parameters:
+      - description: 任务 ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - default: 1
+        description: 页码
+        in: query
+        name: page
+        type: integer
+      - default: 20
+        description: 每页数量
+        in: query
+        name: page_size
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: 获取定时任务执行历史
+      tags:
+      - Scheduled Tasks
+  /tasks/export:
+    get:
+      description: Export all scheduled tasks to JSON
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/scheduledtask.ExportScheduledTasksConfig'
+      summary: Export scheduled tasks
+      tags:
+      - Scheduled Tasks
+  /tasks/import:
+    post:
+      consumes:
+      - application/json
+      description: Import scheduled tasks from JSON
+      parameters:
+      - description: Import config
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/scheduledtask.ImportScheduledTasksConfig'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/scheduledtask.ImportScheduledTasksResult'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Import scheduled tasks
+      tags:
+      - Scheduled Tasks
+  /tasks/validate-cron:
+    get:
+      consumes:
+      - application/json
+      description: 验证 Cron 表达式是否有效，并返回下次执行时间
+      parameters:
+      - description: Cron 表达式
+        in: query
+        name: cron_expression
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: 验证 Cron 表达式
+      tags:
+      - Scheduled Tasks
+  /users/{id}/roles:
+    get:
+      parameters:
+      - description: 用户ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: 获取用户的角色列表
+      tags:
+      - Users
+    post:
+      parameters:
+      - description: 用户ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 角色ID列表
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/user.SetUserRolesRequest'
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: 设置用户的角色
+      tags:
+      - Users
+  /users/{id}/roles/{role_id}:
+    delete:
+      parameters:
+      - description: 用户ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 角色ID
+        in: path
+        name: role_id
+        required: true
+        type: integer
+      responses:
+        "204":
+          description: No Content
+      security:
+      - BearerAuth: []
+      summary: 移除用户的某个角色
+      tags:
+      - Users
 securityDefinitions:
   BearerAuth:
+    description: Type "Bearer" followed by a space and JWT token.
     in: header
     name: Authorization
     type: apiKey

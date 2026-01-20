@@ -31,6 +31,16 @@ func NewHandler(service *asset.Service, authzSvc *authorization.Service) *Handle
 }
 
 // CreateAsset handles asset creation
+// @Summary Create asset
+// @Description Create a new asset
+// @Tags assets
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param request body asset.CreateAssetRequest true "Create asset request"
+// @Success 201 {object} asset.AssetResponse
+// @Failure 400 {object} map[string]string
+// @Router /api/v1/assets [post]
 func (h *Handler) CreateAsset(c *gin.Context) {
 	var req asset.CreateAssetRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -48,6 +58,19 @@ func (h *Handler) CreateAsset(c *gin.Context) {
 }
 
 // GetAsset handles asset retrieval with permission check
+// @Summary Get asset
+// @Description Get asset by ID with permission check
+// @Tags assets
+// @Produce json
+// @Security BearerAuth
+// @Param id path int true "Asset ID"
+// @Success 200 {object} asset.AssetResponse
+// @Failure 400 {object} map[string]string
+// @Failure 401 {object} map[string]string
+// @Failure 403 {object} map[string]string
+// @Failure 404 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Router /api/v1/assets/{id} [get]
 func (h *Handler) GetAsset(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
@@ -83,6 +106,25 @@ func (h *Handler) GetAsset(c *gin.Context) {
 }
 
 // ListAssets handles asset list retrieval with filtering and permission check
+// @Summary List assets
+// @Description Get paginated list of assets with filtering and permission check
+// @Tags assets
+// @Produce json
+// @Security BearerAuth
+// @Param page query int false "Page number" default(1)
+// @Param page_size query int false "Page size" default(20)
+// @Param project_id query int false "Filter by project ID"
+// @Param cloud_platform_id query int false "Filter by cloud platform ID"
+// @Param environment_id query int false "Filter by environment ID"
+// @Param status query string false "Filter by status"
+// @Param ip query string false "Filter by IP address"
+// @Param ssh_key_id query int false "Filter by SSH key ID"
+// @Param tag_ids query string false "Filter by tag IDs (comma-separated)"
+// @Param search query string false "Search by hostname or IP"
+// @Success 200 {object} map[string]interface{} "Response with data, total, page, and size"
+// @Failure 401 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Router /api/v1/assets [get]
 func (h *Handler) ListAssets(c *gin.Context) {
 	filter := asset.ListAssetsFilter{
 		Page:     1,
@@ -155,6 +197,18 @@ func (h *Handler) ListAssets(c *gin.Context) {
 }
 
 // UpdateAsset handles asset update
+// @Summary Update asset
+// @Description Update asset information
+// @Tags assets
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param id path int true "Asset ID"
+// @Param request body asset.UpdateAssetRequest true "Update asset request"
+// @Success 200 {object} asset.AssetResponse
+// @Failure 400 {object} map[string]string
+// @Failure 404 {object} map[string]string
+// @Router /api/v1/assets/{id} [put]
 func (h *Handler) UpdateAsset(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
@@ -178,6 +232,15 @@ func (h *Handler) UpdateAsset(c *gin.Context) {
 }
 
 // DeleteAsset handles asset deletion
+// @Summary Delete asset
+// @Description Delete an asset by ID
+// @Tags assets
+// @Security BearerAuth
+// @Param id path int true "Asset ID"
+// @Success 204
+// @Failure 400 {object} map[string]string
+// @Failure 404 {object} map[string]string
+// @Router /api/v1/assets/{id} [delete]
 func (h *Handler) DeleteAsset(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
@@ -194,6 +257,14 @@ func (h *Handler) DeleteAsset(c *gin.Context) {
 }
 
 // ExportAssets handles asset export
+// @Summary Export assets
+// @Description Export all assets to CSV format
+// @Tags assets
+// @Produce text/csv
+// @Security BearerAuth
+// @Success 200 {file} file "CSV file"
+// @Failure 500 {object} map[string]string
+// @Router /api/v1/assets/export [get]
 func (h *Handler) ExportAssets(c *gin.Context) {
 	c.Header("Content-Type", "text/csv")
 	c.Header("Content-Disposition", "attachment; filename=assets.csv")
@@ -205,6 +276,17 @@ func (h *Handler) ExportAssets(c *gin.Context) {
 }
 
 // ImportAssets handles asset import
+// @Summary Import assets
+// @Description Import assets from CSV file
+// @Tags assets
+// @Accept multipart/form-data
+// @Produce json
+// @Security BearerAuth
+// @Param file formData file true "CSV file to import"
+// @Success 200 {object} map[string]interface{} "Import result"
+// @Failure 400 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Router /api/v1/assets/import [post]
 func (h *Handler) ImportAssets(c *gin.Context) {
 	file, err := c.FormFile("file")
 	if err != nil {

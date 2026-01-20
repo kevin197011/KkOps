@@ -25,6 +25,16 @@ func NewHandler(service *role.Service) *Handler {
 }
 
 // CreateRole handles role creation
+// @Summary Create role
+// @Description Create a new role
+// @Tags roles
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param request body role.CreateRoleRequest true "Create role request"
+// @Success 201 {object} role.RoleResponse
+// @Failure 400 {object} map[string]string
+// @Router /api/v1/roles [post]
 func (h *Handler) CreateRole(c *gin.Context) {
 	var req role.CreateRoleRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -42,6 +52,16 @@ func (h *Handler) CreateRole(c *gin.Context) {
 }
 
 // GetRole handles role retrieval
+// @Summary Get role
+// @Description Get role by ID
+// @Tags roles
+// @Produce json
+// @Security BearerAuth
+// @Param id path int true "Role ID"
+// @Success 200 {object} role.RoleResponse
+// @Failure 400 {object} map[string]string
+// @Failure 404 {object} map[string]string
+// @Router /api/v1/roles/{id} [get]
 func (h *Handler) GetRole(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
@@ -59,6 +79,14 @@ func (h *Handler) GetRole(c *gin.Context) {
 }
 
 // ListRoles handles role list retrieval
+// @Summary List roles
+// @Description Get list of all roles
+// @Tags roles
+// @Produce json
+// @Security BearerAuth
+// @Success 200 {array} role.RoleResponse
+// @Failure 500 {object} map[string]string
+// @Router /api/v1/roles [get]
 func (h *Handler) ListRoles(c *gin.Context) {
 	roles, err := h.service.ListRoles()
 	if err != nil {
@@ -70,6 +98,18 @@ func (h *Handler) ListRoles(c *gin.Context) {
 }
 
 // UpdateRole handles role update
+// @Summary Update role
+// @Description Update role information
+// @Tags roles
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param id path int true "Role ID"
+// @Param request body role.UpdateRoleRequest true "Update role request"
+// @Success 200 {object} role.RoleResponse
+// @Failure 400 {object} map[string]string
+// @Failure 404 {object} map[string]string
+// @Router /api/v1/roles/{id} [put]
 func (h *Handler) UpdateRole(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
@@ -93,6 +133,15 @@ func (h *Handler) UpdateRole(c *gin.Context) {
 }
 
 // DeleteRole handles role deletion
+// @Summary Delete role
+// @Description Delete a role by ID
+// @Tags roles
+// @Security BearerAuth
+// @Param id path int true "Role ID"
+// @Success 204
+// @Failure 400 {object} map[string]string
+// @Failure 404 {object} map[string]string
+// @Router /api/v1/roles/{id} [delete]
 func (h *Handler) DeleteRole(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
@@ -109,6 +158,17 @@ func (h *Handler) DeleteRole(c *gin.Context) {
 }
 
 // AssignRoleToUser handles role assignment to user
+// @Summary Assign role to user
+// @Description Assign a role to a user (deprecated, use /users/{id}/roles instead)
+// @Tags roles
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param id path int true "User ID"
+// @Param request body object true "Role assignment request" SchemaExample({"role_id": 1})
+// @Success 204
+// @Failure 400 {object} map[string]string
+// @Router /api/v1/users/{id}/roles [post]
 func (h *Handler) AssignRoleToUser(c *gin.Context) {
 	userID, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
@@ -133,6 +193,17 @@ func (h *Handler) AssignRoleToUser(c *gin.Context) {
 }
 
 // AssignPermissionToRole handles permission assignment to role
+// @Summary Assign permission to role
+// @Description Assign a permission to a role
+// @Tags roles
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param id path int true "Role ID"
+// @Param request body object true "Permission assignment request" SchemaExample({"permission_id": 1})
+// @Success 204
+// @Failure 400 {object} map[string]string
+// @Router /api/v1/roles/{id}/permissions [post]
 func (h *Handler) AssignPermissionToRole(c *gin.Context) {
 	roleID, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
@@ -157,6 +228,14 @@ func (h *Handler) AssignPermissionToRole(c *gin.Context) {
 }
 
 // ListPermissions handles permission list retrieval
+// @Summary List permissions
+// @Description Get list of all permissions
+// @Tags roles
+// @Produce json
+// @Security BearerAuth
+// @Success 200 {array} model.Permission
+// @Failure 500 {object} map[string]string
+// @Router /api/v1/permissions [get]
 func (h *Handler) ListPermissions(c *gin.Context) {
 	permissions, err := h.service.ListPermissions()
 	if err != nil {
@@ -168,6 +247,16 @@ func (h *Handler) ListPermissions(c *gin.Context) {
 }
 
 // GetRolePermissions handles role permissions retrieval
+// @Summary Get role permissions
+// @Description Get list of permissions for a role
+// @Tags roles
+// @Produce json
+// @Security BearerAuth
+// @Param id path int true "Role ID"
+// @Success 200 {array} model.Permission
+// @Failure 400 {object} map[string]string
+// @Failure 404 {object} map[string]string
+// @Router /api/v1/roles/{id}/permissions [get]
 func (h *Handler) GetRolePermissions(c *gin.Context) {
 	roleID, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
@@ -185,6 +274,15 @@ func (h *Handler) GetRolePermissions(c *gin.Context) {
 }
 
 // RemovePermissionFromRole handles permission removal from role
+// @Summary Remove permission from role
+// @Description Remove a permission from a role
+// @Tags roles
+// @Security BearerAuth
+// @Param id path int true "Role ID"
+// @Param permission_id path int true "Permission ID"
+// @Success 204
+// @Failure 400 {object} map[string]string
+// @Router /api/v1/roles/{id}/permissions/{permission_id} [delete]
 func (h *Handler) RemovePermissionFromRole(c *gin.Context) {
 	roleID, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {

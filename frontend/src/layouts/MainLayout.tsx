@@ -32,6 +32,7 @@ import {
   SettingOutlined,
   ApartmentOutlined,
   AppstoreOutlined,
+  BookOutlined,
 } from '@ant-design/icons'
 import { useThemeStore } from '@/stores/theme'
 import { useAuthStore } from '@/stores/auth'
@@ -437,6 +438,17 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
           {collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
         </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+            <Button
+              type="text"
+              icon={<BookOutlined />}
+              onClick={() => window.open('/swagger/index.html', '_blank')}
+              title="API 文档（在新标签页打开）"
+              style={{
+                color: mode === 'dark' ? '#F1F5F9' : '#1E293B',
+              }}
+            >
+              Docs
+            </Button>
             <Button
               type="text"
               icon={<ConsoleSqlOutlined />}

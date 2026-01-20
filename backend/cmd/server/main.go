@@ -14,7 +14,7 @@
 // @license.name  MIT
 // @license.url   https://opensource.org/licenses/MIT
 
-// @host      localhost:8080
+// @host      localhost:3000
 // @BasePath  /api/v1
 
 // @securityDefinitions.apikey BearerAuth
@@ -232,12 +232,8 @@ func main() {
 				usersGroup.POST("/:id/reset-password", userHdl.ResetPassword)
 				usersGroup.GET("/:id/tokens", authHdl.ListAPITokens)
 				usersGroup.POST("/:id/tokens", authHdl.CreateAPIToken)
-			}
-
-			// API Token management
-			tokensGroup := protected.Group("/tokens")
-			{
-				tokensGroup.DELETE("/:id", authHdl.RevokeAPIToken)
+				usersGroup.GET("/:id/tokens/:token_id", authHdl.GetAPIToken)
+				usersGroup.DELETE("/:id/tokens/:token_id", authHdl.DeleteAPIToken)
 			}
 
 			// Role management

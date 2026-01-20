@@ -5,7 +5,7 @@
 
 import { useState, useEffect } from 'react'
 import { Card, Table, Button, Space, message, Modal, Form, Input, DatePicker, Tag, Popconfirm, Typography } from 'antd'
-import { PlusOutlined, DeleteOutlined, CopyOutlined, KeyOutlined, UserOutlined, MailOutlined, SafetyOutlined } from '@ant-design/icons'
+import { PlusOutlined, DeleteOutlined, CopyOutlined, KeyOutlined, UserOutlined, MailOutlined, SafetyOutlined, EyeOutlined } from '@ant-design/icons'
 import { userApi, APITokenResponse, CreateAPITokenRequest } from '@/api/user'
 import { useAuthStore } from '@/stores/auth'
 import moment from 'moment'
@@ -18,7 +18,8 @@ const UserProfile = () => {
   const [loading, setLoading] = useState(false)
   const [createModalVisible, setCreateModalVisible] = useState(false)
   const [tokenModalVisible, setTokenModalVisible] = useState(false)
-  const [newToken, setNewToken] = useState<string>('')
+  const [viewingToken, setViewingToken] = useState<string>('')
+  const [viewingTokenName, setViewingTokenName] = useState<string>('')
   const [form] = Form.useForm()
 
   useEffect(() => {
@@ -55,7 +56,8 @@ const UserProfile = () => {
           : undefined,
       })
       
-      setNewToken(response.data.token || '')
+      setViewingToken(response.data.token || '')
+      setViewingTokenName(response.data.name || '')
       setTokenModalVisible(true)
       setCreateModalVisible(false)
       form.resetFields()
@@ -66,19 +68,34 @@ const UserProfile = () => {
     }
   }
 
-  const handleRevokeToken = async (tokenId: number) => {
+  const handleDeleteToken = async (tokenId: number) => {
+    if (!user) return
+
     try {
-      await userApi.revokeToken(tokenId)
-      message.success('Token 已撤销')
+      await userApi.deleteToken(user.id, tokenId)
+      message.success('Token 已删除')
       fetchTokens()
     } catch (error: any) {
-      message.error('撤销 Token 失败: ' + (error.response?.data?.error || error.message))
+      message.error('删除 Token 失败: ' + (error.response?.data?.error || error.message))
     }
   }
 
   const handleCopyToken = (token: string) => {
     navigator.clipboard.writeText(token)
     message.success('Token 已复制到剪贴板')
+  }
+
+  const handleViewToken = async (tokenId: number, tokenName: string) => {
+    if (!user) return
+
+    try {
+      const response = await userApi.getToken(user.id, tokenId)
+      setViewingToken(response.data.token || '')
+      setViewingTokenName(tokenName)
+      setTokenModalVisible(true)
+    } catch (error: any) {
+      message.error('获取 Token 失败: ' + (error.response?.data?.error || error.message))
+    }
   }
 
   const columns = [
@@ -138,10 +155,18 @@ const UserProfile = () => {
       key: 'action',
       render: (_: any, record: APITokenResponse) => (
         <Space>
+          <Button
+            type="link"
+            size="small"
+            icon={<EyeOutlined />}
+            onClick={() => handleViewToken(record.id, record.name)}
+          >
+            查看
+          </Button>
           <Popconfirm
-            title="确定要撤销此 Token 吗？"
-            description="撤销后该 Token 将无法再使用"
-            onConfirm={() => handleRevokeToken(record.id)}
+            title="确定要删除此 Token 吗？"
+            description="删除后该 Token 将无法再使用，此操作不可恢复"
+            onConfirm={() => handleDeleteToken(record.id)}
             okText="确定"
             cancelText="取消"
           >
@@ -151,7 +176,7 @@ const UserProfile = () => {
               size="small"
               icon={<DeleteOutlined />}
             >
-              撤销
+              删除
             </Button>
           </Popconfirm>
         </Space>
@@ -293,25 +318,26 @@ const UserProfile = () => {
         </Form>
       </Modal>
 
-      {/* 显示新创建的 Token 弹窗 */}
+      {/* 显示 Token 弹窗 */}
       <Modal
         title={
           <Space>
             <SafetyOutlined style={{ color: '#52c41a' }} />
-            <span>Token 创建成功</span>
+            <span>{viewingTokenName}</span>
           </Space>
         }
         open={tokenModalVisible}
         onCancel={() => {
           setTokenModalVisible(false)
-          setNewToken('')
+          setViewingToken('')
+          setViewingTokenName('')
         }}
         footer={[
           <Button
             key="copy"
             type="primary"
             icon={<CopyOutlined />}
-            onClick={() => handleCopyToken(newToken)}
+            onClick={() => handleCopyToken(viewingToken)}
           >
             复制 Token
           </Button>,
@@ -319,19 +345,15 @@ const UserProfile = () => {
             key="close"
             onClick={() => {
               setTokenModalVisible(false)
-              setNewToken('')
+              setViewingToken('')
+              setViewingTokenName('')
             }}
           >
-            我已保存
+            关闭
           </Button>,
         ]}
         destroyOnClose
       >
-        <div style={{ marginBottom: 16 }}>
-          <Text type="warning" strong>
-            ⚠️ 请立即保存此 Token，关闭窗口后将无法再次查看完整 Token
-          </Text>
-        </div>
         <div
           style={{
             padding: 16,
@@ -342,11 +364,11 @@ const UserProfile = () => {
           }}
         >
           <Text code style={{ fontSize: 12 }}>
-            {newToken}
+            {viewingToken}
           </Text>
         </div>
         <Text type="secondary" style={{ fontSize: 12 }}>
-          提示：Token 仅显示一次，请妥善保管。建议使用密码管理器保存。
+          提示：请妥善保管此 Token，建议使用密码管理器保存。
         </Text>
       </Modal>
     </div>

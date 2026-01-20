@@ -42,20 +42,27 @@ func (s *Service) CreateAPIToken(userID uint, req *CreateAPITokenRequest) (*APIT
 		return nil, err
 	}
 
-	// Hash token
+	// Hash token for validation
 	tokenHash, err := utils.HashAPIToken(token)
+	if err != nil {
+		return nil, err
+	}
+
+	// Encrypt token for later retrieval
+	encryptedToken, err := utils.Encrypt([]byte(token), s.config.Encryption.Key)
 	if err != nil {
 		return nil, err
 	}
 
 	// Create API token record
 	apiToken := model.APIToken{
-		UserID:      userID,
-		Name:        req.Name,
-		TokenHash:   tokenHash,
-		ExpiresAt:   req.ExpiresAt,
-		Status:      "active",
-		Description: req.Description,
+		UserID:         userID,
+		Name:           req.Name,
+		TokenHash:      tokenHash,
+		TokenEncrypted: encryptedToken,
+		ExpiresAt:      req.ExpiresAt,
+		Status:         "active",
+		Description:    req.Description,
 	}
 
 	if err := s.db.Create(&apiToken).Error; err != nil {
@@ -65,7 +72,7 @@ func (s *Service) CreateAPIToken(userID uint, req *CreateAPITokenRequest) (*APIT
 	return &APITokenResponse{
 		ID:          apiToken.ID,
 		Name:        apiToken.Name,
-		Token:       token, // Return full token only once
+		Token:       token, // Return full token
 		Prefix:      utils.GetTokenPrefix(token),
 		ExpiresAt:   apiToken.ExpiresAt,
 		Status:      apiToken.Status,
@@ -76,30 +83,33 @@ func (s *Service) CreateAPIToken(userID uint, req *CreateAPITokenRequest) (*APIT
 
 // ValidateAPIToken validates an API token and returns the user ID
 func (s *Service) ValidateAPIToken(token string) (uint, error) {
-	var apiToken model.APIToken
-	if err := s.db.Where("status = ?", "active").Find(&apiToken).Error; err != nil {
+	// Get all active tokens and check each one
+	var apiTokens []model.APIToken
+	if err := s.db.Where("status = ?", "active").Find(&apiTokens).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return 0, errors.New("invalid token")
 		}
 		return 0, err
 	}
 
-	// Check expiration
-	if utils.IsTokenExpired(apiToken.ExpiresAt) {
-		return 0, errors.New("token expired")
+	// Check each token's hash
+	for _, apiToken := range apiTokens {
+		// Check expiration
+		if utils.IsTokenExpired(apiToken.ExpiresAt) {
+			continue
+		}
+
+		// Verify token hash
+		if utils.CheckAPITokenHash(token, apiToken.TokenHash) {
+			// Update last used time
+			now := time.Now()
+			apiToken.LastUsedAt = &now
+			s.db.Save(&apiToken)
+			return apiToken.UserID, nil
+		}
 	}
 
-	// Verify token hash
-	if !utils.CheckAPITokenHash(token, apiToken.TokenHash) {
-		return 0, errors.New("invalid token")
-	}
-
-	// Update last used time
-	now := time.Now()
-	apiToken.LastUsedAt = &now
-	s.db.Save(&apiToken)
-
-	return apiToken.UserID, nil
+	return 0, errors.New("invalid token")
 }
 
 // ListAPITokens lists all API tokens for a user
@@ -111,10 +121,20 @@ func (s *Service) ListAPITokens(userID uint) ([]APITokenResponse, error) {
 
 	result := make([]APITokenResponse, len(tokens))
 	for i, token := range tokens {
+		// Decrypt token to get prefix for display
+		prefix := "****"
+		if token.TokenEncrypted != "" {
+			decrypted, err := utils.Decrypt(token.TokenEncrypted, s.config.Encryption.Key)
+			if err == nil {
+				tokenStr := string(decrypted)
+				prefix = utils.GetTokenPrefix(tokenStr)
+			}
+		}
+
 		result[i] = APITokenResponse{
 			ID:          token.ID,
 			Name:        token.Name,
-			Prefix:      "****", // Don't show token, only prefix placeholder
+			Prefix:      prefix,
 			ExpiresAt:   token.ExpiresAt,
 			Status:      token.Status,
 			Description: token.Description,
@@ -125,13 +145,44 @@ func (s *Service) ListAPITokens(userID uint) ([]APITokenResponse, error) {
 	return result, nil
 }
 
-// RevokeAPIToken revokes an API token
-func (s *Service) RevokeAPIToken(userID, tokenID uint) error {
+// GetAPIToken retrieves the full API token by ID (for the token owner)
+func (s *Service) GetAPIToken(userID, tokenID uint) (*APITokenResponse, error) {
+	var token model.APIToken
+	if err := s.db.Where("id = ? AND user_id = ?", tokenID, userID).First(&token).Error; err != nil {
+		return nil, errors.New("token not found")
+	}
+
+	// Decrypt token
+	var fullToken string
+	if token.TokenEncrypted != "" {
+		decrypted, err := utils.Decrypt(token.TokenEncrypted, s.config.Encryption.Key)
+		if err != nil {
+			return nil, errors.New("failed to decrypt token")
+		}
+		fullToken = string(decrypted)
+	} else {
+		// For old tokens without encrypted version, return error
+		return nil, errors.New("token cannot be retrieved (created before encryption was enabled)")
+	}
+
+	return &APITokenResponse{
+		ID:          token.ID,
+		Name:        token.Name,
+		Token:       fullToken,
+		Prefix:      utils.GetTokenPrefix(fullToken),
+		ExpiresAt:   token.ExpiresAt,
+		Status:      token.Status,
+		Description: token.Description,
+		CreatedAt:   token.CreatedAt,
+	}, nil
+}
+
+// DeleteAPIToken deletes an API token
+func (s *Service) DeleteAPIToken(userID, tokenID uint) error {
 	var token model.APIToken
 	if err := s.db.Where("id = ? AND user_id = ?", tokenID, userID).First(&token).Error; err != nil {
 		return err
 	}
 
-	token.Status = "disabled"
-	return s.db.Save(&token).Error
+	return s.db.Delete(&token).Error
 }
