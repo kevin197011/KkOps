@@ -173,7 +173,7 @@ function App() {
         <Route
           path="/tags"
           element={
-            <ProtectedRoute>
+            <ProtectedRoute requiredPermission="tags:*">
               <MainLayout>
                 <Suspense fallback={<PageLoading />}>
                   <TagList />

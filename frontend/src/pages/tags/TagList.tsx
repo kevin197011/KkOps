@@ -4,13 +4,19 @@
 // https://opensource.org/licenses/MIT
 
 import { useState, useEffect } from 'react'
-import { Table, Button, Space, message, Modal, Form, Input, Tag, ColorPicker } from 'antd'
-import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons'
+import { Table, Button, Space, Modal, Form, Input, Tag, ColorPicker, Card, Typography, App } from 'antd'
+import { PlusOutlined, EditOutlined, DeleteOutlined, TagsOutlined } from '@ant-design/icons'
 import { tagApi, Tag as TagType, CreateTagRequest, UpdateTagRequest } from '@/api/tag'
 import { usePermissionStore } from '@/stores/permission'
+import { useThemeStore } from '@/stores/theme'
+
+const { Title } = Typography
 
 const TagList = () => {
+  const { message } = App.useApp()
   const { hasPermission } = usePermissionStore()
+  const { mode } = useThemeStore()
+  const isDark = mode === 'dark'
   const [tags, setTags] = useState<TagType[]>([])
   const [loading, setLoading] = useState(false)
   const [modalVisible, setModalVisible] = useState(false)
@@ -134,37 +140,96 @@ const TagList = () => {
   ]
 
   return (
-    <div>
-      <div style={{ 
-        marginBottom: 16, 
-        display: 'flex', 
-        justifyContent: 'space-between', 
-        alignItems: 'center',
-        flexWrap: 'wrap',
-        gap: 8
-      }}>
-        <h2>标签管理</h2>
-        <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate} aria-label="新增标签">
-          新增标签
-        </Button>
-      </div>
-      <Table
-        columns={columns}
-        dataSource={tags}
-        loading={loading}
-        rowKey="id"
-        scroll={{ x: 'max-content' }}
-      />
+    <div style={{ 
+      padding: 24,
+      background: isDark ? '#0F172A' : '#F5F5F5',
+      minHeight: '100vh',
+    }}>
+      <Card
+        style={{
+          background: isDark ? '#1E293B' : '#FFFFFF',
+          border: isDark 
+            ? '1px solid rgba(255, 255, 255, 0.08)' 
+            : '1px solid rgba(0, 0, 0, 0.06)',
+          boxShadow: isDark
+            ? '0 4px 24px rgba(0, 0, 0, 0.5)'
+            : '0 2px 12px rgba(0, 0, 0, 0.08)',
+        }}
+      >
+        <div style={{ 
+          marginBottom: 24, 
+          display: 'flex', 
+          justifyContent: 'space-between', 
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          gap: 16
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <TagsOutlined style={{ 
+              fontSize: 24, 
+              color: isDark ? '#60A5FA' : '#2563EB' 
+            }} />
+            <Title level={3} style={{ 
+              margin: 0,
+              color: isDark ? '#E2E8F0' : '#1E293B',
+            }}>
+              标签管理
+            </Title>
+          </div>
+          {hasPermission('assets', 'create') && (
+            <Button 
+              type="primary" 
+              icon={<PlusOutlined />} 
+              onClick={handleCreate} 
+              size="large"
+              style={{
+                borderRadius: 6,
+                fontWeight: 500,
+              }}
+            >
+              新增标签
+            </Button>
+          )}
+        </div>
+        <Table
+          columns={columns}
+          dataSource={tags}
+          loading={loading}
+          rowKey="id"
+          scroll={{ x: 'max-content' }}
+          style={{
+            background: isDark ? '#1E293B' : '#FFFFFF',
+          }}
+          pagination={{
+            showSizeChanger: true,
+            showQuickJumper: true,
+            showTotal: (total) => `共 ${total} 条`,
+            pageSizeOptions: ['10', '20', '50', '100'],
+          }}
+        />
+      </Card>
       <Modal
-        title={editingTag ? '编辑标签' : '新增标签'}
+        title={
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <TagsOutlined style={{ 
+              fontSize: 18, 
+              color: isDark ? '#60A5FA' : '#2563EB' 
+            }} />
+            <span>{editingTag ? '编辑标签' : '新增标签'}</span>
+          </div>
+        }
         open={modalVisible}
         onCancel={() => {
           setModalVisible(false)
           form.resetFields()
         }}
         onOk={() => form.submit()}
-        width="90%"
-        style={{ maxWidth: 600 }}
+        width={600}
+        styles={{
+          body: {
+            background: isDark ? '#1E293B' : '#FFFFFF',
+          },
+        }}
       >
         <Form form={form} layout="vertical" onFinish={handleSubmit}>
           <Form.Item

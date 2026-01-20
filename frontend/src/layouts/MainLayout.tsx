@@ -33,6 +33,7 @@ import {
   ApartmentOutlined,
   AppstoreOutlined,
   BookOutlined,
+  TagsOutlined,
 } from '@ant-design/icons'
 import { useThemeStore } from '@/stores/theme'
 import { useAuthStore } from '@/stores/auth'
@@ -187,6 +188,11 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
           key: '/assets',
           icon: <DatabaseOutlined />,
           label: '资产管理',
+        },
+        {
+          key: '/tags',
+          icon: <TagsOutlined />,
+          label: '标签管理',
         },
       ],
     },
