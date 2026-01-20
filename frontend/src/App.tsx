@@ -31,6 +31,7 @@ const SSHKeyList = lazy(() => import('./pages/ssh/SSHKeyList'))
 const WebSSHTerminal = lazy(() => import('./pages/ssh/WebSSHTerminal'))
 const AuditLogList = lazy(() => import('./pages/audit/AuditLogList'))
 const OperationToolList = lazy(() => import('./pages/operationTools/OperationToolList'))
+const UserProfile = lazy(() => import('./pages/profile/UserProfile'))
 
 // Loading component
 const PageLoading = () => (
@@ -280,6 +281,18 @@ function App() {
               <MainLayout>
                 <Suspense fallback={<PageLoading />}>
                   <AuditLogList />
+                </Suspense>
+              </MainLayout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/profile"
+          element={
+            <ProtectedRoute>
+              <MainLayout>
+                <Suspense fallback={<PageLoading />}>
+                  <UserProfile />
                 </Suspense>
               </MainLayout>
             </ProtectedRoute>

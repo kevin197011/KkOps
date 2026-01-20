@@ -75,4 +75,30 @@ export const userApi = {
   // 获取当前用户权限
   getPermissions: () =>
     apiClient.get<{ permissions: string[] }>('/user/permissions'),
+  
+  // API Token 管理
+  listTokens: (userId: number) =>
+    apiClient.get<APITokenResponse[]>(`/users/${userId}/tokens`),
+  createToken: (userId: number, data: CreateAPITokenRequest) =>
+    apiClient.post<APITokenResponse>(`/users/${userId}/tokens`, data),
+  revokeToken: (tokenId: number) =>
+    apiClient.delete(`/tokens/${tokenId}`),
+}
+
+// API Token 相关类型
+export interface APITokenResponse {
+  id: number
+  name: string
+  token?: string // 仅在创建时返回完整 token
+  prefix: string
+  expires_at?: string
+  status: string
+  description?: string
+  created_at: string
+}
+
+export interface CreateAPITokenRequest {
+  name: string
+  description?: string
+  expires_at?: string
 }

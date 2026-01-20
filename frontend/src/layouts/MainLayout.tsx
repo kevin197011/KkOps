@@ -300,6 +300,12 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
 
   const userMenuItems: MenuProps['items'] = [
     {
+      key: 'profile',
+      icon: <UserOutlined />,
+      label: '个人设置',
+      onClick: () => navigate('/profile'),
+    },
+    {
       key: 'change-password',
       icon: <LockOutlined />,
       label: '修改密码',

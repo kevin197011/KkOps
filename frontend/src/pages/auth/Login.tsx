@@ -153,23 +153,24 @@ const Login = () => {
           .login-input.ant-input,
           .login-input.ant-input-password {
             background: rgba(255, 255, 255, 0.9) !important;
-            border-color: rgba(226, 232, 240, 0.8) !important;
+            border-color: transparent !important;
             color: #1E293B !important;
             transition: all 0.3s ease !important;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05) !important;
           }
           
           .login-input.ant-input:hover,
           .login-input.ant-input-password:hover {
-            border-color: rgba(203, 213, 225, 1) !important;
-            box-shadow: 0 0 0 2px rgba(226, 232, 240, 0.5) !important;
+            border-color: transparent !important;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08) !important;
           }
           
           .login-input.ant-input:focus,
           .login-input.ant-input-password:focus,
           .login-input.ant-input-focused,
           .login-input.ant-input-password-focused {
-            border-color: rgba(148, 163, 184, 0.8) !important;
-            box-shadow: 0 0 0 2px rgba(226, 232, 240, 0.6) !important;
+            border-color: transparent !important;
+            box-shadow: 0 0 0 2px rgba(241, 245, 249, 0.9), 0 2px 8px rgba(0, 0, 0, 0.1) !important;
             background: rgba(255, 255, 255, 1) !important;
           }
           
@@ -227,22 +228,20 @@ const Login = () => {
           maxWidth: 400,
           position: 'relative',
           zIndex: 1,
-          background: 'rgba(255, 255, 255, 0.7)',
+          background: 'rgba(255, 255, 255, 0.8)',
           backdropFilter: 'blur(12px)',
-          border: '1px solid rgba(203, 213, 225, 0.6)',
-          boxShadow: '0 4px 24px rgba(0, 0, 0, 0.08)',
+          border: 'none',
+          boxShadow: '0 4px 24px rgba(0, 0, 0, 0.06)',
           animation: 'login-fade-in-up 0.6s ease-out',
-          transition: 'transform 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease',
+          transition: 'transform 0.3s ease, box-shadow 0.3s ease',
         }}
         onMouseEnter={(e) => {
           e.currentTarget.style.transform = 'translateY(-2px)'
-          e.currentTarget.style.boxShadow = '0 8px 32px rgba(0, 0, 0, 0.12)'
-          e.currentTarget.style.borderColor = 'rgba(203, 213, 225, 0.8)'
+          e.currentTarget.style.boxShadow = '0 8px 32px rgba(0, 0, 0, 0.1)'
         }}
         onMouseLeave={(e) => {
           e.currentTarget.style.transform = 'translateY(0)'
-          e.currentTarget.style.boxShadow = '0 4px 24px rgba(0, 0, 0, 0.08)'
-          e.currentTarget.style.borderColor = 'rgba(203, 213, 225, 0.6)'
+          e.currentTarget.style.boxShadow = '0 4px 24px rgba(0, 0, 0, 0.06)'
         }}
         bodyStyle={{
           padding: '32px',
@@ -257,9 +256,7 @@ const Login = () => {
           <div style={{
             padding: '12px',
             borderRadius: '8px',
-            background: 'rgba(248, 250, 252, 0.6)',
-            backdropFilter: 'blur(4px)',
-            border: '1px solid rgba(226, 232, 240, 0.6)',
+            background: 'transparent',
             marginBottom: 16,
             display: 'flex',
             alignItems: 'center',
@@ -271,7 +268,7 @@ const Login = () => {
               style={{
                 height: 48,
                 width: 'auto',
-                opacity: 0.9,
+                opacity: 1,
               }}
             />
           </div>
@@ -303,7 +300,7 @@ const Login = () => {
               aria-label="用户名输入框"
               style={{
                 background: 'rgba(255, 255, 255, 0.9)',
-                borderColor: 'rgba(226, 232, 240, 0.8)',
+                borderColor: 'transparent',
                 color: '#1E293B',
               }}
               className="login-input"
@@ -323,7 +320,7 @@ const Login = () => {
               aria-label="密码输入框"
               style={{
                 background: 'rgba(255, 255, 255, 0.9)',
-                borderColor: 'rgba(226, 232, 240, 0.8)',
+                borderColor: 'transparent',
                 color: '#1E293B',
               }}
               className="login-input"
