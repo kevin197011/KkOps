@@ -10,12 +10,14 @@ import (
 	"encoding/json"
 	"io"
 	"log"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
+	"github.com/pkg/sftp"
 	"golang.org/x/crypto/ssh"
 	"gorm.io/gorm"
 
@@ -30,12 +32,16 @@ type zmodemState struct {
 	mu            sync.Mutex
 	active        bool
 	direction     string // "upload" or "download"
-	mode          string // "zmodem" or "trzsz"
+	mode          string // "zmodem" or "trzsz" or "sftp"
 	filename      string
 	totalSize     int64
 	bytesSent     int64
 	bytesReceived int64
 	canceled      bool
+	// For SFTP upload
+	uploadBuffer  *bytes.Buffer
+	uploadChan    chan []byte
+	uploadDone    chan bool
 }
 
 // detectZmodemSequence detects ZMODEM protocol initiation sequences
@@ -383,11 +389,23 @@ func handleSSHConnect(conn *websocket.Conn, msg map[string]interface{}, db *gorm
 		return
 	}
 
+	// Create SFTP client
+	sftpClient, err := sftp.NewClient(sshClient.Client())
+	if err != nil {
+		log.Printf("Failed to create SFTP client: %v", err)
+		// Don't fail the connection, just log the error - terminal will still work
+		sftpClient = nil
+	} else {
+		defer sftpClient.Close()
+		log.Printf("SFTP client created successfully")
+	}
+
 	// Send connected message
 	conn.WriteJSON(map[string]interface{}{
 		"type": "connected",
 		"data": map[string]interface{}{
-			"message": "SSH session established",
+			"message":    "SSH session established",
+			"sftp_ready": sftpClient != nil,
 		},
 	})
 
@@ -872,39 +890,64 @@ func handleSSHConnect(conn *websocket.Conn, msg map[string]interface{}, db *gorm
 			break
 		}
 
-		// Check if ZMODEM transfer is active
-		zmodemState.mu.Lock()
-		isZmodemActive := zmodemState.active
-		zmodemState.mu.Unlock()
-
-		if messageType == websocket.BinaryMessage && isZmodemActive {
-			// Binary data during ZMODEM upload: forward to SSH stdin
+		if messageType == websocket.BinaryMessage {
 			zmodemState.mu.Lock()
+			isActive := zmodemState.active
 			direction := zmodemState.direction
+			mode := zmodemState.mode
 			zmodemState.mu.Unlock()
 
-			if direction == "upload" {
-				if _, err := stdin.Write(messageData); err != nil {
-					log.Printf("Error writing to stdin: %v", err)
-					break
-				}
+			if isActive {
+				if mode == "sftp" && direction == "upload" {
+					// SFTP upload: send data to channel
+					zmodemState.mu.Lock()
+					if zmodemState.uploadChan != nil {
+						select {
+						case zmodemState.uploadChan <- messageData:
+							// Data sent successfully
+						default:
+							log.Printf("Upload channel full, dropping data")
+						}
+					}
+					zmodemState.bytesSent += int64(len(messageData))
+					bytesSent := zmodemState.bytesSent
+					totalSize := zmodemState.totalSize
+					zmodemState.mu.Unlock()
 
-				// Update progress
-				zmodemState.mu.Lock()
-				zmodemState.bytesSent += int64(len(messageData))
-				bytesSent := zmodemState.bytesSent
-				totalSize := zmodemState.totalSize
-				zmodemState.mu.Unlock()
+					// Send progress update
+					if totalSize > 0 {
+						conn.WriteJSON(map[string]interface{}{
+							"type": "sftp_upload_progress",
+							"data": map[string]interface{}{
+								"bytes_transferred": bytesSent,
+								"total_bytes":       totalSize,
+							},
+						})
+					}
+				} else if mode == "zmodem" && direction == "upload" {
+					// ZMODEM upload: forward to SSH stdin
+					if _, err := stdin.Write(messageData); err != nil {
+						log.Printf("Error writing to stdin: %v", err)
+						break
+					}
 
-				// Send progress update
-				if totalSize > 0 {
-					conn.WriteJSON(map[string]interface{}{
-						"type": "zmodem_progress",
-						"data": map[string]interface{}{
-							"bytes_transferred": bytesSent,
-							"total_bytes":       totalSize,
-						},
-					})
+					// Update progress
+					zmodemState.mu.Lock()
+					zmodemState.bytesSent += int64(len(messageData))
+					bytesSent := zmodemState.bytesSent
+					totalSize := zmodemState.totalSize
+					zmodemState.mu.Unlock()
+
+					// Send progress update
+					if totalSize > 0 {
+						conn.WriteJSON(map[string]interface{}{
+							"type": "zmodem_progress",
+							"data": map[string]interface{}{
+								"bytes_transferred": bytesSent,
+								"total_bytes":       totalSize,
+							},
+						})
+					}
 				}
 			}
 			continue
@@ -1019,6 +1062,161 @@ func handleSSHConnect(conn *websocket.Conn, msg map[string]interface{}, db *gorm
 					zmodemState.mu.Unlock()
 				}
 			}()
+		case "sftp_list":
+			// List files in directory
+			if sftpClient == nil {
+				conn.WriteJSON(map[string]interface{}{
+					"type": "sftp_error",
+					"data": map[string]interface{}{
+						"error": "SFTP client not available",
+					},
+				})
+				break
+			}
+			if listData, ok := wsMsg["data"].(map[string]interface{}); ok {
+				path, _ := listData["path"].(string)
+				if path == "" {
+					path = "."
+				}
+				handleSFTPList(conn, sftpClient, path)
+			}
+		case "sftp_upload":
+			// Upload file (file data will be sent as binary message)
+			if sftpClient == nil {
+				conn.WriteJSON(map[string]interface{}{
+					"type": "sftp_error",
+					"data": map[string]interface{}{
+						"error": "SFTP client not available",
+					},
+				})
+				break
+			}
+			if uploadData, ok := wsMsg["data"].(map[string]interface{}); ok {
+				remotePath, _ := uploadData["remote_path"].(string)
+				fileName, _ := uploadData["file_name"].(string)
+				size, _ := uploadData["size"].(float64)
+				if remotePath == "" || fileName == "" {
+					conn.WriteJSON(map[string]interface{}{
+						"type": "sftp_error",
+						"data": map[string]interface{}{
+							"error": "remote_path and file_name are required",
+						},
+					})
+					break
+				}
+				// Set upload state - file data will come as binary message
+				zmodemState.mu.Lock()
+				zmodemState.active = true
+				zmodemState.direction = "upload"
+				zmodemState.mode = "sftp"
+				zmodemState.filename = fileName
+				zmodemState.totalSize = int64(size)
+				zmodemState.bytesSent = 0
+				zmodemState.uploadChan = make(chan []byte, 10)
+				zmodemState.uploadDone = make(chan bool, 1)
+				zmodemState.uploadBuffer = bytes.NewBuffer(nil)
+				zmodemState.mu.Unlock()
+
+				// Start SFTP upload in goroutine
+				go handleSFTPUpload(conn, sftpClient, remotePath, fileName, zmodemState, done)
+			}
+		case "sftp_download":
+			// Download file
+			if sftpClient == nil {
+				conn.WriteJSON(map[string]interface{}{
+					"type": "sftp_error",
+					"data": map[string]interface{}{
+						"error": "SFTP client not available",
+					},
+				})
+				break
+			}
+			if downloadData, ok := wsMsg["data"].(map[string]interface{}); ok {
+				remotePath, _ := downloadData["remote_path"].(string)
+				if remotePath == "" {
+					conn.WriteJSON(map[string]interface{}{
+						"type": "sftp_error",
+						"data": map[string]interface{}{
+							"error": "remote_path is required",
+						},
+					})
+					break
+				}
+				go handleSFTPDownload(conn, sftpClient, remotePath, zmodemState)
+			}
+		case "sftp_delete":
+			// Delete file or directory
+			if sftpClient == nil {
+				conn.WriteJSON(map[string]interface{}{
+					"type": "sftp_error",
+					"data": map[string]interface{}{
+						"error": "SFTP client not available",
+					},
+				})
+				break
+			}
+			if deleteData, ok := wsMsg["data"].(map[string]interface{}); ok {
+				path, _ := deleteData["path"].(string)
+				if path == "" {
+					conn.WriteJSON(map[string]interface{}{
+						"type": "sftp_error",
+						"data": map[string]interface{}{
+							"error": "path is required",
+						},
+					})
+					break
+				}
+				go handleSFTPDelete(conn, sftpClient, path)
+			}
+		case "sftp_mkdir":
+			// Create directory
+			if sftpClient == nil {
+				conn.WriteJSON(map[string]interface{}{
+					"type": "sftp_error",
+					"data": map[string]interface{}{
+						"error": "SFTP client not available",
+					},
+				})
+				break
+			}
+			if mkdirData, ok := wsMsg["data"].(map[string]interface{}); ok {
+				path, _ := mkdirData["path"].(string)
+				if path == "" {
+					conn.WriteJSON(map[string]interface{}{
+						"type": "sftp_error",
+						"data": map[string]interface{}{
+							"error": "path is required",
+						},
+					})
+					break
+				}
+				go handleSFTPMkdir(conn, sftpClient, path)
+			}
+		case "sftp_rename":
+			// Rename file or directory
+			if sftpClient == nil {
+				conn.WriteJSON(map[string]interface{}{
+					"type": "sftp_error",
+					"data": map[string]interface{}{
+						"error": "SFTP client not available",
+					},
+				})
+				break
+			}
+			if renameData, ok := wsMsg["data"].(map[string]interface{}); ok {
+				oldPath, _ := renameData["old_path"].(string)
+				newPath, _ := renameData["new_path"].(string)
+				if oldPath == "" || newPath == "" {
+					conn.WriteJSON(map[string]interface{}{
+						"type": "sftp_error",
+						"data": map[string]interface{}{
+							"error": "old_path and new_path are required",
+						},
+					})
+					break
+				}
+				go handleSFTPRename(conn, sftpClient, oldPath, newPath)
+			}
 		case "disconnect":
 			// User requested disconnect
 			done <- true
@@ -1046,6 +1244,371 @@ func handleSSHConnect(conn *websocket.Conn, msg map[string]interface{}, db *gorm
 		"type": "disconnected",
 		"data": map[string]interface{}{
 			"reason": "Connection closed",
+		},
+	})
+}
+
+// SFTP handler functions
+
+func handleSFTPList(conn *websocket.Conn, sftpClient *sftp.Client, path string) {
+	files, err := sftpClient.ReadDir(path)
+	if err != nil {
+		conn.WriteJSON(map[string]interface{}{
+			"type": "sftp_error",
+			"data": map[string]interface{}{
+				"error": "Failed to list directory: " + err.Error(),
+				"path":  path,
+			},
+		})
+		return
+	}
+
+	fileList := make([]map[string]interface{}, 0, len(files))
+	for _, file := range files {
+		fileInfo := map[string]interface{}{
+			"name":    file.Name(),
+			"size":    file.Size(),
+			"mode":    file.Mode().String(),
+			"modTime": file.ModTime().Unix(),
+			"isDir":   file.IsDir(),
+		}
+		fileList = append(fileList, fileInfo)
+	}
+
+	conn.WriteJSON(map[string]interface{}{
+		"type": "sftp_list",
+		"data": map[string]interface{}{
+			"path":  path,
+			"files": fileList,
+		},
+	})
+}
+
+func handleSFTPUpload(conn *websocket.Conn, sftpClient *sftp.Client, remotePath string, fileName string, zmodemState *zmodemState, done chan bool) {
+	// Create a timeout for receiving file data
+	timeout := time.NewTimer(60 * time.Second)
+	defer timeout.Stop()
+
+	// Read data from channel and write to buffer
+	zmodemState.mu.Lock()
+	uploadChan := zmodemState.uploadChan
+	buffer := zmodemState.uploadBuffer
+	totalSize := zmodemState.totalSize
+	zmodemState.mu.Unlock()
+
+	if uploadChan == nil {
+		conn.WriteJSON(map[string]interface{}{
+			"type": "sftp_error",
+			"data": map[string]interface{}{
+				"error": "Upload channel not initialized",
+			},
+		})
+		return
+	}
+
+	// Collect all data chunks
+	for {
+		select {
+		case <-done:
+			zmodemState.mu.Lock()
+			zmodemState.active = false
+			close(zmodemState.uploadChan)
+			zmodemState.uploadChan = nil
+			zmodemState.mu.Unlock()
+			return
+		case <-timeout.C:
+			zmodemState.mu.Lock()
+			zmodemState.active = false
+			close(zmodemState.uploadChan)
+			zmodemState.uploadChan = nil
+			zmodemState.mu.Unlock()
+			conn.WriteJSON(map[string]interface{}{
+				"type": "sftp_error",
+				"data": map[string]interface{}{
+					"error": "Upload timeout",
+				},
+			})
+			return
+		case data, ok := <-uploadChan:
+			if !ok {
+				// Channel closed, all data received
+				goto writeFile
+			}
+			if buffer != nil {
+				buffer.Write(data)
+			}
+			// Reset timeout on each chunk
+			timeout.Reset(60 * time.Second)
+
+			// Check if all data received
+			zmodemState.mu.Lock()
+			bytesSent := zmodemState.bytesSent
+			totalSize := zmodemState.totalSize
+			zmodemState.mu.Unlock()
+
+			if totalSize > 0 && bytesSent >= totalSize {
+				// All data received
+				goto writeFile
+			}
+		}
+
+		// Check if we have all data
+		zmodemState.mu.Lock()
+		bytesSent := zmodemState.bytesSent
+		totalSize = zmodemState.totalSize
+		zmodemState.mu.Unlock()
+
+		if totalSize > 0 && bytesSent >= totalSize {
+			// Wait a bit for remaining chunks
+			time.Sleep(100 * time.Millisecond)
+			// Check if channel is empty
+			select {
+			case <-timeout.C:
+				goto writeFile
+			default:
+			}
+		}
+	}
+
+writeFile:
+	// All data received, write to SFTP
+	fullPath := filepath.Join(remotePath, fileName)
+	if remotePath == "." || remotePath == "" {
+		fullPath = fileName
+	}
+
+	// Create parent directory if it doesn't exist
+	parentDir := filepath.Dir(fullPath)
+	if parentDir != "." && parentDir != "/" {
+		sftpClient.MkdirAll(parentDir)
+	}
+
+	dstFile, err := sftpClient.Create(fullPath)
+	if err != nil {
+		zmodemState.mu.Lock()
+		zmodemState.active = false
+		if zmodemState.uploadChan != nil {
+			close(zmodemState.uploadChan)
+			zmodemState.uploadChan = nil
+		}
+		zmodemState.mu.Unlock()
+		conn.WriteJSON(map[string]interface{}{
+			"type": "sftp_error",
+			"data": map[string]interface{}{
+				"error": "Failed to create file: " + err.Error(),
+			},
+		})
+		return
+	}
+
+	if buffer != nil {
+		_, err = dstFile.Write(buffer.Bytes())
+	}
+	dstFile.Close()
+
+	if err != nil {
+		zmodemState.mu.Lock()
+		zmodemState.active = false
+		if zmodemState.uploadChan != nil {
+			close(zmodemState.uploadChan)
+			zmodemState.uploadChan = nil
+		}
+		zmodemState.mu.Unlock()
+		conn.WriteJSON(map[string]interface{}{
+			"type": "sftp_error",
+			"data": map[string]interface{}{
+				"error": "Failed to write file: " + err.Error(),
+			},
+		})
+		return
+	}
+
+	zmodemState.mu.Lock()
+	bytesSent := zmodemState.bytesSent
+	zmodemState.active = false
+	if zmodemState.uploadChan != nil {
+		close(zmodemState.uploadChan)
+		zmodemState.uploadChan = nil
+	}
+	zmodemState.mu.Unlock()
+
+	conn.WriteJSON(map[string]interface{}{
+		"type": "sftp_upload_complete",
+		"data": map[string]interface{}{
+			"remote_path": fullPath,
+			"file_name":   fileName,
+			"size":        bytesSent,
+		},
+	})
+}
+
+func handleSFTPDownload(conn *websocket.Conn, sftpClient *sftp.Client, remotePath string, zmodemState *zmodemState) {
+	srcFile, err := sftpClient.Open(remotePath)
+	if err != nil {
+		conn.WriteJSON(map[string]interface{}{
+			"type": "sftp_error",
+			"data": map[string]interface{}{
+				"error":      "Failed to open file: " + err.Error(),
+				"remote_path": remotePath,
+			},
+		})
+		return
+	}
+	defer srcFile.Close()
+
+	fileInfo, err := srcFile.Stat()
+	if err != nil {
+		conn.WriteJSON(map[string]interface{}{
+			"type": "sftp_error",
+			"data": map[string]interface{}{
+				"error":      "Failed to get file info: " + err.Error(),
+				"remote_path": remotePath,
+			},
+		})
+		return
+	}
+
+	// Send download start message
+	conn.WriteJSON(map[string]interface{}{
+		"type": "sftp_download_start",
+		"data": map[string]interface{}{
+			"remote_path": remotePath,
+			"file_name":   filepath.Base(remotePath),
+			"size":        fileInfo.Size(),
+		},
+	})
+
+	// Read and send file in chunks
+	buffer := make([]byte, 8192) // 8KB chunks
+	totalRead := int64(0)
+	fileName := filepath.Base(remotePath)
+
+	for {
+		n, err := srcFile.Read(buffer)
+		if n > 0 {
+			totalRead += int64(n)
+			// Send binary data
+			if err := conn.WriteMessage(websocket.BinaryMessage, buffer[:n]); err != nil {
+				log.Printf("Error sending file chunk: %v", err)
+				return
+			}
+
+			// Send progress update
+			conn.WriteJSON(map[string]interface{}{
+				"type": "sftp_download_progress",
+				"data": map[string]interface{}{
+					"remote_path":      remotePath,
+					"file_name":        fileName,
+					"bytes_transferred": totalRead,
+					"total_bytes":       fileInfo.Size(),
+				},
+			})
+		}
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			conn.WriteJSON(map[string]interface{}{
+				"type": "sftp_error",
+				"data": map[string]interface{}{
+					"error":      "Failed to read file: " + err.Error(),
+					"remote_path": remotePath,
+				},
+			})
+			return
+		}
+	}
+
+	// Send download complete message
+	conn.WriteJSON(map[string]interface{}{
+		"type": "sftp_download_complete",
+		"data": map[string]interface{}{
+			"remote_path": remotePath,
+			"file_name":   fileName,
+			"size":        totalRead,
+		},
+	})
+}
+
+func handleSFTPDelete(conn *websocket.Conn, sftpClient *sftp.Client, path string) {
+	// Check if it's a directory or file
+	fileInfo, err := sftpClient.Stat(path)
+	if err != nil {
+		conn.WriteJSON(map[string]interface{}{
+			"type": "sftp_error",
+			"data": map[string]interface{}{
+				"error": "Failed to stat path: " + err.Error(),
+				"path":  path,
+			},
+		})
+		return
+	}
+
+	if fileInfo.IsDir() {
+		err = sftpClient.RemoveDirectory(path)
+	} else {
+		err = sftpClient.Remove(path)
+	}
+
+	if err != nil {
+		conn.WriteJSON(map[string]interface{}{
+			"type": "sftp_error",
+			"data": map[string]interface{}{
+				"error": "Failed to delete: " + err.Error(),
+				"path":  path,
+			},
+		})
+		return
+	}
+
+	conn.WriteJSON(map[string]interface{}{
+		"type": "sftp_delete_complete",
+		"data": map[string]interface{}{
+			"path": path,
+		},
+	})
+}
+
+func handleSFTPMkdir(conn *websocket.Conn, sftpClient *sftp.Client, path string) {
+	err := sftpClient.MkdirAll(path)
+	if err != nil {
+		conn.WriteJSON(map[string]interface{}{
+			"type": "sftp_error",
+			"data": map[string]interface{}{
+				"error": "Failed to create directory: " + err.Error(),
+				"path":  path,
+			},
+		})
+		return
+	}
+
+	conn.WriteJSON(map[string]interface{}{
+		"type": "sftp_mkdir_complete",
+		"data": map[string]interface{}{
+			"path": path,
+		},
+	})
+}
+
+func handleSFTPRename(conn *websocket.Conn, sftpClient *sftp.Client, oldPath string, newPath string) {
+	err := sftpClient.Rename(oldPath, newPath)
+	if err != nil {
+		conn.WriteJSON(map[string]interface{}{
+			"type": "sftp_error",
+			"data": map[string]interface{}{
+				"error":    "Failed to rename: " + err.Error(),
+				"old_path": oldPath,
+				"new_path": newPath,
+			},
+		})
+		return
+	}
+
+	conn.WriteJSON(map[string]interface{}{
+		"type": "sftp_rename_complete",
+		"data": map[string]interface{}{
+			"old_path": oldPath,
+			"new_path": newPath,
 		},
 	})
 }

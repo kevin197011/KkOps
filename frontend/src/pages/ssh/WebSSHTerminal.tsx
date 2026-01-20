@@ -8,9 +8,9 @@ import { useNavigate } from 'react-router-dom'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import '@xterm/xterm/css/xterm.css'
-import { Layout, Button, message, Space, Tag, Input, Tree, Spin, Typography, theme as antdTheme, Dropdown, Modal, Progress } from 'antd'
+import { Layout, Button, message, Space, Tag, Input, Tree, Spin, Typography, theme as antdTheme, Dropdown, Modal, Progress, Tooltip } from 'antd'
 import type { MenuProps } from 'antd'
-import { DisconnectOutlined, ArrowLeftOutlined, CheckCircleOutlined, ReloadOutlined, FolderOutlined, FolderOpenOutlined, DatabaseOutlined, CloseOutlined, HomeOutlined, SunOutlined, MoonOutlined, CopyOutlined, CloseCircleOutlined, UserOutlined, LogoutOutlined, UploadOutlined, DownloadOutlined } from '@ant-design/icons'
+import { DisconnectOutlined, ArrowLeftOutlined, CheckCircleOutlined, ReloadOutlined, FolderOutlined, FolderOpenOutlined, DatabaseOutlined, CloseOutlined, HomeOutlined, SunOutlined, MoonOutlined, CopyOutlined, CloseCircleOutlined, UserOutlined, LogoutOutlined, UploadOutlined, DownloadOutlined, FileTextOutlined, CloudServerOutlined } from '@ant-design/icons'
 import { useAuthStore } from '@/stores/auth'
 import { authApi } from '@/api/auth'
 import { assetApi, Asset } from '@/api/asset'
@@ -18,6 +18,7 @@ import { projectApi, Project } from '@/api/project'
 import { environmentApi, Environment } from '@/api/environment'
 import { useThemeStore } from '@/stores/theme'
 import { detectZmodemSequence, formatBytes, calculateProgress } from '@/utils/zmodem'
+import SFTPManager from './components/SFTPManager'
 
 const { Header, Sider, Content } = Layout
 const { Search } = Input
@@ -64,6 +65,7 @@ const WebSSHTerminal = () => {
   const [searchQuery, setSearchQuery] = useState('')
   const [expandedKeys, setExpandedKeys] = useState<React.Key[]>([])
   const [autoExpandParent, setAutoExpandParent] = useState(true)
+  const [sftpVisibleConnections, setSftpVisibleConnections] = useState<Set<string>>(new Set())
   const { mode, toggleMode } = useThemeStore()
   const { user, clearAuth } = useAuthStore()
   const { token } = antdTheme.useToken()
@@ -623,6 +625,14 @@ const WebSSHTerminal = () => {
         try {
           const msg = JSON.parse(event.data)
           console.log(`[WebSocket ${messageConnId}] Message received:`, msg.type, msg)
+
+          // Forward SFTP messages to SFTPManager components
+          // SFTP messages will be handled by SFTPManager's event listener
+          // We don't intercept them here to avoid conflicts
+          if (msg.type && msg.type.startsWith('sftp_')) {
+            // Let SFTPManager handle these messages
+            return
+          }
 
           if (msg.type === 'ready') {
             console.log('WebSocket ready')
@@ -2460,115 +2470,117 @@ const WebSSHTerminal = () => {
                 const isActive = activeConnectionId === conn.id
                 const isDragging = draggedTabId === conn.id
                 return (
-                  <Dropdown
-                    key={conn.id}
-                    menu={{ items: getTabContextMenuItems(conn.id) }}
-                    trigger={['contextMenu']}
-                  >
-                    <div
-                      draggable
-                      onDragStart={(e) => handleDragStart(e, conn.id)}
-                      onDragEnd={handleDragEnd}
-                      onDragOver={handleDragOver}
-                      onDrop={(e) => handleDrop(e, conn.id)}
-                      onClick={() => setActiveConnectionId(conn.id)}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 8,
-                        padding: '6px 12px',
-                        borderRadius: '6px 6px 0 0',
-                        cursor: isDragging ? 'grabbing' : 'grab',
-                        background: isActive
-                          ? (mode === 'dark' ? '#0A0E27' : '#F5F5F5')
-                          : 'transparent',
-                        borderBottom: isActive
-                          ? `2px solid ${mode === 'dark' ? '#60A5FA' : '#2563EB'}`
-                          : '2px solid transparent',
-                        color: isActive
-                          ? (mode === 'dark' ? '#F1F5F9' : '#1E293B')
-                          : (mode === 'dark' ? '#94A3B8' : '#64748B'),
-                        transition: 'all 0.2s ease',
-                        whiteSpace: 'nowrap',
-                        minWidth: 120,
-                        maxWidth: 200,
-                        opacity: isDragging ? 0.5 : 1,
-                      }}
-                      onMouseEnter={(e) => {
-                        if (!isActive && !isDragging) {
-                          e.currentTarget.style.background = mode === 'dark' 
-                            ? 'rgba(255, 255, 255, 0.04)' 
-                            : 'rgba(0, 0, 0, 0.02)'
-                        }
-                      }}
-                      onMouseLeave={(e) => {
-                        if (!isActive) {
-                          e.currentTarget.style.background = 'transparent'
-                        }
-                      }}
+                  <div key={conn.id} style={{ display: 'flex', flexDirection: 'column' }}>
+                    <Dropdown
+                      menu={{ items: getTabContextMenuItems(conn.id) }}
+                      trigger={['contextMenu']}
                     >
-                      <Text
+                      <div
+                        draggable
+                        onDragStart={(e) => handleDragStart(e, conn.id)}
+                        onDragEnd={handleDragEnd}
+                        onDragOver={handleDragOver}
+                        onDrop={(e) => handleDrop(e, conn.id)}
+                        onClick={() => setActiveConnectionId(conn.id)}
                         style={{
-                          fontSize: 12,
-                          fontWeight: isActive ? 500 : 400,
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          flex: 1,
-                        }}
-                      >
-                        {getTabDisplayName(conn.id)}
-                      </Text>
-                      {conn.status === 'connecting' && (
-                        <Spin size="small" />
-                      )}
-                      {conn.status === 'connected' && (
-                        <div
-                          style={{
-                            width: 8,
-                            height: 8,
-                            borderRadius: '50%',
-                            background: '#10B981',
-                          }}
-                        />
-                      )}
-                      {conn.status === 'error' && (
-                        <div
-                          style={{
-                            width: 8,
-                            height: 8,
-                            borderRadius: '50%',
-                            background: '#EF4444',
-                          }}
-                        />
-                      )}
-                      <Button
-                        type="text"
-                        size="small"
-                        icon={<CloseOutlined />}
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          handleDisconnect(conn.id)
-                        }}
-                        style={{
-                          padding: 0,
-                          width: 16,
-                          height: 16,
-                          minWidth: 16,
-                          color: mode === 'dark' ? '#94A3B8' : '#64748B',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 8,
+                          padding: '6px 12px',
+                          borderRadius: '6px 6px 0 0',
+                          cursor: isDragging ? 'grabbing' : 'grab',
+                          background: isActive
+                            ? (mode === 'dark' ? '#0A0E27' : '#F5F5F5')
+                            : 'transparent',
+                          borderBottom: isActive
+                            ? `2px solid ${mode === 'dark' ? '#60A5FA' : '#2563EB'}`
+                            : '2px solid transparent',
+                          color: isActive
+                            ? (mode === 'dark' ? '#F1F5F9' : '#1E293B')
+                            : (mode === 'dark' ? '#94A3B8' : '#64748B'),
+                          transition: 'all 0.2s ease',
+                          whiteSpace: 'nowrap',
+                          minWidth: 120,
+                          maxWidth: 200,
+                          opacity: isDragging ? 0.5 : 1,
                         }}
                         onMouseEnter={(e) => {
-                          e.currentTarget.style.color = '#EF4444'
-                          e.currentTarget.style.background = mode === 'dark' 
-                            ? 'rgba(239, 68, 68, 0.1)' 
-                            : 'rgba(239, 68, 68, 0.05)'
+                          if (!isActive && !isDragging) {
+                            e.currentTarget.style.background = mode === 'dark' 
+                              ? 'rgba(255, 255, 255, 0.04)' 
+                              : 'rgba(0, 0, 0, 0.02)'
+                          }
                         }}
                         onMouseLeave={(e) => {
-                          e.currentTarget.style.color = mode === 'dark' ? '#94A3B8' : '#64748B'
-                          e.currentTarget.style.background = 'transparent'
+                          if (!isActive) {
+                            e.currentTarget.style.background = 'transparent'
+                          }
                         }}
-                      />
-                    </div>
-                  </Dropdown>
+                      >
+                        <Text
+                          style={{
+                            fontSize: 12,
+                            fontWeight: isActive ? 500 : 400,
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            flex: 1,
+                          }}
+                        >
+                          {getTabDisplayName(conn.id)}
+                        </Text>
+                        {conn.status === 'connecting' && (
+                          <Spin size="small" />
+                        )}
+                        {conn.status === 'connected' && (
+                          <div
+                            style={{
+                              width: 8,
+                              height: 8,
+                              borderRadius: '50%',
+                              background: '#10B981',
+                            }}
+                          />
+                        )}
+                        {conn.status === 'error' && (
+                          <div
+                            style={{
+                              width: 8,
+                              height: 8,
+                              borderRadius: '50%',
+                              background: '#EF4444',
+                            }}
+                          />
+                        )}
+                        <Button
+                          type="text"
+                          size="small"
+                          icon={<CloseOutlined />}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleDisconnect(conn.id)
+                          }}
+                          style={{
+                            padding: 0,
+                            width: 16,
+                            height: 16,
+                            minWidth: 16,
+                            color: mode === 'dark' ? '#94A3B8' : '#64748B',
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.color = '#EF4444'
+                            e.currentTarget.style.background = mode === 'dark' 
+                              ? 'rgba(239, 68, 68, 0.1)' 
+                              : 'rgba(239, 68, 68, 0.05)'
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.color = mode === 'dark' ? '#94A3B8' : '#64748B'
+                            e.currentTarget.style.background = 'transparent'
+                          }}
+                        />
+                      </div>
+                    </Dropdown>
+                    
+                  </div>
                 )
               })}
             </div>
@@ -2584,8 +2596,101 @@ const WebSSHTerminal = () => {
               flexDirection: 'column',
               overflow: 'hidden',
               background: mode === 'dark' ? '#0A0E27' : '#F5F5F5',
+              position: 'relative',
             }}
           >
+            {/* SFTP Button Above Terminal (in gray area) */}
+            {activeConnection && activeConnection.status === 'connected' && (
+              <div
+                style={{
+                  position: 'absolute',
+                  top: 'calc(24px - 32px)', // Align button bottom with terminal top (24px padding)
+                  left: 24, // Align with terminal left edge (matches padding)
+                  zIndex: 10,
+                }}
+              >
+                <Tooltip title="SFTP 文件管理" placement="bottom">
+                  <Button
+                    type="text"
+                    size="small"
+                    icon={
+                      <FolderOpenOutlined 
+                        style={{ 
+                          fontSize: 14,
+                          marginRight: 6,
+                        }} 
+                      />
+                    }
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setSftpVisibleConnections((prev) => {
+                        const newSet = new Set(prev)
+                        if (newSet.has(activeConnection.id)) {
+                          newSet.delete(activeConnection.id)
+                        } else {
+                          newSet.add(activeConnection.id)
+                        }
+                        return newSet
+                      })
+                    }}
+                    style={{
+                      padding: '6px 14px',
+                      height: 32,
+                      fontSize: 13,
+                      lineHeight: '20px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      background: mode === 'dark'
+                        ? 'rgba(255, 255, 255, 0.08)'
+                        : 'rgba(255, 255, 255, 0.9)',
+                      border: mode === 'dark'
+                        ? '1px solid rgba(255, 255, 255, 0.12)'
+                        : '1px solid rgba(0, 0, 0, 0.12)',
+                      borderRadius: '8px 8px 0 0', // Match terminal top border radius
+                      color: sftpVisibleConnections.has(activeConnection.id)
+                        ? (mode === 'dark' ? '#60A5FA' : '#2563EB')
+                        : (mode === 'dark' ? '#C9D1D9' : '#475569'),
+                      boxShadow: mode === 'dark'
+                        ? '0 2px 8px rgba(0, 0, 0, 0.3)'
+                        : '0 2px 8px rgba(0, 0, 0, 0.1)',
+                      fontWeight: 500,
+                      transition: 'all 0.2s ease',
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = mode === 'dark'
+                        ? 'rgba(255, 255, 255, 0.12)'
+                        : 'rgba(255, 255, 255, 1)'
+                      e.currentTarget.style.borderColor = mode === 'dark'
+                        ? 'rgba(255, 255, 255, 0.18)'
+                        : 'rgba(0, 0, 0, 0.18)'
+                      e.currentTarget.style.color = mode === 'dark'
+                        ? '#60A5FA'
+                        : '#2563EB'
+                      e.currentTarget.style.boxShadow = mode === 'dark'
+                        ? '0 4px 12px rgba(0, 0, 0, 0.4)'
+                        : '0 4px 12px rgba(0, 0, 0, 0.15)'
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = mode === 'dark'
+                        ? 'rgba(255, 255, 255, 0.08)'
+                        : 'rgba(255, 255, 255, 0.9)'
+                      e.currentTarget.style.borderColor = mode === 'dark'
+                        ? 'rgba(255, 255, 255, 0.12)'
+                        : 'rgba(0, 0, 0, 0.12)'
+                      e.currentTarget.style.color = sftpVisibleConnections.has(activeConnection.id)
+                        ? (mode === 'dark' ? '#60A5FA' : '#2563EB')
+                        : (mode === 'dark' ? '#C9D1D9' : '#475569')
+                      e.currentTarget.style.boxShadow = mode === 'dark'
+                        ? '0 2px 8px rgba(0, 0, 0, 0.3)'
+                        : '0 2px 8px rgba(0, 0, 0, 0.1)'
+                    }}
+                  >
+                    SFTP
+                  </Button>
+                </Tooltip>
+              </div>
+            )}
             <div
               style={{
                 flex: 1,
@@ -2730,6 +2835,29 @@ const WebSSHTerminal = () => {
           </div>
         </Modal>
       )}
+      
+      {/* SFTP Manager Modals */}
+      {Array.from(connections.values()).map((conn) => {
+        if (conn.status !== 'connected' || !conn.ws || !sftpVisibleConnections.has(conn.id)) {
+          return null
+        }
+        return (
+          <SFTPManager
+            key={conn.id}
+            ws={conn.ws}
+            connectionId={conn.id}
+            assetName={conn.asset.hostname || conn.asset.name}
+            visible={sftpVisibleConnections.has(conn.id)}
+            onClose={() => {
+              setSftpVisibleConnections((prev) => {
+                const newSet = new Set(prev)
+                newSet.delete(conn.id)
+                return newSet
+              })
+            }}
+          />
+        )
+      })}
     </Layout>
   )
 }
