@@ -133,24 +133,32 @@ const AuditLogList = () => {
   }
 
   // 导出
-  const handleExport = (format: 'csv' | 'json') => {
-    const values = form.getFieldsValue()
-    const params: AuditLogQueryParams & { format: 'csv' | 'json' } = {
-      format,
-      username: values.username,
-      module: values.module,
-      action: values.action,
-      status: values.status,
-      keyword: values.keyword,
-    }
+  const handleExport = async (format: 'csv' | 'json') => {
+    try {
+      setLoading(true)
+      const values = form.getFieldsValue()
+      const params: AuditLogQueryParams & { format: 'csv' | 'json' } = {
+        format,
+        username: values.username,
+        module: values.module,
+        action: values.action,
+        status: values.status,
+        keyword: values.keyword,
+      }
 
-    if (values.timeRange && values.timeRange.length === 2) {
-      params.start_time = values.timeRange[0].startOf('day').toISOString()
-      params.end_time = values.timeRange[1].endOf('day').toISOString()
-    }
+      if (values.timeRange && values.timeRange.length === 2) {
+        params.start_time = values.timeRange[0].startOf('day').toISOString()
+        params.end_time = values.timeRange[1].endOf('day').toISOString()
+      }
 
-    auditApi.export(params)
-    message.success('开始导出，请在新窗口中下载')
+      await auditApi.export(params)
+      message.success('导出成功')
+    } catch (error: any) {
+      console.error('导出失败:', error)
+      message.error(error.response?.data?.error || '导出失败')
+    } finally {
+      setLoading(false)
+    }
   }
 
   // 查看详情

@@ -128,9 +128,11 @@ func (h *Handler) GetAuditLog(c *gin.Context) {
 
 // ExportAuditLogs 导出审计日志
 // @Summary 导出审计日志
+// @Description 导出审计日志为 CSV 或 JSON 格式
 // @Tags 审计日志
 // @Accept json
 // @Produce octet-stream
+// @Security BearerAuth
 // @Param format query string false "导出格式" Enums(csv, json) default(csv)
 // @Param user_id query int false "用户ID"
 // @Param username query string false "用户名"
@@ -140,7 +142,11 @@ func (h *Handler) GetAuditLog(c *gin.Context) {
 // @Param start_time query string false "开始时间"
 // @Param end_time query string false "结束时间"
 // @Param keyword query string false "关键词"
-// @Success 200 {file} binary
+// @Success 200 {file} binary "导出文件"
+// @Failure 400 {object} map[string]string "请求参数错误"
+// @Failure 401 {object} map[string]string "未授权"
+// @Failure 403 {object} map[string]string "权限不足"
+// @Failure 500 {object} map[string]string "服务器错误"
 // @Router /audit-logs/export [get]
 func (h *Handler) ExportAuditLogs(c *gin.Context) {
 	format := c.DefaultQuery("format", "csv")
@@ -186,7 +192,8 @@ func (h *Handler) ExportAuditLogs(c *gin.Context) {
 	}
 
 	c.Header("Content-Type", contentType)
-	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s", filename))
+	// 使用 UTF-8 编码的文件名，兼容不同浏览器
+	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename*=UTF-8''%s", filename))
 
 	// 导出
 	if err := h.svc.ExportLogs(req, format, c.Writer); err != nil {

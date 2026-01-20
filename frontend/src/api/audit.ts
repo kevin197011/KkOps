@@ -54,14 +54,45 @@ export const auditApi = {
   get: (id: number) => apiClient.get<{ data: AuditLog }>(`/audit-logs/${id}`),
 
   // 导出审计日志
-  export: (params: AuditLogQueryParams & { format: 'csv' | 'json' }) => {
-    const queryParams = new URLSearchParams()
+  export: async (params: AuditLogQueryParams & { format: 'csv' | 'json' }) => {
+    const queryParams: Record<string, string> = {}
     Object.entries(params).forEach(([key, value]) => {
       if (value !== undefined && value !== '') {
-        queryParams.append(key, String(value))
+        queryParams[key] = String(value)
       }
     })
-    window.open(`/api/v1/audit-logs/export?${queryParams.toString()}`, '_blank')
+    
+    const response = await apiClient.get('/audit-logs/export', {
+      params: queryParams,
+      responseType: 'blob',
+    })
+    
+    // 从 Content-Disposition header 获取文件名，或生成默认文件名
+    const contentDisposition = response.headers['content-disposition'] || response.headers['Content-Disposition']
+    let filename = `audit_logs_${new Date().toISOString().slice(0, 10)}.${params.format}`
+    if (contentDisposition) {
+      // 尝试匹配 filename*=UTF-8''格式
+      const utf8Match = contentDisposition.match(/filename\*=UTF-8''(.+)/)
+      if (utf8Match && utf8Match[1]) {
+        filename = decodeURIComponent(utf8Match[1])
+      } else {
+        // 尝试匹配标准 filename= 格式
+        const filenameMatch = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/)
+        if (filenameMatch && filenameMatch[1]) {
+          filename = filenameMatch[1].replace(/['"]/g, '')
+        }
+      }
+    }
+    
+    // 创建 blob URL 并触发下载
+    const url = window.URL.createObjectURL(new Blob([response.data]))
+    const link = document.createElement('a')
+    link.href = url
+    link.setAttribute('download', filename)
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    window.URL.revokeObjectURL(url)
   },
 
   // 获取模块列表

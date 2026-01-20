@@ -3,7 +3,7 @@
 // This software is released under the MIT License.
 // https://opensource.org/licenses/MIT
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import {
   Table,
   Button,
@@ -17,6 +17,13 @@ import {
   Tag,
   Tooltip,
   theme,
+  Card,
+  Row,
+  Col,
+  Typography,
+  Empty,
+  Divider,
+  Collapse,
 } from 'antd'
 import {
   PlusOutlined,
@@ -34,6 +41,7 @@ import {
   CloudServerOutlined,
   CheckCircleOutlined,
   CloseCircleOutlined,
+  SettingOutlined,
 } from '@ant-design/icons'
 import {
   operationToolApi,
@@ -42,8 +50,11 @@ import {
   UpdateOperationToolRequest,
 } from '@/api/operationTool'
 import { usePermissionStore } from '@/stores/permission'
+import { useThemeStore } from '@/stores/theme'
 
 const { TextArea } = Input
+const { Title, Text } = Typography
+const { Panel } = Collapse
 
 // 图标映射
 const iconMap: Record<string, React.ReactNode> = {
@@ -61,12 +72,14 @@ const iconMap: Record<string, React.ReactNode> = {
 
 const OperationToolList = () => {
   const { hasPermission } = usePermissionStore()
+  const { mode } = useThemeStore()
   const { token } = theme.useToken()
   const [tools, setTools] = useState<OperationTool[]>([])
   const [loading, setLoading] = useState(false)
   const [modalVisible, setModalVisible] = useState(false)
   const [editingTool, setEditingTool] = useState<OperationTool | null>(null)
   const [form] = Form.useForm()
+  const isDark = mode === 'dark'
 
   useEffect(() => {
     fetchTools()
@@ -75,6 +88,7 @@ const OperationToolList = () => {
   const fetchTools = async () => {
     setLoading(true)
     try {
+      // 获取所有工具（包括禁用的）用于配置管理
       const response = await operationToolApi.list()
       setTools(response.data.data)
     } catch (error: any) {
@@ -83,6 +97,36 @@ const OperationToolList = () => {
       setLoading(false)
     }
   }
+
+  // 按分类分组工具（只显示启用的）
+  const toolsByCategory = useMemo(() => {
+    const enabledTools = tools.filter((tool) => tool.enabled)
+    const grouped: Record<string, OperationTool[]> = {}
+    enabledTools.forEach((tool) => {
+      const category = tool.category || '未分类'
+      if (!grouped[category]) {
+        grouped[category] = []
+      }
+      grouped[category].push(tool)
+    })
+    
+    // 对每个分类的工具按 order 排序
+    Object.keys(grouped).forEach((category) => {
+      grouped[category].sort((a, b) => a.order - b.order)
+    })
+    
+    return grouped
+  }, [tools])
+
+  // 获取所有分类（排序）
+  const categories = useMemo(() => {
+    return Object.keys(toolsByCategory).sort((a, b) => {
+      // 未分类放在最后
+      if (a === '未分类') return 1
+      if (b === '未分类') return -1
+      return a.localeCompare(b)
+    })
+  }, [toolsByCategory])
 
   const handleCreate = () => {
     setEditingTool(null)
@@ -100,7 +144,7 @@ const OperationToolList = () => {
   const handleDelete = async (id: number) => {
     Modal.confirm({
       title: '确认删除',
-      content: '确定要删除这个运维工具吗？删除后将从仪表盘和此页面中移除。',
+      content: '确定要删除这个运维工具吗？删除后将从导航页面和配置管理中移除。',
       onOk: async () => {
         try {
           await operationToolApi.delete(id)
@@ -131,14 +175,14 @@ const OperationToolList = () => {
   }
 
   // 渲染图标
-  const renderIcon = (iconName?: string, iconUrl?: string) => {
+  const renderIcon = (iconName?: string, iconUrl?: string, size: number = 24) => {
     if (iconUrl && iconUrl.startsWith('http')) {
-      return <img src={iconUrl} alt="" style={{ width: 20, height: 20 }} />
+      return <img src={iconUrl} alt="" style={{ width: size, height: size }} />
     }
     if (iconName && iconMap[iconName]) {
-      return iconMap[iconName]
+      return <span style={{ fontSize: size }}>{iconMap[iconName]}</span>
     }
-    return <ToolOutlined />
+    return <ToolOutlined style={{ fontSize: size }} />
   }
 
   // URL 验证
@@ -151,6 +195,7 @@ const OperationToolList = () => {
     }
     return Promise.resolve()
   }
+
 
   const columns = [
     {
@@ -177,7 +222,7 @@ const OperationToolList = () => {
       title: '分类',
       dataIndex: 'category',
       key: 'category',
-      render: (category: string) => (category ? <Tag>{category}</Tag> : '-'),
+      render: (category: string) => (category ? <Tag>{category}</Tag> : <Tag>未分类</Tag>),
     },
     {
       title: '图标',
@@ -269,35 +314,169 @@ const OperationToolList = () => {
 
   return (
     <div>
-      <div
-        style={{
-          marginBottom: 16,
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          flexWrap: 'wrap',
-          gap: 8,
-        }}
-      >
-        <h2>运维导航</h2>
-        {canManage && (
-          <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate} aria-label="新增工具">
-            新增工具
-          </Button>
+      {/* 导航展示区域 */}
+      <div style={{ marginBottom: 32 }}>
+        <div
+          style={{
+            marginBottom: 24,
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            gap: 16,
+          }}
+        >
+          <Title level={2} style={{ margin: 0 }}>
+            运维导航
+          </Title>
+        </div>
+
+        {loading ? (
+          <div style={{ padding: '40px 0', textAlign: 'center' }}>
+            <Text type="secondary">加载中...</Text>
+          </div>
+        ) : categories.length === 0 ? (
+          <Empty description="暂无运维工具" />
+        ) : (
+          categories.map((category) => (
+            <div key={category} style={{ marginBottom: 32 }}>
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 12,
+                  marginBottom: 16,
+                }}
+              >
+                <Title level={4} style={{ margin: 0 }}>
+                  {category}
+                </Title>
+                <Tag>{toolsByCategory[category].length}</Tag>
+              </div>
+              <Row gutter={[16, 16]}>
+                {toolsByCategory[category].map((tool) => (
+                  <Col key={tool.id} xs={24} sm={12} md={8} lg={6} xl={6}>
+                    <Card
+                      hoverable
+                      onClick={() => window.open(tool.url, '_blank', 'noopener,noreferrer')}
+                      style={{
+                        height: '100%',
+                        cursor: 'pointer',
+                        borderRadius: 12,
+                        border: isDark
+                          ? '1px solid rgba(255, 255, 255, 0.1)'
+                          : '1px solid rgba(0, 0, 0, 0.06)',
+                        transition: 'all 0.2s ease',
+                        background: isDark ? 'rgba(255, 255, 255, 0.03)' : '#fff',
+                      }}
+                      bodyStyle={{
+                        padding: 20,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        textAlign: 'center',
+                        gap: 12,
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.transform = 'translateY(-4px)'
+                        e.currentTarget.style.boxShadow = isDark
+                          ? '0 8px 24px rgba(0, 0, 0, 0.3)'
+                          : '0 8px 24px rgba(0, 0, 0, 0.1)'
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.transform = 'translateY(0)'
+                        e.currentTarget.style.boxShadow = 'none'
+                      }}
+                    >
+                      <div
+                        style={{
+                          fontSize: 48,
+                          color: token.colorPrimary,
+                          marginBottom: 8,
+                        }}
+                      >
+                        {renderIcon(tool.icon, tool.icon?.startsWith('http') ? tool.icon : undefined, 48)}
+                      </div>
+                      <Title level={5} style={{ margin: 0, fontSize: 16 }}>
+                        {tool.name}
+                      </Title>
+                      {tool.description && (
+                        <Text
+                          type="secondary"
+                          style={{
+                            fontSize: 13,
+                            display: '-webkit-box',
+                            WebkitLineClamp: 2,
+                            WebkitBoxOrient: 'vertical',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            lineHeight: '1.5',
+                          }}
+                        >
+                          {tool.description}
+                        </Text>
+                      )}
+                    </Card>
+                  </Col>
+                ))}
+              </Row>
+            </div>
+          ))
         )}
       </div>
-      <Table
-        columns={columns}
-        dataSource={tools}
-        loading={loading}
-        rowKey="id"
-        scroll={{ x: 'max-content' }}
-        pagination={{
-          showSizeChanger: true,
-          showQuickJumper: true,
-          showTotal: (total) => `共 ${total} 条`,
-        }}
+
+      <Divider />
+
+      {/* 配置管理区域 */}
+      <Collapse
+        defaultActiveKey={canManage ? ['1'] : []}
+        items={[
+          {
+            key: '1',
+            label: (
+              <Space>
+                <SettingOutlined />
+                <span>导航配置管理</span>
+              </Space>
+            ),
+            children: (
+              <div>
+                <div
+                  style={{
+                    marginBottom: 16,
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    flexWrap: 'wrap',
+                    gap: 8,
+                  }}
+                >
+                  <Text type="secondary">管理和配置运维导航工具</Text>
+                  {canManage && (
+                    <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate}>
+                      新增工具
+                    </Button>
+                  )}
+                </div>
+                <Table
+                  columns={columns}
+                  dataSource={tools}
+                  loading={loading}
+                  rowKey="id"
+                  scroll={{ x: 'max-content' }}
+                  pagination={{
+                    showSizeChanger: true,
+                    showQuickJumper: true,
+                    showTotal: (total) => `共 ${total} 条`,
+                  }}
+                />
+              </div>
+            ),
+          },
+        ]}
       />
+
+      {/* 创建/编辑弹窗 */}
       <Modal
         title={editingTool ? '编辑运维工具' : '新增运维工具'}
         open={modalVisible}

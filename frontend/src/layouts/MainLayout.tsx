@@ -440,17 +440,6 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
           <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
             <Button
               type="text"
-              icon={<BookOutlined />}
-              onClick={() => window.open('/swagger/index.html', '_blank')}
-              title="API 文档（在新标签页打开）"
-              style={{
-                color: mode === 'dark' ? '#F1F5F9' : '#1E293B',
-              }}
-            >
-              Docs
-            </Button>
-            <Button
-              type="text"
               icon={<ConsoleSqlOutlined />}
               onClick={() => window.open('/ssh/terminal', '_blank')}
               title="WebSSH 终端（在新标签页打开）"
@@ -459,6 +448,17 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
               }}
             >
               WebSSH
+            </Button>
+            <Button
+              type="text"
+              icon={<BookOutlined />}
+              onClick={() => window.open('/swagger/index.html', '_blank')}
+              title="API 文档（在新标签页打开）"
+              style={{
+                color: mode === 'dark' ? '#F1F5F9' : '#1E293B',
+              }}
+            >
+              Docs
             </Button>
             <div
               role="button"
