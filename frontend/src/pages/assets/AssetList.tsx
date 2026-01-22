@@ -25,6 +25,8 @@ const AssetList = () => {
   const [pageSize, setPageSize] = useState(20)
   const [searchText, setSearchText] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>()
+  const [projectFilter, setProjectFilter] = useState<number | undefined>()
+  const [environmentFilter, setEnvironmentFilter] = useState<number | undefined>()
   const [modalVisible, setModalVisible] = useState(false)
   const [editingAsset, setEditingAsset] = useState<Asset | null>(null)
   const [form] = Form.useForm()
@@ -49,7 +51,7 @@ const AssetList = () => {
     fetchCloudPlatforms()
     fetchSshKeys()
     fetchTags()
-  }, [page, pageSize, searchText, statusFilter])
+  }, [page, pageSize, searchText, statusFilter, projectFilter, environmentFilter])
 
   const fetchAssets = async () => {
     setLoading(true)
@@ -59,6 +61,8 @@ const AssetList = () => {
         page_size: pageSize,
         search: searchText || undefined,
         status: statusFilter,
+        project_id: projectFilter,
+        environment_id: environmentFilter,
       })
       // Debug: log the first asset to check field names
       if (response.data.data && response.data.data.length > 0) {
@@ -435,6 +439,30 @@ const AssetList = () => {
             setPage(1)
           }}
           aria-label="搜索资产"
+        />
+        <Select
+          placeholder="按项目筛选"
+          allowClear
+          style={{ width: 200, minWidth: 150 }}
+          value={projectFilter}
+          onChange={(value) => {
+            setProjectFilter(value)
+            setPage(1)
+          }}
+          options={projects.map((p) => ({ label: p.name, value: p.id }))}
+          aria-label="按项目筛选"
+        />
+        <Select
+          placeholder="按环境筛选"
+          allowClear
+          style={{ width: 200, minWidth: 150 }}
+          value={environmentFilter}
+          onChange={(value) => {
+            setEnvironmentFilter(value)
+            setPage(1)
+          }}
+          options={environments.map((e) => ({ label: e.name, value: e.id }))}
+          aria-label="按环境筛选"
         />
         <Select
           placeholder="状态筛选"

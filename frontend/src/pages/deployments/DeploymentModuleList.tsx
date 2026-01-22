@@ -75,6 +75,7 @@ const DeploymentModuleList = () => {
   const [assets, setAssets] = useState<Asset[]>([])
   const [templates, setTemplates] = useState<ExecutionTemplate[]>([])
   const [projectFilter, setProjectFilter] = useState<number | undefined>()
+  const [environmentFilter, setEnvironmentFilter] = useState<number | undefined>()
 
   // 模块编辑弹窗
   const [moduleModalVisible, setModuleModalVisible] = useState(false)
@@ -631,8 +632,23 @@ const DeploymentModuleList = () => {
             allowClear
             style={{ width: 200 }}
             value={projectFilter}
-            onChange={setProjectFilter}
+            onChange={(value) => {
+              setProjectFilter(value)
+              // 清空环境筛选，因为项目变了
+              setEnvironmentFilter(undefined)
+            }}
             options={projects.map((p) => ({ label: p.name, value: p.id }))}
+          />
+          <Select
+            placeholder="按环境筛选"
+            allowClear
+            style={{ width: 200 }}
+            value={environmentFilter}
+            onChange={setEnvironmentFilter}
+            options={[
+              { label: '全部环境', value: null },
+              ...environments.map((e) => ({ label: e.name, value: e.id })),
+            ]}
           />
           <Button icon={<ReloadOutlined />} onClick={fetchModules}>
             刷新
@@ -669,7 +685,19 @@ const DeploymentModuleList = () => {
 
       <Table
         columns={columns}
-        dataSource={modules}
+        dataSource={modules.filter((module) => {
+          // 按环境筛选
+          if (environmentFilter !== undefined) {
+            // 如果筛选的是 null（全部环境），则只显示 environment_id 为 null 的模块
+            if (environmentFilter === null) {
+              if (module.environment_id !== null) return false
+            } else {
+              // 否则显示匹配的 environment_id
+              if (module.environment_id !== environmentFilter) return false
+            }
+          }
+          return true
+        })}
         loading={loading}
         rowKey="id"
         scroll={{ x: 'max-content' }}
@@ -836,15 +864,25 @@ const DeploymentModuleList = () => {
               <Spin />
             ) : versions && versions.versions.length > 0 ? (
               <Select
-                placeholder="选择版本"
+                placeholder="选择版本（支持输入过滤）"
                 value={selectedVersion}
                 onChange={setSelectedVersion}
                 showSearch
                 allowClear
+                filterOption={(input, option) => {
+                  const label = option?.label as string || ''
+                  const value = option?.value as string || ''
+                  const searchText = input.toLowerCase()
+                  return (
+                    label.toLowerCase().includes(searchText) ||
+                    value.toLowerCase().includes(searchText)
+                  )
+                }}
                 options={versions.versions.map((v) => ({
                   label: v === versions.latest ? `${v} (latest)` : v,
                   value: v,
                 }))}
+                style={{ width: '100%' }}
               />
             ) : (
               <Input
@@ -859,7 +897,7 @@ const DeploymentModuleList = () => {
               </div>
             )}
           </Form.Item>
-          <Form.Item label="目标主机（已预配置，不可修改）">
+          <Form.Item label="目标主机">
             {(() => {
               // 显示部署模块预配置的目标主机
               const targetAssets = assets.filter((asset) => 
@@ -893,7 +931,7 @@ const DeploymentModuleList = () => {
               )
             })()}
             <div style={{ fontSize: 12, color: '#888', marginTop: 4 }}>
-              共 {selectedAssetIds.length} 台主机，如需修改请编辑部署模块配置
+              共 {selectedAssetIds.length} 台主机
             </div>
           </Form.Item>
         </Form>
