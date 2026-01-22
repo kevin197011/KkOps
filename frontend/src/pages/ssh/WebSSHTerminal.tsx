@@ -10,7 +10,7 @@ import { FitAddon } from '@xterm/addon-fit'
 import '@xterm/xterm/css/xterm.css'
 import { Layout, Button, message, Space, Tag, Input, Tree, Spin, Typography, theme as antdTheme, Dropdown, Modal, Progress, Tooltip } from 'antd'
 import type { MenuProps } from 'antd'
-import { DisconnectOutlined, ArrowLeftOutlined, CheckCircleOutlined, ReloadOutlined, FolderOutlined, FolderOpenOutlined, DatabaseOutlined, CloseOutlined, HomeOutlined, SunOutlined, MoonOutlined, CopyOutlined, CloseCircleOutlined, UserOutlined, LogoutOutlined, UploadOutlined, DownloadOutlined, FileTextOutlined, CloudServerOutlined } from '@ant-design/icons'
+import { DisconnectOutlined, ArrowLeftOutlined, CheckCircleOutlined, ReloadOutlined, FolderOutlined, FolderOpenOutlined, DatabaseOutlined, CloseOutlined, HomeOutlined, SunFilled, MoonFilled, CopyOutlined, CloseCircleOutlined, UserOutlined, LogoutOutlined, UploadOutlined, DownloadOutlined, FileTextOutlined, CloudServerOutlined } from '@ant-design/icons'
 import { useAuthStore } from '@/stores/auth'
 import { authApi } from '@/api/auth'
 import { assetApi, Asset } from '@/api/asset'
@@ -2068,7 +2068,7 @@ const WebSSHTerminal = () => {
               e.currentTarget.style.backgroundColor = 'transparent'
             }}
           >
-            {mode === 'dark' ? <SunOutlined /> : <MoonOutlined />}
+            {mode === 'dark' ? <SunFilled /> : <MoonFilled />}
           </div>
           {user && (
             <Dropdown

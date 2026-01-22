@@ -16,8 +16,8 @@ import {
   TeamOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
-  MoonOutlined,
-  SunOutlined,
+  MoonFilled,
+  SunFilled,
   LogoutOutlined,
   FolderOutlined,
   GlobalOutlined,
@@ -483,7 +483,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
                 }
               }}
             >
-              {mode === 'dark' ? <SunOutlined /> : <MoonOutlined />}
+              {mode === 'dark' ? <SunFilled /> : <MoonFilled />}
             </div>
             {user && (
               <Dropdown
