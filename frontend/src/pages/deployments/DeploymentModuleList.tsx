@@ -20,6 +20,9 @@ import {
   Spin,
   Divider,
   Timeline,
+  Card,
+  Typography,
+  theme,
 } from 'antd'
 import {
   PlusOutlined,
@@ -35,7 +38,6 @@ import {
   StopOutlined,
   ExportOutlined,
   ImportOutlined,
-  UploadOutlined,
 } from '@ant-design/icons'
 import {
   deploymentModuleApi,
@@ -56,6 +58,7 @@ import { useThemeStore } from '@/stores/theme'
 import { usePermissionStore } from '@/stores/permission'
 
 const { TextArea } = Input
+const { Title } = Typography
 
 // 不同类型的 shebang
 const SHEBANGS: Record<string, string> = {
@@ -64,6 +67,7 @@ const SHEBANGS: Record<string, string> = {
 }
 
 const DeploymentModuleList = () => {
+  const { token } = theme.useToken()
   const { mode } = useThemeStore()
   const { hasPermission } = usePermissionStore()
   const isDark = mode === 'dark'
@@ -614,19 +618,28 @@ const DeploymentModuleList = () => {
   ]
 
   return (
-    <div>
-      <div
-        style={{
-          marginBottom: 16,
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          flexWrap: 'wrap',
-          gap: 8,
-        }}
+    <div style={{ padding: 24, background: token.colorBgContainer, minHeight: '100%' }}>
+      <Card
+        styles={{ body: { padding: 24 } }}
+        style={{ background: token.colorBgElevated, borderColor: token.colorBorderSecondary }}
       >
-        <h2>部署管理</h2>
-        <Space>
+        <div
+          style={{
+            marginBottom: 24,
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            gap: 16,
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <RocketOutlined style={{ fontSize: 24, color: token.colorPrimary }} />
+            <Title level={3} style={{ margin: 0, color: token.colorTextHeading }}>
+              部署管理
+            </Title>
+          </div>
+          <Space wrap>
           <Select
             placeholder="按项目筛选"
             allowClear
@@ -680,12 +693,12 @@ const DeploymentModuleList = () => {
               新增模块
             </Button>
           )}
-        </Space>
-      </div>
+          </Space>
+        </div>
 
-      <Table
-        columns={columns}
-        dataSource={modules.filter((module) => {
+        <Table
+          columns={columns}
+          dataSource={modules.filter((module) => {
           // 按环境筛选
           if (environmentFilter !== undefined) {
             // 如果筛选的是 null（全部环境），则只显示 environment_id 为 null 的模块
@@ -701,12 +714,14 @@ const DeploymentModuleList = () => {
         loading={loading}
         rowKey="id"
         scroll={{ x: 'max-content' }}
-      />
+        />
+      </Card>
 
       {/* 模块编辑弹窗 */}
       <Modal
         title={editingModule ? '编辑部署模块' : '新增部署模块'}
         open={moduleModalVisible}
+        styles={{ body: { background: token.colorBgElevated } }}
         onCancel={() => {
           setModuleModalVisible(false)
           moduleForm.resetFields()
@@ -756,7 +771,7 @@ const DeploymentModuleList = () => {
               onChange={handleTemplateChange}
             />
           </Form.Item>
-          <div style={{ fontSize: 12, color: '#888', marginTop: -16, marginBottom: 16 }}>
+          <div style={{ fontSize: 12, color: token.colorTextTertiary, marginTop: -16, marginBottom: 16 }}>
             选择模板后将自动填充脚本内容和类型，您可以在此基础上进行修改
           </div>
           <Form.Item
@@ -772,7 +787,7 @@ const DeploymentModuleList = () => {
           <Form.Item name="version_source_url" label="版本数据源 URL">
             <Input placeholder="HTTP JSON 数据源地址，如: https://api.example.com/versions" />
           </Form.Item>
-          <div style={{ fontSize: 12, color: '#888', marginTop: -16, marginBottom: 16 }}>
+          <div style={{ fontSize: 12, color: token.colorTextTertiary, marginTop: -16, marginBottom: 16 }}>
             数据源需返回 JSON 格式：{`{"versions": ["v1.0.0", "v1.1.0"], "latest": "v1.1.0"}`}
           </div>
           <Form.Item name="script_type" label="脚本类型">
@@ -796,7 +811,7 @@ const DeploymentModuleList = () => {
               }}
             />
           </Form.Item>
-          <div style={{ fontSize: 12, color: '#888', marginTop: -16, marginBottom: 16 }}>
+          <div style={{ fontSize: 12, color: token.colorTextTertiary, marginTop: -16, marginBottom: 16 }}>
             支持变量替换：<code>${`{VERSION}`}</code> <code>${`{MODULE_NAME}`}</code>{' '}
             <code>${`{PROJECT_NAME}`}</code> <code>${`{ENVIRONMENT_NAME}`}</code>
           </div>
@@ -807,7 +822,7 @@ const DeploymentModuleList = () => {
             label={
               <Space>
                 <span>默认目标主机</span>
-                <span style={{ fontSize: 12, color: '#888' }}>
+                <span style={{ fontSize: 12, color: token.colorTextTertiary }}>
                   ({filteredAssets.length} 台可选)
                 </span>
               </Space>
@@ -824,7 +839,7 @@ const DeploymentModuleList = () => {
               <Checkbox.Group style={{ width: '100%' }}>
                 <div style={{ maxHeight: 200, overflowY: 'auto', border: '1px solid #d9d9d9', borderRadius: 6, padding: 8 }}>
                   {filteredAssets.length === 0 ? (
-                    <div style={{ color: '#888', padding: 16, textAlign: 'center' }}>
+                    <div style={{ color: token.colorTextTertiary, padding: 16, textAlign: 'center' }}>
                       {formProjectId ? (hostSearchText ? '无匹配主机' : '该项目/环境下暂无主机') : '请先选择项目'}
                     </div>
                   ) : (
@@ -892,7 +907,7 @@ const DeploymentModuleList = () => {
               />
             )}
             {!deployingModule?.version_source_url && (
-              <div style={{ fontSize: 12, color: '#888', marginTop: 4 }}>
+              <div style={{ fontSize: 12, color: token.colorTextTertiary, marginTop: 4 }}>
                 未配置版本数据源，请手动输入版本号
               </div>
             )}
@@ -913,7 +928,7 @@ const DeploymentModuleList = () => {
                   background: isDark ? '#1f1f1f' : '#fafafa'
                 }}>
                   {targetAssets.length === 0 ? (
-                    <div style={{ color: '#888', textAlign: 'center' }}>
+                    <div style={{ color: token.colorTextTertiary, textAlign: 'center' }}>
                       该模块未配置目标主机
                     </div>
                   ) : (
@@ -930,7 +945,7 @@ const DeploymentModuleList = () => {
                 </div>
               )
             })()}
-            <div style={{ fontSize: 12, color: '#888', marginTop: 4 }}>
+            <div style={{ fontSize: 12, color: token.colorTextTertiary, marginTop: 4 }}>
               共 {selectedAssetIds.length} 台主机
             </div>
           </Form.Item>
@@ -955,7 +970,7 @@ const DeploymentModuleList = () => {
             <Spin size="large" />
           </div>
         ) : deployments.length === 0 ? (
-          <div style={{ textAlign: 'center', color: '#888', padding: 50 }}>暂无部署记录</div>
+          <div style={{ textAlign: 'center', color: token.colorTextTertiary, padding: 50 }}>暂无部署记录</div>
         ) : (
           <Timeline>
             {deployments.map((d) => (
@@ -964,7 +979,7 @@ const DeploymentModuleList = () => {
                   <div>
                     <strong>版本: {d.version}</strong>
                     <span style={{ marginLeft: 12 }}>{getStatusTag(d.status)}</span>
-                    <div style={{ fontSize: 12, color: '#888', marginTop: 4 }}>
+                    <div style={{ fontSize: 12, color: token.colorTextTertiary, marginTop: 4 }}>
                       {d.creator_name} · {d.created_at}
                     </div>
                   </div>
@@ -1018,7 +1033,7 @@ const DeploymentModuleList = () => {
              !detailDeployment.output && !detailDeployment.error && (
               <div style={{ textAlign: 'center', padding: 40 }}>
                 <Spin size="large" />
-                <div style={{ marginTop: 16, color: '#888' }}>
+                <div style={{ marginTop: 16, color: token.colorTextTertiary }}>
                   {detailDeployment.status === 'pending' ? '等待执行...' : '正在执行中，请稍候...'}
                 </div>
               </div>

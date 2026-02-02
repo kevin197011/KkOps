@@ -20,38 +20,50 @@ func (s *Service) ExportAssets(w io.Writer) error {
 	writer := csv.NewWriter(w)
 	defer writer.Flush()
 
-	// Write header
+	// Write header (readable names for Project, Cloud Platform, Environment, SSH Key)
 	header := []string{
-		"ID", "Hostname", "Project ID",
-		"Cloud Platform ID", "Environment ID", "IP", "SSH Port",
-		"SSH Key ID", "SSH User", "CPU", "Memory", "Disk",
+		"ID", "Hostname", "Project",
+		"Cloud Platform", "Environment", "IP", "SSH Port",
+		"SSH Key", "SSH User", "CPU", "Memory", "Disk",
 		"Status", "Description",
 	}
 	if err := writer.Write(header); err != nil {
 		return err
 	}
 
-	// Fetch all assets
+	// Fetch all assets with related Project, CloudPlatform, Environment, SSHKey
 	var assets []model.Asset
-	if err := s.db.Preload("Environment").Preload("CloudPlatform").Find(&assets).Error; err != nil {
+	if err := s.db.Preload("Project").Preload("Environment").Preload("CloudPlatform").Preload("SSHKey").Find(&assets).Error; err != nil {
 		return err
 	}
 
-	// Write data
+	// Write data (use names for Project / Cloud Platform / Environment / SSH Key; empty when nil)
 	for _, asset := range assets {
+		projectName := ""
+		if asset.Project != nil {
+			projectName = asset.Project.Name
+		}
 		cloudPlatformName := ""
 		if asset.CloudPlatform != nil {
 			cloudPlatformName = asset.CloudPlatform.Name
 		}
+		environmentName := ""
+		if asset.Environment != nil {
+			environmentName = asset.Environment.Name
+		}
+		sshKeyName := ""
+		if asset.SSHKey != nil {
+			sshKeyName = asset.SSHKey.Name
+		}
 		record := []string{
 			strconv.FormatUint(uint64(asset.ID), 10),
 			asset.HostName,
-			uintPtrToString(asset.ProjectID),
+			projectName,
 			cloudPlatformName,
-			uintPtrToString(asset.EnvironmentID),
+			environmentName,
 			asset.IP,
 			strconv.Itoa(asset.SSHPort),
-			uintPtrToString(asset.SSHKeyID),
+			sshKeyName,
 			asset.SSHUser,
 			asset.CPU,
 			asset.Memory,
@@ -152,39 +164,53 @@ func (s *Service) parseImportRecord(record []string, headerMap map[string]int) (
 	}
 	req.HostName = hostname
 
-	// Optional fields
+	// Optional fields: support both ID columns (backward compatible) and name columns (round-trip from export)
 	if projectIDStr := getValue("Project ID"); projectIDStr != "" {
 		if projectID, err := strconv.ParseUint(projectIDStr, 10, 32); err == nil {
 			id := uint(projectID)
 			req.ProjectID = &id
 		}
 	}
-
-	// Handle Cloud Platform - try to find by name first, then by ID
-	if cloudPlatformStr := getValue("Cloud Platform"); cloudPlatformStr != "" {
-		// Try to parse as ID first
-		if cloudPlatformID, err := strconv.ParseUint(cloudPlatformStr, 10, 32); err == nil {
-			id := uint(cloudPlatformID)
-			req.CloudPlatformID = &id
-		} else {
-			// If not a number, try to find cloud platform by name
-			// Note: This requires database lookup, which should be handled in service layer
-			// For now, we'll skip and let the service handle it
+	if req.ProjectID == nil {
+		if name := getValue("Project"); name != "" {
+			var proj model.Project
+			if err := s.db.Where("name = ?", name).First(&proj).Error; err == nil {
+				req.ProjectID = &proj.ID
+			}
 		}
 	}
-	// Also support "Cloud Platform ID" column for explicit ID input
+
+	// Cloud Platform: support "Cloud Platform ID" and "Cloud Platform" (name)
 	if cloudPlatformIDStr := getValue("Cloud Platform ID"); cloudPlatformIDStr != "" {
 		if cloudPlatformID, err := strconv.ParseUint(cloudPlatformIDStr, 10, 32); err == nil {
 			id := uint(cloudPlatformID)
 			req.CloudPlatformID = &id
 		}
 	}
+	if req.CloudPlatformID == nil {
+		if name := getValue("Cloud Platform"); name != "" {
+			var cp model.CloudPlatform
+			if err := s.db.Where("name = ?", name).First(&cp).Error; err == nil {
+				req.CloudPlatformID = &cp.ID
+			}
+		}
+	}
+
 	if envIDStr := getValue("Environment ID"); envIDStr != "" {
 		if envID, err := strconv.ParseUint(envIDStr, 10, 32); err == nil {
 			id := uint(envID)
 			req.EnvironmentID = &id
 		}
 	}
+	if req.EnvironmentID == nil {
+		if name := getValue("Environment"); name != "" {
+			var env model.Environment
+			if err := s.db.Where("name = ?", name).First(&env).Error; err == nil {
+				req.EnvironmentID = &env.ID
+			}
+		}
+	}
+
 	req.IP = getValue("IP")
 
 	if sshPortStr := getValue("SSH Port"); sshPortStr != "" {
@@ -197,6 +223,14 @@ func (s *Service) parseImportRecord(record []string, headerMap map[string]int) (
 		if sshKeyID, err := strconv.ParseUint(sshKeyIDStr, 10, 32); err == nil {
 			id := uint(sshKeyID)
 			req.SSHKeyID = &id
+		}
+	}
+	if req.SSHKeyID == nil {
+		if name := getValue("SSH Key"); name != "" {
+			var key model.SSHKey
+			if err := s.db.Where("name = ?", name).First(&key).Error; err == nil {
+				req.SSHKeyID = &key.ID
+			}
 		}
 	}
 

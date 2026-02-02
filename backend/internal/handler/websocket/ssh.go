@@ -23,6 +23,7 @@ import (
 
 	"github.com/kkops/backend/internal/model"
 	"github.com/kkops/backend/internal/service/authorization"
+	"github.com/kkops/backend/internal/service/connectionaudit"
 	"github.com/kkops/backend/internal/service/sshkey"
 	"github.com/kkops/backend/internal/utils"
 )
@@ -39,9 +40,9 @@ type zmodemState struct {
 	bytesReceived int64
 	canceled      bool
 	// For SFTP upload
-	uploadBuffer  *bytes.Buffer
-	uploadChan    chan []byte
-	uploadDone    chan bool
+	uploadBuffer *bytes.Buffer
+	uploadChan   chan []byte
+	uploadDone   chan bool
 }
 
 // detectZmodemSequence detects ZMODEM protocol initiation sequences
@@ -103,10 +104,55 @@ func detectZmodemSequence(data []byte) (bool, string, string, int) {
 	return false, "", "", -1
 }
 
+// transcriptChunk 录像输出块（时间戳 + 内容）
+type transcriptChunk struct {
+	T int64  `json:"t"`
+	D string `json:"d"`
+}
+
+// transcriptRecorder 线程安全的录像 buffer，用于收集 stdout/stderr 发往 WebSocket 的输出
+type transcriptRecorder struct {
+	mu     sync.Mutex
+	chunks []transcriptChunk
+}
+
+func (r *transcriptRecorder) Append(t int64, d string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.chunks = append(r.chunks, transcriptChunk{T: t, D: d})
+}
+
+// SerializeAndTruncate 序列化为 JSON，超过 maxSize 字节时截断并返回 truncated=true
+func (r *transcriptRecorder) SerializeAndTruncate(maxSize int) (string, bool) {
+	r.mu.Lock()
+	chunks := append([]transcriptChunk(nil), r.chunks...)
+	r.mu.Unlock()
+	if len(chunks) == 0 {
+		return "[]", false
+	}
+	truncated := false
+	for len(chunks) > 0 {
+		b, err := json.Marshal(chunks)
+		if err != nil {
+			return "[]", false
+		}
+		if len(b) <= maxSize {
+			return string(b), truncated
+		}
+		truncated = true
+		// 从尾部减少 chunk 直到满足长度
+		if len(chunks) <= 1 {
+			return "[]", true
+		}
+		chunks = chunks[:len(chunks)-1]
+	}
+	return "[]", true
+}
+
 // SSHTerminalHandler handles SSH terminal WebSocket connections
 // WS /ws/ssh/connect
 // 增加资产访问权限检查：管理员可以连接任意资产，普通用户只能连接已授权的资产
-func SSHTerminalHandler(db *gorm.DB, cfg interface{}, sshkeySvc *sshkey.Service, authzSvc *authorization.Service) gin.HandlerFunc {
+func SSHTerminalHandler(db *gorm.DB, cfg interface{}, sshkeySvc *sshkey.Service, authzSvc *authorization.Service, connectionauditSvc *connectionaudit.Service) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		userID, exists := c.Get("user_id")
 		if !exists {
@@ -161,7 +207,7 @@ func SSHTerminalHandler(db *gorm.DB, cfg interface{}, sshkeySvc *sshkey.Service,
 			switch msgType {
 			case "connect":
 				// Handle SSH connection - this will manage the entire session lifecycle
-				handleSSHConnect(conn, msg, db, userID.(uint), sshkeySvc, authzSvc)
+				handleSSHConnect(conn, msg, db, userID.(uint), sshkeySvc, authzSvc, connectionauditSvc)
 				return // After SSH session ends, close the WebSocket handler
 			default:
 				conn.WriteJSON(map[string]interface{}{
@@ -173,7 +219,7 @@ func SSHTerminalHandler(db *gorm.DB, cfg interface{}, sshkeySvc *sshkey.Service,
 	}
 }
 
-func handleSSHConnect(conn *websocket.Conn, msg map[string]interface{}, db *gorm.DB, userID uint, sshkeySvc *sshkey.Service, authzSvc *authorization.Service) {
+func handleSSHConnect(conn *websocket.Conn, msg map[string]interface{}, db *gorm.DB, userID uint, sshkeySvc *sshkey.Service, authzSvc *authorization.Service, connectionauditSvc *connectionaudit.Service) {
 	data, ok := msg["data"].(map[string]interface{})
 	if !ok {
 		conn.WriteJSON(map[string]interface{}{
@@ -409,6 +455,33 @@ func handleSSHConnect(conn *websocket.Conn, msg map[string]interface{}, db *gorm
 		},
 	})
 
+	// 审计连线录像：记录开始时间与输出 buffer
+	startedAt := time.Now()
+	transcriptRecorder := &transcriptRecorder{}
+	sendOutput := func(dataStr string) {
+		conn.WriteJSON(map[string]interface{}{"type": "output", "data": dataStr})
+		transcriptRecorder.Append(time.Now().UnixMilli(), dataStr)
+	}
+
+	// persistRecord 在会话结束时将录像写入 DB（在 wg.Wait() 之后调用）
+	persistRecord := func() {
+		if connectionauditSvc == nil {
+			return
+		}
+		endedAt := time.Now()
+		transcript, truncated := transcriptRecorder.SerializeAndTruncate(connectionaudit.MaxTranscriptSize)
+		_ = connectionauditSvc.Create(&connectionaudit.CreateRequest{
+			UserID:              userID,
+			Username:            username,
+			AssetID:             assetID,
+			AssetHostname:       asset.HostName,
+			StartedAt:           startedAt,
+			EndedAt:             endedAt,
+			Transcript:          transcript,
+			TranscriptTruncated: truncated,
+		})
+	}
+
 	// Initialize ZMODEM state
 	zmodemState := &zmodemState{}
 
@@ -534,10 +607,7 @@ func handleSSHConnect(conn *websocket.Conn, msg map[string]interface{}, db *gorm
 							}
 
 							// Send output (completion messages, errors, normal output, etc.)
-							conn.WriteJSON(map[string]interface{}{
-								"type": "output",
-								"data": dataStr,
-							})
+							sendOutput(dataStr)
 							continue
 						}
 					}
@@ -559,19 +629,13 @@ func handleSSHConnect(conn *websocket.Conn, msg map[string]interface{}, db *gorm
 
 							// Send any buffered data first
 							if stdoutBuffer.Len() > 0 {
-								conn.WriteJSON(map[string]interface{}{
-									"type": "output",
-									"data": stdoutBuffer.String(),
-								})
+								sendOutput(stdoutBuffer.String())
 								stdoutBuffer.Reset()
 							}
 
 							// Send text before ZMODEM sequence (if any)
 							if seqPos > 0 {
-								conn.WriteJSON(map[string]interface{}{
-									"type": "output",
-									"data": string(data[:seqPos]),
-								})
+								sendOutput(string(data[:seqPos]))
 							}
 
 							// Activate ZMODEM mode
@@ -628,10 +692,7 @@ func handleSSHConnect(conn *websocket.Conn, msg map[string]interface{}, db *gorm
 
 							// Send text before the hiding point (if any)
 							if hideStart > 0 {
-								conn.WriteJSON(map[string]interface{}{
-									"type": "output",
-									"data": string(bufBytes[:hideStart]),
-								})
+								sendOutput(string(bufBytes[:hideStart]))
 							}
 
 							// Activate ZMODEM mode
@@ -671,17 +732,11 @@ func handleSSHConnect(conn *websocket.Conn, msg map[string]interface{}, db *gorm
 							// This prevents unnecessary retention of non-ZMODEM data
 							if len(tail) < 2 || !(tail[0] == 0x2A && tail[1] == 0x2A) {
 								// No ** at start of tail, safe to send all
-								conn.WriteJSON(map[string]interface{}{
-									"type": "output",
-									"data": string(bufBytes),
-								})
+								sendOutput(string(bufBytes))
 								stdoutBuffer.Reset()
 							} else {
 								// Tail starts with **, keep it for next check
-								conn.WriteJSON(map[string]interface{}{
-									"type": "output",
-									"data": string(bufBytes[:sendLen]),
-								})
+								sendOutput(string(bufBytes[:sendLen]))
 								stdoutBuffer.Reset()
 								stdoutBuffer.Write(tail)
 							}
@@ -693,10 +748,7 @@ func handleSSHConnect(conn *websocket.Conn, msg map[string]interface{}, db *gorm
 								// Don't send yet
 							} else {
 								// Not a potential ZMODEM sequence, send immediately
-								conn.WriteJSON(map[string]interface{}{
-									"type": "output",
-									"data": string(bufBytes),
-								})
+								sendOutput(string(bufBytes))
 								stdoutBuffer.Reset()
 							}
 						}
@@ -751,19 +803,13 @@ func handleSSHConnect(conn *websocket.Conn, msg map[string]interface{}, db *gorm
 
 						// Send any buffered data first
 						if stderrBuffer.Len() > 0 {
-							conn.WriteJSON(map[string]interface{}{
-								"type": "output",
-								"data": stderrBuffer.String(),
-							})
+							sendOutput(stderrBuffer.String())
 							stderrBuffer.Reset()
 						}
 
 						// Send text before ZMODEM sequence (if any)
 						if seqPos > 0 {
-							conn.WriteJSON(map[string]interface{}{
-								"type": "output",
-								"data": string(data[:seqPos]),
-							})
+							sendOutput(string(data[:seqPos]))
 						}
 
 						// Activate ZMODEM mode
@@ -799,10 +845,7 @@ func handleSSHConnect(conn *websocket.Conn, msg map[string]interface{}, db *gorm
 
 						// Send text before ZMODEM sequence (if any)
 						if seqPos > 0 {
-							conn.WriteJSON(map[string]interface{}{
-								"type": "output",
-								"data": string(bufBytes[:seqPos]),
-							})
+							sendOutput(string(bufBytes[:seqPos]))
 						}
 
 						// Activate ZMODEM mode
@@ -842,17 +885,11 @@ func handleSSHConnect(conn *websocket.Conn, msg map[string]interface{}, db *gorm
 						// This prevents unnecessary retention of non-ZMODEM data
 						if len(tail) < 2 || !(tail[0] == 0x2A && tail[1] == 0x2A) {
 							// No ** at start of tail, safe to send all
-							conn.WriteJSON(map[string]interface{}{
-								"type": "output",
-								"data": string(bufBytes),
-							})
+							sendOutput(string(bufBytes))
 							stderrBuffer.Reset()
 						} else {
 							// Tail starts with **, keep it for next check
-							conn.WriteJSON(map[string]interface{}{
-								"type": "output",
-								"data": string(bufBytes[:sendLen]),
-							})
+							sendOutput(string(bufBytes[:sendLen]))
 							stderrBuffer.Reset()
 							stderrBuffer.Write(tail)
 						}
@@ -864,10 +901,7 @@ func handleSSHConnect(conn *websocket.Conn, msg map[string]interface{}, db *gorm
 							// Don't send yet
 						} else {
 							// Not a potential ZMODEM sequence, send immediately
-							conn.WriteJSON(map[string]interface{}{
-								"type": "output",
-								"data": string(bufBytes),
-							})
+							sendOutput(string(bufBytes))
 							stderrBuffer.Reset()
 						}
 					}
@@ -1221,6 +1255,8 @@ func handleSSHConnect(conn *websocket.Conn, msg map[string]interface{}, db *gorm
 			// User requested disconnect
 			done <- true
 			session.Close()
+			wg.Wait()
+			persistRecord()
 			conn.WriteJSON(map[string]interface{}{
 				"type": "disconnected",
 				"data": map[string]interface{}{
@@ -1239,6 +1275,8 @@ func handleSSHConnect(conn *websocket.Conn, msg map[string]interface{}, db *gorm
 
 	// Wait for streams to finish
 	wg.Wait()
+
+	persistRecord()
 
 	conn.WriteJSON(map[string]interface{}{
 		"type": "disconnected",
@@ -1448,7 +1486,7 @@ func handleSFTPDownload(conn *websocket.Conn, sftpClient *sftp.Client, remotePat
 		conn.WriteJSON(map[string]interface{}{
 			"type": "sftp_error",
 			"data": map[string]interface{}{
-				"error":      "Failed to open file: " + err.Error(),
+				"error":       "Failed to open file: " + err.Error(),
 				"remote_path": remotePath,
 			},
 		})
@@ -1461,7 +1499,7 @@ func handleSFTPDownload(conn *websocket.Conn, sftpClient *sftp.Client, remotePat
 		conn.WriteJSON(map[string]interface{}{
 			"type": "sftp_error",
 			"data": map[string]interface{}{
-				"error":      "Failed to get file info: " + err.Error(),
+				"error":       "Failed to get file info: " + err.Error(),
 				"remote_path": remotePath,
 			},
 		})
@@ -1497,8 +1535,8 @@ func handleSFTPDownload(conn *websocket.Conn, sftpClient *sftp.Client, remotePat
 			conn.WriteJSON(map[string]interface{}{
 				"type": "sftp_download_progress",
 				"data": map[string]interface{}{
-					"remote_path":      remotePath,
-					"file_name":        fileName,
+					"remote_path":       remotePath,
+					"file_name":         fileName,
 					"bytes_transferred": totalRead,
 					"total_bytes":       fileInfo.Size(),
 				},
@@ -1511,7 +1549,7 @@ func handleSFTPDownload(conn *websocket.Conn, sftpClient *sftp.Client, remotePat
 			conn.WriteJSON(map[string]interface{}{
 				"type": "sftp_error",
 				"data": map[string]interface{}{
-					"error":      "Failed to read file: " + err.Error(),
+					"error":       "Failed to read file: " + err.Error(),
 					"remote_path": remotePath,
 				},
 			})

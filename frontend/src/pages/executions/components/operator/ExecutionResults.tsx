@@ -3,18 +3,14 @@
 // This software is released under the MIT License.
 // https://opensource.org/licenses/MIT
 
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import {
   Card,
   Tag,
   Typography,
   Space,
-  Collapse,
   Spin,
-  Empty,
   Statistic,
-  Row,
-  Col,
   Button,
 } from 'antd'
 import {
@@ -31,7 +27,6 @@ import { Asset } from '@/api/asset'
 import { useThemeStore } from '@/stores/theme'
 import dayjs from 'dayjs'
 
-const { Panel } = Collapse
 const { Text, Title } = Typography
 
 // 状态配置
@@ -71,6 +66,8 @@ interface ExecutionResultsProps {
   assets: Map<number, Asset>
   isRunning: boolean
   onRefresh?: () => void
+  /** 嵌入分栏布局时去掉顶部外边距，便于一屏显示 */
+  embedded?: boolean
 }
 
 const ExecutionResults: React.FC<ExecutionResultsProps> = ({
@@ -78,6 +75,7 @@ const ExecutionResults: React.FC<ExecutionResultsProps> = ({
   assets,
   isRunning,
   onRefresh,
+  embedded = false,
 }) => {
   const { mode } = useThemeStore()
   const [expandedLogs, setExpandedLogs] = useState<Set<number>>(new Set())
@@ -94,15 +92,6 @@ const ExecutionResults: React.FC<ExecutionResultsProps> = ({
     pending: executionRecords.filter((r) => r.status === 'pending').length,
     cancelled: executionRecords.filter((r) => r.status === 'cancelled').length,
   }
-
-  // 获取总体状态
-  const getOverallStatus = () => {
-    if (stats.running > 0 || stats.pending > 0) return 'running'
-    if (stats.failed > 0) return stats.success > 0 ? 'partial' : 'failed'
-    return 'success'
-  }
-
-  const overallStatus = getOverallStatus()
 
   // 切换日志展开/折叠
   const toggleLog = (recordId: number) => {
@@ -199,7 +188,7 @@ const ExecutionResults: React.FC<ExecutionResultsProps> = ({
   return (
     <Card
       style={{
-        marginTop: 24,
+        marginTop: embedded ? 0 : 24,
         borderRadius: 12,
       }}
       styles={{

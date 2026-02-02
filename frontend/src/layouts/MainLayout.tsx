@@ -34,6 +34,7 @@ import {
   AppstoreOutlined,
   BookOutlined,
   TagsOutlined,
+  LinkOutlined,
 } from '@ant-design/icons'
 import { useThemeStore } from '@/stores/theme'
 import { useAuthStore } from '@/stores/auth'
@@ -106,6 +107,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
     '/users': 'users:*',
     '/roles': 'roles:*',
     '/audit-logs': 'audit-logs:read',
+    '/connection-audit': 'connection-audit:read',
   }
 
   // 根据权限过滤菜单项
@@ -122,8 +124,8 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
         }
         
         // 如果是子菜单，过滤子项
-        if (item.children && Array.isArray(item.children)) {
-          const filteredChildren = filterMenuItems(item.children)
+        if ('children' in item && item.children && Array.isArray(item.children)) {
+          const filteredChildren = filterMenuItems(item.children) ?? []
           // 如果子菜单没有可用项，不显示父菜单
           if (filteredChildren.length === 0) {
             return null
@@ -254,6 +256,11 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
           key: '/audit-logs',
           icon: <AuditOutlined />,
           label: '审计日志',
+        },
+        {
+          key: '/connection-audit',
+          icon: <LinkOutlined />,
+          label: '审计连线',
         },
       ],
     },

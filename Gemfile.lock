@@ -1,0 +1,17 @@
+GEM
+  remote: https://rubygems.org/
+  specs:
+    kk-git (0.1.7)
+
+PLATFORMS
+  arm64-darwin-25
+  ruby
+
+DEPENDENCIES
+  kk-git
+
+CHECKSUMS
+  kk-git (0.1.7)
+
+BUNDLED WITH
+  4.0.3

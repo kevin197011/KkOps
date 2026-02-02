@@ -30,6 +30,7 @@ const ScheduledTaskList = lazy(() => import('./pages/tasks/ScheduledTaskList'))
 const SSHKeyList = lazy(() => import('./pages/ssh/SSHKeyList'))
 const WebSSHTerminal = lazy(() => import('./pages/ssh/WebSSHTerminal'))
 const AuditLogList = lazy(() => import('./pages/audit/AuditLogList'))
+const ConnectionAuditList = lazy(() => import('./pages/connectionAudit/ConnectionAuditList'))
 const OperationToolList = lazy(() => import('./pages/operationTools/OperationToolList'))
 const UserProfile = lazy(() => import('./pages/profile/UserProfile'))
 
@@ -281,6 +282,18 @@ function App() {
               <MainLayout>
                 <Suspense fallback={<PageLoading />}>
                   <AuditLogList />
+                </Suspense>
+              </MainLayout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/connection-audit"
+          element={
+            <ProtectedRoute requiredPermission="connection-audit:read">
+              <MainLayout>
+                <Suspense fallback={<PageLoading />}>
+                  <ConnectionAuditList />
                 </Suspense>
               </MainLayout>
             </ProtectedRoute>

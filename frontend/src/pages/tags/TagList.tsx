@@ -4,19 +4,17 @@
 // https://opensource.org/licenses/MIT
 
 import { useState, useEffect } from 'react'
-import { Table, Button, Space, Modal, Form, Input, Tag, ColorPicker, Card, Typography, App } from 'antd'
+import { Table, Button, Space, Modal, Form, Input, Tag, ColorPicker, Card, Typography, App, theme } from 'antd'
 import { PlusOutlined, EditOutlined, DeleteOutlined, TagsOutlined } from '@ant-design/icons'
 import { tagApi, Tag as TagType, CreateTagRequest, UpdateTagRequest } from '@/api/tag'
 import { usePermissionStore } from '@/stores/permission'
-import { useThemeStore } from '@/stores/theme'
 
 const { Title } = Typography
 
 const TagList = () => {
+  const { token } = theme.useToken()
   const { message } = App.useApp()
   const { hasPermission } = usePermissionStore()
-  const { mode } = useThemeStore()
-  const isDark = mode === 'dark'
   const [tags, setTags] = useState<TagType[]>([])
   const [loading, setLoading] = useState(false)
   const [modalVisible, setModalVisible] = useState(false)
@@ -77,7 +75,7 @@ const TagList = () => {
         await tagApi.update(editingTag.id, values)
         message.success('更新成功')
       } else {
-        await tagApi.create(values)
+        await tagApi.create({ name: values.name!, color: values.color, description: values.description })
         message.success('创建成功')
       }
       setModalVisible(false)
@@ -140,52 +138,39 @@ const TagList = () => {
   ]
 
   return (
-    <div style={{ 
+    <div style={{
       padding: 24,
-      background: isDark ? '#0F172A' : '#F5F5F5',
-      minHeight: '100vh',
+      background: token.colorBgContainer,
+      minHeight: '100%',
     }}>
       <Card
+        styles={{ body: { padding: 24 } }}
         style={{
-          background: isDark ? '#1E293B' : '#FFFFFF',
-          border: isDark 
-            ? '1px solid rgba(255, 255, 255, 0.08)' 
-            : '1px solid rgba(0, 0, 0, 0.06)',
-          boxShadow: isDark
-            ? '0 4px 24px rgba(0, 0, 0, 0.5)'
-            : '0 2px 12px rgba(0, 0, 0, 0.08)',
+          background: token.colorBgElevated,
+          borderColor: token.colorBorderSecondary,
         }}
       >
-        <div style={{ 
-          marginBottom: 24, 
-          display: 'flex', 
-          justifyContent: 'space-between', 
+        <div style={{
+          marginBottom: 24,
+          display: 'flex',
+          justifyContent: 'space-between',
           alignItems: 'center',
           flexWrap: 'wrap',
-          gap: 16
+          gap: 16,
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <TagsOutlined style={{ 
-              fontSize: 24, 
-              color: isDark ? '#60A5FA' : '#2563EB' 
-            }} />
-            <Title level={3} style={{ 
-              margin: 0,
-              color: isDark ? '#E2E8F0' : '#1E293B',
-            }}>
+            <TagsOutlined style={{ fontSize: 24, color: token.colorPrimary }} />
+            <Title level={3} style={{ margin: 0, color: token.colorTextHeading }}>
               标签管理
             </Title>
           </div>
           {hasPermission('assets', 'create') && (
-            <Button 
-              type="primary" 
-              icon={<PlusOutlined />} 
-              onClick={handleCreate} 
+            <Button
+              type="primary"
+              icon={<PlusOutlined />}
+              onClick={handleCreate}
               size="large"
-              style={{
-                borderRadius: 6,
-                fontWeight: 500,
-              }}
+              style={{ borderRadius: 6, fontWeight: 500 }}
             >
               新增标签
             </Button>
@@ -197,9 +182,7 @@ const TagList = () => {
           loading={loading}
           rowKey="id"
           scroll={{ x: 'max-content' }}
-          style={{
-            background: isDark ? '#1E293B' : '#FFFFFF',
-          }}
+          style={{ background: token.colorBgElevated }}
           pagination={{
             showSizeChanger: true,
             showQuickJumper: true,
@@ -211,10 +194,7 @@ const TagList = () => {
       <Modal
         title={
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <TagsOutlined style={{ 
-              fontSize: 18, 
-              color: isDark ? '#60A5FA' : '#2563EB' 
-            }} />
+            <TagsOutlined style={{ fontSize: 18, color: token.colorPrimary }} />
             <span>{editingTag ? '编辑标签' : '新增标签'}</span>
           </div>
         }
@@ -225,11 +205,7 @@ const TagList = () => {
         }}
         onOk={() => form.submit()}
         width={600}
-        styles={{
-          body: {
-            background: isDark ? '#1E293B' : '#FFFFFF',
-          },
-        }}
+        styles={{ body: { background: token.colorBgElevated } }}
       >
         <Form form={form} layout="vertical" onFinish={handleSubmit}>
           <Form.Item

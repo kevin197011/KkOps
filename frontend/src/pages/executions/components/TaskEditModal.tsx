@@ -72,7 +72,7 @@ const TaskEditModal = ({
     setLoading(true)
     try {
       const [assetsRes, templatesRes] = await Promise.all([
-        assetApi.list({ page: 1, pageSize: 1000 }),
+        assetApi.list({ page: 1, page_size: 1000 }),
         templateApi.list(),
       ])
       // Handle different response formats
@@ -263,7 +263,7 @@ const TaskEditModal = ({
       okText="保存"
       cancelText="取消"
       styles={{
-        body: { maxHeight: '70vh', overflow: 'auto' },
+        body: { maxHeight: '70vh', overflow: 'auto', background: token.colorBgElevated },
       }}
     >
       {loading ? (

@@ -24,6 +24,8 @@ interface ScriptEditorProps {
   onTypeChange: (type: string) => void
   templateContent?: string
   readOnly?: boolean
+  /** 脚本编辑区最大高度，内部滚动（如 '20vh' 或 200） */
+  maxHeight?: number | string
 }
 
 const ScriptEditor: React.FC<ScriptEditorProps> = ({
@@ -34,6 +36,7 @@ const ScriptEditor: React.FC<ScriptEditorProps> = ({
   onTypeChange,
   templateContent,
   readOnly = false,
+  maxHeight = 200,
 }) => {
   const isReadOnly = mode === 'template' || readOnly
 
@@ -85,24 +88,33 @@ const ScriptEditor: React.FC<ScriptEditorProps> = ({
             ]}
           />
         </div>
-        <TextArea
-          value={scriptContent}
-          onChange={(e) => onContentChange(e.target.value)}
-          readOnly={isReadOnly}
-          rows={12}
-          placeholder={
-            isReadOnly
-              ? '请先选择模板'
-              : scriptType === 'shell'
-                ? '请输入 Shell 脚本内容...'
-                : '请输入 Python 脚本内容...'
-          }
+        <div
           style={{
-            fontFamily: '"JetBrains Mono", "SF Mono", "Consolas", monospace',
-            fontSize: 13,
-            lineHeight: 1.6,
+            maxHeight: typeof maxHeight === 'number' ? `${maxHeight}px` : maxHeight,
+            overflow: 'auto',
+            minHeight: 120,
           }}
-        />
+        >
+          <TextArea
+            value={scriptContent}
+            onChange={(e) => onContentChange(e.target.value)}
+            readOnly={isReadOnly}
+            rows={8}
+            placeholder={
+              isReadOnly
+                ? '请先选择模板'
+                : scriptType === 'shell'
+                  ? '请输入 Shell 脚本内容...'
+                  : '请输入 Python 脚本内容...'
+            }
+            style={{
+              fontFamily: '"JetBrains Mono", "SF Mono", "Consolas", monospace',
+              fontSize: 13,
+              lineHeight: 1.6,
+              minHeight: 120,
+            }}
+          />
+        </div>
         {isReadOnly && mode === 'template' && (
           <Text type="secondary" style={{ fontSize: 12 }}>
             模板模式下脚本内容为只读，如需修改请切换到自定义模式

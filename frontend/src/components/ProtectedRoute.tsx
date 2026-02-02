@@ -17,7 +17,7 @@ interface ProtectedRouteProps {
 
 const ProtectedRoute = ({ children, requiredPermission }: ProtectedRouteProps) => {
   const { isAuthenticated, user } = useAuth()
-  const { hasPermission, permissions, isAdmin, setPermissions } = usePermissionStore()
+  const { hasPermission, permissions, setPermissions } = usePermissionStore()
   const [permissionsLoaded, setPermissionsLoaded] = useState(false)
 
   if (!isAuthenticated) {

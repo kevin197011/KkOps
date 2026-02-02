@@ -411,8 +411,8 @@ type ExportTemplateConfig struct {
 
 // ExportTemplatesConfig 导出模板配置根结构
 type ExportTemplatesConfig struct {
-	Version  string                `json:"version"`
-	ExportAt string                `json:"export_at"`
+	Version   string                 `json:"version"`
+	ExportAt  string                 `json:"export_at"`
 	Templates []ExportTemplateConfig `json:"templates"`
 }
 
@@ -426,17 +426,19 @@ type ImportTemplateConfig struct {
 
 // ImportTemplatesConfig 导入模板配置根结构
 type ImportTemplatesConfig struct {
-	Version  string                `json:"version"`
+	Version   string                 `json:"version"`
 	Templates []ImportTemplateConfig `json:"templates" binding:"required"`
 }
 
 // ImportResult 导入结果
 type ImportResult struct {
-	Total     int      `json:"total"`
-	Success   int      `json:"success"`
-	Failed    int      `json:"failed"`
-	Errors    []string `json:"errors,omitempty"`
-	Skipped   []string `json:"skipped,omitempty"`
+	Total        int      `json:"total"`
+	Success      int      `json:"success"`
+	Updated      int      `json:"updated"`
+	Failed       int      `json:"failed"`
+	Errors       []string `json:"errors,omitempty"`
+	UpdatedItems []string `json:"updated_items,omitempty"`
+	Skipped      []string `json:"skipped,omitempty"`
 }
 
 // ExportTemplates 导出所有任务模板
@@ -458,24 +460,31 @@ func (s *Service) ExportTemplates() (*ExportTemplatesConfig, error) {
 
 	return &ExportTemplatesConfig{
 		Version:   "1.0",
-		ExportAt: time.Now().Format(time.RFC3339),
+		ExportAt:  time.Now().Format(time.RFC3339),
 		Templates: exportTemplates,
 	}, nil
 }
 
-// ImportTemplates 导入任务模板
+// ImportTemplates 导入任务模板；同名模板已存在则覆盖更新
 func (s *Service) ImportTemplates(config *ImportTemplatesConfig, userID uint) (*ImportResult, error) {
 	result := &ImportResult{
-		Total:   len(config.Templates),
-		Errors:  []string{},
-		Skipped: []string{},
+		Total:        len(config.Templates),
+		Errors:       []string{},
+		UpdatedItems: []string{},
+		Skipped:      []string{},
+	}
+
+	templateType := func(typ string) string {
+		if typ == "" {
+			return "shell"
+		}
+		return typ
 	}
 
 	for _, t := range config.Templates {
-		// 验证必填字段
 		if t.Name == "" {
 			result.Failed++
-			result.Errors = append(result.Errors, fmt.Sprintf("模板缺少必填字段 'name'"))
+			result.Errors = append(result.Errors, "模板缺少必填字段 'name'")
 			continue
 		}
 		if t.Content == "" {
@@ -484,34 +493,36 @@ func (s *Service) ImportTemplates(config *ImportTemplatesConfig, userID uint) (*
 			continue
 		}
 
-		// 检查是否已存在同名模板
 		var existingTemplate model.TaskTemplate
 		if err := s.db.Where("name = ?", t.Name).First(&existingTemplate).Error; err == nil {
-			// 模板已存在，跳过
-			result.Skipped = append(result.Skipped, fmt.Sprintf("模板 '%s': 已存在，已跳过", t.Name))
+			// 已存在同名模板，覆盖更新
+			updates := map[string]interface{}{
+				"description": t.Description,
+				"content":     t.Content,
+				"type":        templateType(t.Type),
+			}
+			if err := s.db.Model(&existingTemplate).Updates(updates).Error; err != nil {
+				result.Failed++
+				result.Errors = append(result.Errors, fmt.Sprintf("模板 '%s': 更新失败: %v", t.Name, err))
+				continue
+			}
+			result.Updated++
+			result.UpdatedItems = append(result.UpdatedItems, t.Name)
 			continue
-		}
-
-		// 创建新模板
-		templateType := t.Type
-		if templateType == "" {
-			templateType = "shell"
 		}
 
 		template := model.TaskTemplate{
 			Name:        t.Name,
 			Description: t.Description,
 			Content:     t.Content,
-			Type:        templateType,
+			Type:        templateType(t.Type),
 			CreatedBy:   userID,
 		}
-
 		if err := s.db.Create(&template).Error; err != nil {
 			result.Failed++
 			result.Errors = append(result.Errors, fmt.Sprintf("模板 '%s': 创建失败: %v", t.Name, err))
 			continue
 		}
-
 		result.Success++
 	}
 

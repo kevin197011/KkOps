@@ -4,13 +4,16 @@
 // https://opensource.org/licenses/MIT
 
 import { useState, useEffect, useCallback } from 'react'
-import { Table, Button, Space, message, Modal, Form, Input, Select, Tag, Tooltip, Checkbox, Switch } from 'antd'
-import { PlusOutlined, EditOutlined, DeleteOutlined, TeamOutlined, LockOutlined } from '@ant-design/icons'
+import { Table, Button, Space, message, Modal, Form, Input, Select, Tag, Tooltip, Checkbox, Switch, Card, Typography, theme } from 'antd'
+import { PlusOutlined, EditOutlined, DeleteOutlined, TeamOutlined, LockOutlined, UserOutlined } from '@ant-design/icons'
 import { userApi, User, CreateUserRequest, UpdateUserRequest, UserRoleInfo } from '@/api/user'
 import { roleApi, Role } from '@/api/role'
 import { usePermissionStore } from '@/stores/permission'
 
+const { Title } = Typography
+
 const UserList = () => {
+  const { token } = theme.useToken()
   const { hasPermission } = usePermissionStore()
   const [users, setUsers] = useState<User[]>([])
   const [loading, setLoading] = useState(false)
@@ -210,7 +213,7 @@ const UserList = () => {
       render: (_: any, record: User) => {
         const roles = userRolesMap[record.id] || []
         if (roles.length === 0) {
-          return <span style={{ color: '#999' }}>暂无角色</span>
+          return <span style={{ color: token.colorTextTertiary }}>暂无角色</span>
         }
         return (
           <Space size={[0, 4]} wrap>
@@ -293,44 +296,54 @@ const UserList = () => {
   ]
 
   return (
-    <div>
-      <div
-        style={{
-          marginBottom: 16,
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          flexWrap: 'wrap',
-          gap: 8,
-        }}
+    <div style={{ padding: 24, background: token.colorBgContainer, minHeight: '100%' }}>
+      <Card
+        styles={{ body: { padding: 24 } }}
+        style={{ background: token.colorBgElevated, borderColor: token.colorBorderSecondary }}
       >
-        <h2>用户管理</h2>
-        {hasPermission('users', 'create') && (
-          <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate} aria-label="新增用户">
-            新增用户
-          </Button>
-        )}
-      </div>
-      <Table
-        columns={columns}
-        dataSource={users}
-        loading={loading}
-        rowKey="id"
-        scroll={{ x: 'max-content' }}
-        pagination={{
-          current: page,
-          pageSize: pageSize,
-          total: total,
-          showSizeChanger: true,
-          showQuickJumper: true,
-          showTotal: (total, range) => `第 ${range[0]}-${range[1]} 条/共 ${total} 条`,
-          responsive: true,
-          onChange: (page, pageSize) => {
-            setPage(page)
-            setPageSize(pageSize)
-          },
-        }}
-      />
+        <div
+          style={{
+            marginBottom: 24,
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            gap: 16,
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <UserOutlined style={{ fontSize: 24, color: token.colorPrimary }} />
+            <Title level={3} style={{ margin: 0, color: token.colorTextHeading }}>
+              用户管理
+            </Title>
+          </div>
+          {hasPermission('users', 'create') && (
+            <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate} aria-label="新增用户">
+              新增用户
+            </Button>
+          )}
+        </div>
+        <Table
+          columns={columns}
+          dataSource={users}
+          loading={loading}
+          rowKey="id"
+          scroll={{ x: 'max-content' }}
+          pagination={{
+            current: page,
+            pageSize: pageSize,
+            total: total,
+            showSizeChanger: true,
+            showQuickJumper: true,
+            showTotal: (total, range) => `第 ${range[0]}-${range[1]} 条/共 ${total} 条`,
+            responsive: true,
+            onChange: (page, pageSize) => {
+              setPage(page)
+              setPageSize(pageSize)
+            },
+          }}
+        />
+      </Card>
       <Modal
         title={editingUser ? '编辑用户' : '新增用户'}
         open={modalVisible}
@@ -342,6 +355,7 @@ const UserList = () => {
         onOk={() => form.submit()}
         width="90%"
         style={{ maxWidth: 600 }}
+        styles={{ body: { background: token.colorBgElevated } }}
       >
         <Form form={form} layout="vertical" onFinish={handleSubmit}>
           {!editingUser && (
@@ -382,7 +396,7 @@ const UserList = () => {
                     checkedChildren={<LockOutlined />}
                     unCheckedChildren={<LockOutlined />}
                   />
-                  <span style={{ color: '#888' }}>
+                  <span style={{ color: token.colorTextTertiary }}>
                     {resetPassword ? '启用密码重置' : '不修改密码'}
                   </span>
                 </Space>
@@ -431,6 +445,7 @@ const UserList = () => {
         width={500}
         okText="保存"
         cancelText="取消"
+        styles={{ body: { background: token.colorBgElevated } }}
       >
         <div style={{ marginBottom: 16 }}>
           <Tag color="blue">勾选要分配给用户的角色，用户将获得角色所授权的资产访问权限</Tag>
@@ -447,10 +462,10 @@ const UserList = () => {
                   key={role.id}
                   style={{
                     padding: '12px 16px',
-                    border: '1px solid #f0f0f0',
+                    border: `1px solid ${token.colorBorderSecondary}`,
                     borderRadius: 6,
                     marginBottom: 8,
-                    background: selectedRoleIds.includes(role.id) ? '#f6ffed' : '#fff',
+                    background: selectedRoleIds.includes(role.id) ? token.colorSuccessBg : token.colorBgContainer,
                   }}
                 >
                   <Checkbox value={role.id}>
@@ -463,7 +478,7 @@ const UserList = () => {
                     </Space>
                   </Checkbox>
                   {role.description && (
-                    <div style={{ marginLeft: 24, marginTop: 4, color: '#888', fontSize: 12 }}>
+                    <div style={{ marginLeft: 24, marginTop: 4, color: token.colorTextTertiary, fontSize: 12 }}>
                       {role.description}
                     </div>
                   )}

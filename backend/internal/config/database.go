@@ -95,7 +95,7 @@ func seedDefaultUser(db *gorm.DB) error {
 func seedDefaultAdminRole(db *gorm.DB) error {
 	var adminRole model.Role
 	result := db.Where("name = ?", "admin").First(&adminRole)
-	
+
 	if result.Error == gorm.ErrRecordNotFound {
 		// Create admin role
 		adminRole = model.Role{
@@ -106,7 +106,7 @@ func seedDefaultAdminRole(db *gorm.DB) error {
 		if err := db.Create(&adminRole).Error; err != nil {
 			return fmt.Errorf("failed to create default admin role: %w", err)
 		}
-		
+
 		// Assign admin role to admin user
 		var adminUser model.User
 		if err := db.Where("username = ?", "admin").First(&adminUser).Error; err == nil {
@@ -121,7 +121,7 @@ func seedDefaultAdminRole(db *gorm.DB) error {
 			db.Save(&adminRole)
 		}
 	}
-	
+
 	return nil
 }
 
@@ -380,7 +380,7 @@ func seedDefaultScheduledTasks(db *gorm.DB) error {
 func runSQLMigrations(db *gorm.DB) error {
 	// Get the base directory (assuming migrations are relative to backend/)
 	migrationDir := "migrations"
-	
+
 	// Check if migration directory exists
 	if _, err := os.Stat(migrationDir); os.IsNotExist(err) {
 		// Try alternative path (when running from backend directory)
@@ -407,7 +407,7 @@ func runSQLMigrations(db *gorm.DB) error {
 	// Execute migrations in order
 	for _, filename := range migrationFiles {
 		filepath := filepath.Join(migrationDir, filename)
-		
+
 		// Check if file exists
 		if _, err := os.Stat(filepath); os.IsNotExist(err) {
 			continue // Skip if file doesn't exist
@@ -422,7 +422,7 @@ func runSQLMigrations(db *gorm.DB) error {
 		// Execute the entire SQL file as one transaction
 		// This is better for DO blocks and complex migrations
 		sql := string(sqlContent)
-		
+
 		// Remove comments that are on their own lines
 		lines := strings.Split(sql, "\n")
 		var cleanLines []string
@@ -448,7 +448,7 @@ func runSQLMigrations(db *gorm.DB) error {
 				// Safe to ignore, continue
 				continue
 			}
-			
+
 			// For column/table not found errors, they might be expected depending on migration state
 			// But we should log them as warnings, not fail completely
 			if strings.Contains(errStr, "does not exist") {
@@ -491,6 +491,7 @@ func migrate(db *gorm.DB) error {
 		&model.Deployment{},
 		&model.AuditLog{},
 		&model.OperationTool{},
+		&model.SSHConnectionRecord{},
 	); err != nil {
 		return err
 	}
@@ -612,7 +613,7 @@ func seedMenuPermissions(db *gorm.DB) error {
 		// Check if permission already exists
 		var existingPerm model.Permission
 		result := db.Where("resource = ? AND action = ?", permDef.Resource, permDef.Action).First(&existingPerm)
-		
+
 		if result.Error == gorm.ErrRecordNotFound {
 			// Create new permission
 			permission := model.Permission{
@@ -629,7 +630,7 @@ func seedMenuPermissions(db *gorm.DB) error {
 		}
 		// If permission exists, skip (idempotent)
 	}
-	
+
 	return nil
 }
 

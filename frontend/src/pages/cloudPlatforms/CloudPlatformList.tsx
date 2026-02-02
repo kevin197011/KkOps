@@ -4,14 +4,16 @@
 // https://opensource.org/licenses/MIT
 
 import { useState, useEffect } from 'react'
-import { Table, Button, Space, message, Modal, Form, Input, Tag } from 'antd'
-import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons'
+import { Table, Button, Space, message, Modal, Form, Input, Card, Typography, theme } from 'antd'
+import { PlusOutlined, EditOutlined, DeleteOutlined, CloudOutlined } from '@ant-design/icons'
 import { cloudPlatformApi, CloudPlatform, CreateCloudPlatformRequest, UpdateCloudPlatformRequest } from '@/api/cloudPlatform'
 import { usePermissionStore } from '@/stores/permission'
 
 const { TextArea } = Input
+const { Title } = Typography
 
 const CloudPlatformList = () => {
+  const { token } = theme.useToken()
   const { hasPermission } = usePermissionStore()
   const [cloudPlatforms, setCloudPlatforms] = useState<CloudPlatform[]>([])
   const [loading, setLoading] = useState(false)
@@ -142,29 +144,39 @@ const CloudPlatformList = () => {
   ]
 
   return (
-    <div>
-      <div
-        style={{
-          marginBottom: 16,
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          flexWrap: 'wrap',
-          gap: 8,
-        }}
+    <div style={{ padding: 24, background: token.colorBgContainer, minHeight: '100%' }}>
+      <Card
+        styles={{ body: { padding: 24 } }}
+        style={{ background: token.colorBgElevated, borderColor: token.colorBorderSecondary }}
       >
-        <h2>云平台管理</h2>
-        <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate} aria-label="新增云平台">
-          新增云平台
-        </Button>
-      </div>
-      <Table
-        columns={columns}
-        dataSource={cloudPlatforms}
-        loading={loading}
-        rowKey="id"
-        scroll={{ x: 'max-content' }}
-      />
+        <div
+          style={{
+            marginBottom: 24,
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            gap: 16,
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <CloudOutlined style={{ fontSize: 24, color: token.colorPrimary }} />
+            <Title level={3} style={{ margin: 0, color: token.colorTextHeading }}>
+              云平台管理
+            </Title>
+          </div>
+          <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate} aria-label="新增云平台">
+            新增云平台
+          </Button>
+        </div>
+        <Table
+          columns={columns}
+          dataSource={cloudPlatforms}
+          loading={loading}
+          rowKey="id"
+          scroll={{ x: 'max-content' }}
+        />
+      </Card>
       <Modal
         title={editingCloudPlatform ? '编辑云平台' : '新增云平台'}
         open={modalVisible}
@@ -175,6 +187,7 @@ const CloudPlatformList = () => {
         onOk={() => form.submit()}
         width="90%"
         style={{ maxWidth: 600 }}
+        styles={{ body: { background: token.colorBgElevated } }}
       >
         <Form form={form} layout="vertical" onFinish={handleSubmit}>
           <Form.Item name="name" label="云平台名称" rules={[{ required: true, message: '请输入云平台名称' }]}>

@@ -15,11 +15,9 @@ import {
   theme,
   Badge,
   Typography,
-  Space,
   Divider,
 } from 'antd'
 import {
-  DatabaseOutlined,
   UserOutlined,
   PlayCircleOutlined,
   FolderOutlined,
@@ -1005,7 +1003,6 @@ const RecentActivities: React.FC<RecentActivitiesProps> = ({ activities, loading
 const Dashboard: React.FC = () => {
   const [stats, setStats] = useState<DashboardStats | null>(null)
   const [loading, setLoading] = useState(true)
-  const { token } = theme.useToken()
 
   const fetchStats = useCallback(async () => {
     try {

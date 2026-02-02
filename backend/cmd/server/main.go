@@ -40,6 +40,7 @@ import (
 	authHandler "github.com/kkops/backend/internal/handler/auth"
 	categoryHandler "github.com/kkops/backend/internal/handler/category"
 	cloudplatformHandler "github.com/kkops/backend/internal/handler/cloudplatform"
+	connectionauditHandler "github.com/kkops/backend/internal/handler/connectionaudit"
 	dashboardHandler "github.com/kkops/backend/internal/handler/dashboard"
 	deploymentHandler "github.com/kkops/backend/internal/handler/deployment"
 	environmentHandler "github.com/kkops/backend/internal/handler/environment"
@@ -59,6 +60,7 @@ import (
 	authorizationService "github.com/kkops/backend/internal/service/authorization"
 	categoryService "github.com/kkops/backend/internal/service/category"
 	cloudplatformService "github.com/kkops/backend/internal/service/cloudplatform"
+	connectionauditService "github.com/kkops/backend/internal/service/connectionaudit"
 	dashboardService "github.com/kkops/backend/internal/service/dashboard"
 	deploymentService "github.com/kkops/backend/internal/service/deployment"
 	environmentService "github.com/kkops/backend/internal/service/environment"
@@ -129,6 +131,7 @@ func main() {
 	deploymentSvc := deploymentService.NewService(db, cfg)
 	scheduledTaskSvc := scheduledtaskService.NewService(db)
 	auditSvc := auditService.NewService(db)
+	connectionauditSvc := connectionauditService.NewService(db)
 	operationtoolSvc := operationtoolService.NewService(db)
 
 	// Initialize scheduler for scheduled tasks
@@ -160,6 +163,7 @@ func main() {
 	roleAssetHdl := roleHandler.NewAssetHandler(authzSvc)
 	userRoleHdl := userHandler.NewRoleHandler(authzSvc)
 	auditHdl := auditHandler.NewHandler(auditSvc)
+	connectionauditHdl := connectionauditHandler.NewHandler(connectionauditSvc)
 
 	// API routes
 	api := r.Group("/api/v1")
@@ -203,6 +207,13 @@ func main() {
 				auditLogsGroup.GET("/modules", auditHdl.GetModules)
 				auditLogsGroup.GET("/actions", auditHdl.GetActions)
 				auditLogsGroup.GET("/:id", auditHdl.GetAuditLog)
+			}
+
+			// Connection audit (审计连线)
+			connectionAuditGroup := protected.Group("/connection-audit")
+			{
+				connectionAuditGroup.GET("", connectionauditHdl.ListConnectionRecords)
+				connectionAuditGroup.GET("/:id", connectionauditHdl.GetConnectionRecord)
 			}
 
 			// Dashboard
@@ -417,7 +428,7 @@ func main() {
 	ws.Use(middleware.AuthMiddleware(cfg))
 	{
 		ws.GET("/execution-records/:id/logs", websocketHandler.StreamExecutionLogs(db))
-		ws.GET("/ssh/connect", websocketHandler.SSHTerminalHandler(db, cfg, sshkeySvc, authzSvc))
+		ws.GET("/ssh/connect", websocketHandler.SSHTerminalHandler(db, cfg, sshkeySvc, authzSvc, connectionauditSvc))
 	}
 
 	// Swagger documentation

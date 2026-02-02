@@ -4,12 +4,15 @@
 // https://opensource.org/licenses/MIT
 
 import { useState, useEffect } from 'react'
-import { Table, Button, Space, message, Modal, Form, Input } from 'antd'
-import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons'
+import { Table, Button, Space, message, Modal, Form, Input, Card, Typography, theme } from 'antd'
+import { PlusOutlined, EditOutlined, DeleteOutlined, FolderOutlined } from '@ant-design/icons'
 import { projectApi, Project, CreateProjectRequest, UpdateProjectRequest } from '@/api/project'
 import { usePermissionStore } from '@/stores/permission'
 
+const { Title } = Typography
+
 const ProjectList = () => {
+  const { token } = theme.useToken()
   const { hasPermission } = usePermissionStore()
   const [projects, setProjects] = useState<Project[]>([])
   const [loading, setLoading] = useState(false)
@@ -67,7 +70,7 @@ const ProjectList = () => {
         await projectApi.update(editingProject.id, values)
         message.success('更新成功')
       } else {
-        await projectApi.create(values)
+        await projectApi.create({ name: values.name!, description: values.description })
         message.success('创建成功')
       }
       setModalVisible(false)
@@ -122,27 +125,39 @@ const ProjectList = () => {
   ]
 
   return (
-    <div>
-      <div style={{ 
-        marginBottom: 16, 
-        display: 'flex', 
-        justifyContent: 'space-between', 
-        alignItems: 'center',
-        flexWrap: 'wrap',
-        gap: 8
-      }}>
-        <h2>项目管理</h2>
-        <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate} aria-label="新增项目">
-          新增项目
-        </Button>
-      </div>
-      <Table
-        columns={columns}
-        dataSource={projects}
-        loading={loading}
-        rowKey="id"
-        scroll={{ x: 'max-content' }}
-      />
+    <div style={{ padding: 24, background: token.colorBgContainer, minHeight: '100%' }}>
+      <Card
+        styles={{
+          body: { padding: 24 },
+        }}
+        style={{ background: token.colorBgElevated, borderColor: token.colorBorderSecondary }}
+      >
+        <div style={{
+          marginBottom: 24,
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          gap: 16,
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <FolderOutlined style={{ fontSize: 24, color: token.colorPrimary }} />
+            <Title level={3} style={{ margin: 0, color: token.colorTextHeading }}>
+              项目管理
+            </Title>
+          </div>
+          <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate} aria-label="新增项目">
+            新增项目
+          </Button>
+        </div>
+        <Table
+          columns={columns}
+          dataSource={projects}
+          loading={loading}
+          rowKey="id"
+          scroll={{ x: 'max-content' }}
+        />
+      </Card>
       <Modal
         title={editingProject ? '编辑项目' : '新增项目'}
         open={modalVisible}
@@ -153,6 +168,7 @@ const ProjectList = () => {
         onOk={() => form.submit()}
         width="90%"
         style={{ maxWidth: 600 }}
+        styles={{ body: { background: token.colorBgElevated } }}
       >
         <Form form={form} layout="vertical" onFinish={handleSubmit}>
           <Form.Item

@@ -4,7 +4,6 @@
 // https://opensource.org/licenses/MIT
 
 import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
 import { UserInfo } from '@/api/auth'
 
 interface AuthState {

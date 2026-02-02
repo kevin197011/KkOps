@@ -4,9 +4,9 @@
 // https://opensource.org/licenses/MIT
 
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { Layout, Button, message, Form, Modal, Input, Space, Typography } from 'antd'
+import { Layout, Button, message, Typography, Row, Col } from 'antd'
 import { ThunderboltOutlined, LinkOutlined } from '@ant-design/icons'
-import { executionApi, ExecutionRecord, executionTemplateApi, ExecutionTemplate } from '@/api/execution'
+import { executionApi, ExecutionRecord, ExecutionTemplate } from '@/api/execution'
 import { projectApi, Project } from '@/api/project'
 import { environmentApi, Environment } from '@/api/environment'
 import { assetApi, Asset } from '@/api/asset'
@@ -15,7 +15,6 @@ import ScriptEditor from './components/operator/ScriptEditor'
 import HostSelector from './components/operator/HostSelector'
 import ExecutionOptions from './components/operator/ExecutionOptions'
 import ExecutionResults from './components/operator/ExecutionResults'
-import { useThemeStore } from '@/stores/theme'
 import { useNavigate } from 'react-router-dom'
 import { usePermissionStore } from '@/stores/permission'
 
@@ -23,10 +22,8 @@ const { Content } = Layout
 const { Text } = Typography
 
 const ExecutionOperatorPage = () => {
-  const { mode } = useThemeStore()
   const { hasPermission } = usePermissionStore()
   const navigate = useNavigate()
-  const [form] = Form.useForm()
 
   // 执行模式
   const [executionMode, setExecutionMode] = useState<ExecutionMode>('template')
@@ -54,12 +51,9 @@ const ExecutionOperatorPage = () => {
   const [executionRecords, setExecutionRecords] = useState<ExecutionRecord[]>([])
   const [isExecuting, setIsExecuting] = useState(false)
   const [currentTaskId, setCurrentTaskId] = useState<number | null>(null)
-  const [taskName, setTaskName] = useState<string>('')
-  const [saveTaskModalVisible, setSaveTaskModalVisible] = useState(false)
-  const [saveTaskForm] = Form.useForm()
 
   // 轮询定时器
-  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null)
+  const pollingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   // 获取项目和环境列表
   useEffect(() => {
@@ -182,7 +176,6 @@ const ExecutionOperatorPage = () => {
 
         // 如果保存为任务，显示保存任务名称的提示
         if (saveAsTask) {
-          setTaskName(selectedTemplate?.name || `执行任务 ${new Date().toLocaleString()}`)
           message.info('任务已保存，可在"任务执行"页面查看')
         }
 
@@ -271,8 +264,6 @@ const ExecutionOperatorPage = () => {
     }
   }
 
-  const isDark = mode === 'dark'
-
   return (
     <Layout style={{ minHeight: 'calc(100vh - 120px)', background: 'transparent' }}>
       <Content
@@ -281,93 +272,127 @@ const ExecutionOperatorPage = () => {
           maxWidth: 1200,
           margin: '0 auto',
           width: '100%',
+          display: 'flex',
+          flexDirection: 'column',
+          minHeight: 'calc(100vh - 120px)',
+          boxSizing: 'border-box',
         }}
       >
-        <Space direction="vertical" size={24} style={{ width: '100%' }}>
-          {/* 页面标题 */}
-          <div>
-            <Text strong style={{ fontSize: 24, display: 'block', marginBottom: 8 }}>
-              <ThunderboltOutlined style={{ marginRight: 8 }} />
-              运维执行
-            </Text>
-            <Text type="secondary">
-              选择模板或输入自定义脚本，快速执行到目标主机
-            </Text>
-          </div>
+        {/* 页面标题 */}
+        <div style={{ flexShrink: 0, marginBottom: 16 }}>
+          <Text strong style={{ fontSize: 24, display: 'block', marginBottom: 8 }}>
+            <ThunderboltOutlined style={{ marginRight: 8 }} />
+            运维执行
+          </Text>
+          <Text type="secondary">
+            选择模板或输入自定义脚本，快速执行到目标主机
+          </Text>
+        </div>
 
-          {/* 执行模式选择 */}
-          <ExecutionModeSelector
-            mode={executionMode}
-            onModeChange={handleModeChange}
-            selectedTemplateId={selectedTemplateId}
-            onTemplateSelect={handleTemplateSelect}
-          />
+        {/* 第一行：执行选项（左）+ 模式选择（右）并排 */}
+        <Row gutter={[16, 16]} style={{ flexShrink: 0, marginBottom: 16 }}>
+          <Col xs={24} md={12}>
+            <ExecutionOptions
+              executionType={executionType}
+              onExecutionTypeChange={setExecutionType}
+              timeout={timeout}
+              onTimeoutChange={setTimeout}
+              saveAsTask={saveAsTask}
+              onSaveAsTaskChange={setSaveAsTask}
+            />
+          </Col>
+          <Col xs={24} md={12}>
+            <ExecutionModeSelector
+              mode={executionMode}
+              onModeChange={handleModeChange}
+              selectedTemplateId={selectedTemplateId}
+              onTemplateSelect={handleTemplateSelect}
+            />
+          </Col>
+        </Row>
 
-          {/* 脚本编辑器 */}
-          <ScriptEditor
-            mode={executionMode}
-            scriptContent={scriptContent}
-            scriptType={scriptType}
-            onContentChange={setScriptContent}
-            onTypeChange={setScriptType}
-            templateContent={selectedTemplate?.content}
-            readOnly={executionMode === 'template'}
-          />
+        {/* 第二行：主机选择（左）+ 脚本编辑（右）并排；<992px 上下堆叠 */}
+        <Row gutter={[16, 16]} style={{ flexShrink: 0, marginBottom: 16 }}>
+          <Col xs={24} lg={12}>
+            <HostSelector
+              selectedAssetIds={selectedAssetIds}
+              onSelectionChange={setSelectedAssetIds}
+              projects={projects}
+              environments={environments}
+            />
+          </Col>
+          <Col xs={24} lg={12}>
+            <ScriptEditor
+              mode={executionMode}
+              scriptContent={scriptContent}
+              scriptType={scriptType}
+              onContentChange={setScriptContent}
+              onTypeChange={setScriptType}
+              templateContent={selectedTemplate?.content}
+              readOnly={executionMode === 'template'}
+              maxHeight={200}
+            />
+          </Col>
+        </Row>
 
-          {/* 主机选择器 */}
-          <HostSelector
-            selectedAssetIds={selectedAssetIds}
-            onSelectionChange={setSelectedAssetIds}
-            projects={projects}
-            environments={environments}
-          />
-
-          {/* 执行选项 */}
-          <ExecutionOptions
-            executionType={executionType}
-            onExecutionTypeChange={setExecutionType}
-            timeout={timeout}
-            onTimeoutChange={setTimeout}
-            saveAsTask={saveAsTask}
-            onSaveAsTaskChange={setSaveAsTask}
-          />
-
-          {/* 执行按钮 */}
-          {hasPermission('executions', 'create') && (
-            <div style={{ textAlign: 'center', padding: '16px 0' }}>
+        {/* 第三行：执行按钮 */}
+        {hasPermission('executions', 'create') && (
+          <div style={{ flexShrink: 0, textAlign: 'center', marginBottom: 16 }}>
+            <Button
+              type="primary"
+              size="large"
+              icon={<ThunderboltOutlined />}
+              onClick={handleExecute}
+              loading={isExecuting}
+              disabled={isExecuting}
+            >
+              {isExecuting ? '执行中...' : '执行'}
+            </Button>
+            {currentTaskId && saveAsTask && hasPermission('tasks', 'read') && (
               <Button
-                type="primary"
-                size="large"
-                icon={<ThunderboltOutlined />}
-                onClick={handleExecute}
-                loading={isExecuting}
-                disabled={isExecuting}
+                type="link"
+                icon={<LinkOutlined />}
+                onClick={handleViewTaskHistory}
+                style={{ marginLeft: 16 }}
               >
-                {isExecuting ? '执行中...' : '执行'}
+                查看任务历史
               </Button>
-              {currentTaskId && saveAsTask && hasPermission('tasks', 'read') && (
-                <Button
-                  type="link"
-                  icon={<LinkOutlined />}
-                  onClick={handleViewTaskHistory}
-                  style={{ marginLeft: 16 }}
-                >
-                  查看任务历史
-                </Button>
-              )}
-            </div>
-          )}
+            )}
+          </div>
+        )}
 
-          {/* 执行结果 */}
-          {executionRecords.length > 0 && (
+        {/* 第四行：执行结果，占剩余高度，内部滚动 */}
+        <div
+          style={{
+            flex: 1,
+            minHeight: 0,
+            overflow: 'auto',
+            display: 'flex',
+            flexDirection: 'column',
+          }}
+        >
+          {executionRecords.length > 0 ? (
             <ExecutionResults
               executionRecords={executionRecords}
               assets={assets}
               isRunning={isExecuting}
               onRefresh={handleRefresh}
             />
+          ) : (
+            <div
+              style={{
+                flex: 1,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: 'var(--ant-color-text-tertiary)',
+                fontSize: 14,
+              }}
+            >
+              执行后结果将显示于此
+            </div>
           )}
-        </Space>
+        </div>
       </Content>
     </Layout>
   )

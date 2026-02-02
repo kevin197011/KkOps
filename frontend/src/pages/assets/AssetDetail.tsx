@@ -5,7 +5,7 @@
 
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { Card, Descriptions, Tag, Button, Space, message, Spin } from 'antd'
+import { Card, Descriptions, Tag, Button, Space, message, Spin, theme } from 'antd'
 import { ArrowLeftOutlined } from '@ant-design/icons'
 import { assetApi, Asset } from '@/api/asset'
 import { projectApi, Project } from '@/api/project'
@@ -14,6 +14,7 @@ import { cloudPlatformApi, CloudPlatform } from '@/api/cloudPlatform'
 import { sshkeyApi, SSHKey } from '@/api/sshkey'
 
 const AssetDetail = () => {
+  const { token } = theme.useToken()
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const [asset, setAsset] = useState<Asset | null>(null)
@@ -92,7 +93,7 @@ const AssetDetail = () => {
 
   if (loading) {
     return (
-      <div style={{ textAlign: 'center', padding: '50px' }}>
+      <div style={{ padding: '50px 24px', background: token.colorBgContainer, minHeight: '100%', textAlign: 'center' }}>
         <Spin size="large" />
       </div>
     )
@@ -103,13 +104,17 @@ const AssetDetail = () => {
   }
 
   return (
-    <div>
+    <div style={{ padding: 24, background: token.colorBgContainer, minHeight: '100%' }}>
       <div style={{ marginBottom: 16 }}>
         <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/assets')}>
           返回列表
         </Button>
       </div>
-      <Card title="资产详情">
+      <Card
+        title="资产详情"
+        styles={{ body: { padding: 24 } }}
+        style={{ background: token.colorBgElevated, borderColor: token.colorBorderSecondary }}
+      >
         <Descriptions column={2} bordered>
           <Descriptions.Item label="ID">{asset.id}</Descriptions.Item>
           <Descriptions.Item label="主机名">{asset.hostName}</Descriptions.Item>

@@ -30,8 +30,8 @@ import {
   EyeOutlined,
   CheckCircleOutlined,
   CloseCircleOutlined,
-  FilterOutlined,
   ClearOutlined,
+  FileSearchOutlined,
 } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
@@ -45,7 +45,7 @@ import {
 } from '@/api/audit'
 
 const { RangePicker } = DatePicker
-const { Text } = Typography
+const { Text, Title } = Typography
 
 const AuditLogList = () => {
   const { token } = theme.useToken()
@@ -259,10 +259,19 @@ const AuditLogList = () => {
   ]
 
   return (
-    <div>
-      {/* 筛选表单 */}
-      <Card style={{ marginBottom: 16 }}>
-        <Form form={form} layout="inline" style={{ flexWrap: 'wrap', gap: 8 }}>
+    <div style={{ padding: 24, background: token.colorBgContainer, minHeight: '100%' }}>
+      <Card
+        styles={{ body: { padding: 24 } }}
+        style={{ background: token.colorBgElevated, borderColor: token.colorBorderSecondary }}
+      >
+        <div style={{ marginBottom: 24, display: 'flex', alignItems: 'center', gap: 12 }}>
+          <FileSearchOutlined style={{ fontSize: 24, color: token.colorPrimary }} />
+          <Title level={3} style={{ margin: 0, color: token.colorTextHeading }}>
+            审计日志
+          </Title>
+        </div>
+        {/* 筛选表单 */}
+        <Form form={form} layout="inline" style={{ flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
           <Row gutter={[16, 16]} style={{ width: '100%' }}>
             <Col xs={24} sm={12} md={6} lg={4}>
               <Form.Item name="username" style={{ marginBottom: 0, width: '100%' }}>
@@ -332,10 +341,8 @@ const AuditLogList = () => {
             </Col>
           </Row>
         </Form>
-      </Card>
 
-      {/* 数据表格 */}
-      <Card>
+        {/* 数据表格 */}
         <Table
           columns={columns}
           dataSource={logs}
@@ -364,6 +371,7 @@ const AuditLogList = () => {
           </Button>,
         ]}
         width={700}
+        styles={{ body: { background: token.colorBgElevated } }}
       >
         {selectedLog && (
           <Descriptions bordered column={2} size="small">

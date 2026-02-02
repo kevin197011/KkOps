@@ -54,7 +54,6 @@ import { useThemeStore } from '@/stores/theme'
 
 const { TextArea } = Input
 const { Title, Text } = Typography
-const { Panel } = Collapse
 
 // 图标映射
 const iconMap: Record<string, React.ReactNode> = {
@@ -163,7 +162,14 @@ const OperationToolList = () => {
         await operationToolApi.update(editingTool.id, values)
         message.success('更新成功')
       } else {
-        await operationToolApi.create(values)
+        await operationToolApi.create({
+          name: values.name!,
+          url: values.url!,
+          category: values.category,
+          icon: values.icon,
+          description: values.description,
+          order: values.order,
+        })
         message.success('创建成功')
       }
       setModalVisible(false)
@@ -229,7 +235,7 @@ const OperationToolList = () => {
       dataIndex: 'icon',
       key: 'icon',
       width: 80,
-      render: (icon: string, record: OperationTool) => (
+      render: (icon: string) => (
         <div style={{ fontSize: 20 }}>{renderIcon(icon, icon?.startsWith('http') ? icon : undefined)}</div>
       ),
     },
@@ -313,7 +319,7 @@ const OperationToolList = () => {
   const canManage = hasPermission('operation-tools', '*')
 
   return (
-    <div>
+    <div style={{ padding: 24, background: token.colorBgContainer, minHeight: '100%' }}>
       {/* 导航展示区域 */}
       <div style={{ marginBottom: 32 }}>
         <div
@@ -326,7 +332,7 @@ const OperationToolList = () => {
             gap: 16,
           }}
         >
-          <Title level={2} style={{ margin: 0 }}>
+          <Title level={2} style={{ margin: 0, color: token.colorTextHeading }}>
             运维导航
           </Title>
         </div>
@@ -363,11 +369,9 @@ const OperationToolList = () => {
                         height: '100%',
                         cursor: 'pointer',
                         borderRadius: 12,
-                        border: isDark
-                          ? '1px solid rgba(255, 255, 255, 0.1)'
-                          : '1px solid rgba(0, 0, 0, 0.06)',
+                        border: `1px solid ${token.colorBorderSecondary}`,
                         transition: 'all 0.2s ease',
-                        background: isDark ? 'rgba(255, 255, 255, 0.03)' : '#fff',
+                        background: token.colorBgElevated,
                       }}
                       bodyStyle={{
                         padding: 20,
@@ -487,6 +491,7 @@ const OperationToolList = () => {
         onOk={() => form.submit()}
         width="90%"
         style={{ maxWidth: 600 }}
+        styles={{ body: { background: token.colorBgElevated } }}
       >
         <Form form={form} layout="vertical" onFinish={handleSubmit}>
           <Form.Item

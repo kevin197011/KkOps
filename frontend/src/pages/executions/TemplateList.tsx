@@ -4,10 +4,9 @@
 // https://opensource.org/licenses/MIT
 
 import { useState, useEffect } from 'react'
-import { Table, Button, Space, message, Modal, Form, Input, Select, Tag, Upload, Descriptions } from 'antd'
-import { PlusOutlined, EditOutlined, DeleteOutlined, DownloadOutlined, UploadOutlined } from '@ant-design/icons'
-import { executionTemplateApi, ExecutionTemplate, CreateTemplateRequest, UpdateTemplateRequest, ExportTemplatesConfig, ImportTemplatesConfig, ImportResult } from '@/api/execution'
-import type { UploadFile } from 'antd/es/upload/interface'
+import { Table, Button, Space, message, Modal, Form, Input, Select, Tag, Upload, Descriptions, Card, Typography, theme } from 'antd'
+import { PlusOutlined, EditOutlined, DeleteOutlined, DownloadOutlined, UploadOutlined, FileTextOutlined } from '@ant-design/icons'
+import { executionTemplateApi, ExecutionTemplate, CreateTemplateRequest, UpdateTemplateRequest, ImportTemplatesConfig, ImportResult } from '@/api/execution'
 import { usePermissionStore } from '@/stores/permission'
 
 const { TextArea } = Input
@@ -18,7 +17,10 @@ const SHEBANGS: Record<string, string> = {
   python: '#!/usr/bin/env python3\n\n',
 }
 
+const { Title } = Typography
+
 const TemplateList = () => {
+  const { token } = theme.useToken()
   const { hasPermission } = usePermissionStore()
   const [templates, setTemplates] = useState<ExecutionTemplate[]>([])
   const [loading, setLoading] = useState(false)
@@ -64,13 +66,16 @@ const TemplateList = () => {
     setLoading(true)
     try {
       const response = await executionTemplateApi.list(page, pageSize)
+      const data = response.data as
+        | ExecutionTemplate[]
+        | { data?: ExecutionTemplate[]; total?: number }
       // 处理不同的响应格式
-      if (Array.isArray(response.data)) {
-        setTemplates(response.data)
-        setTotal(response.data.length)
-      } else if (response.data?.data) {
-        setTemplates(response.data.data)
-        setTotal(response.data.total || response.data.data.length)
+      if (Array.isArray(data)) {
+        setTemplates(data)
+        setTotal(data.length)
+      } else if (data && typeof data === 'object' && 'data' in data && Array.isArray(data.data)) {
+        setTemplates(data.data)
+        setTotal(data.total ?? data.data.length)
       } else {
         setTemplates([])
         setTotal(0)
@@ -123,7 +128,11 @@ const TemplateList = () => {
         await executionTemplateApi.update(editingTemplate.id, values)
         message.success('更新成功')
       } else {
-        await executionTemplateApi.create(values)
+        await executionTemplateApi.create({
+          name: values.name!,
+          content: values.content ?? '',
+          type: values.type,
+        })
         message.success('创建成功')
       }
       setModalVisible(false)
@@ -250,37 +259,39 @@ const TemplateList = () => {
   ]
 
   return (
-    <div>
-      <div style={{ 
-        marginBottom: 16, 
-        display: 'flex', 
-        justifyContent: 'space-between', 
-        alignItems: 'center',
-        flexWrap: 'wrap',
-        gap: 8
-      }}>
-        <h2>任务模板管理</h2>
-        <Space>
-          {hasPermission('templates', 'export') && (
-            <Button icon={<DownloadOutlined />} onClick={handleExport}>
-              导出配置
-            </Button>
-          )}
-          {hasPermission('templates', 'import') && (
-            <Upload {...uploadProps}>
-              <Button icon={<UploadOutlined />}>
-                导入配置
+    <div style={{ padding: 24, background: token.colorBgContainer, minHeight: '100%' }}>
+      <Card
+        styles={{ body: { padding: 24 } }}
+        style={{ background: token.colorBgElevated, borderColor: token.colorBorderSecondary }}
+      >
+        <div style={{ marginBottom: 24, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <FileTextOutlined style={{ fontSize: 24, color: token.colorPrimary }} />
+            <Title level={3} style={{ margin: 0, color: token.colorTextHeading }}>
+              任务模板管理
+            </Title>
+          </div>
+          <Space wrap>
+            {hasPermission('templates', 'export') && (
+              <Button icon={<DownloadOutlined />} onClick={handleExport}>
+                导出配置
               </Button>
-            </Upload>
-          )}
-          {hasPermission('templates', 'create') && (
-            <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate} aria-label="新增模板">
-              新增模板
-            </Button>
-          )}
-        </Space>
-      </div>
-      <Table
+            )}
+            {hasPermission('templates', 'import') && (
+              <Upload {...uploadProps}>
+                <Button icon={<UploadOutlined />}>
+                  导入配置
+                </Button>
+              </Upload>
+            )}
+            {hasPermission('templates', 'create') && (
+              <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate} aria-label="新增模板">
+                新增模板
+              </Button>
+            )}
+          </Space>
+        </div>
+        <Table
         columns={columns}
         dataSource={templates}
         loading={loading}
@@ -298,12 +309,13 @@ const TemplateList = () => {
             setPage(newPage)
             setPageSize(newPageSize || 20)
           },
-          onShowSizeChange: (current, size) => {
+          onShowSizeChange: (_current, size) => {
             setPage(1)
             setPageSize(size)
           },
         }}
-      />
+        />
+      </Card>
       <Modal
         title={editingTemplate ? '编辑模板' : '新增模板'}
         open={modalVisible}
@@ -314,6 +326,7 @@ const TemplateList = () => {
         onOk={() => form.submit()}
         width="90%"
         style={{ maxWidth: 800 }}
+        styles={{ body: { background: token.colorBgElevated } }}
       >
         <Form form={form} layout="vertical" onFinish={handleSubmit}>
           <Form.Item
@@ -350,6 +363,7 @@ const TemplateList = () => {
             关闭
           </Button>,
         ]}
+        styles={{ body: { background: token.colorBgElevated } }}
       >
         {importResult && (
           <Descriptions bordered column={1}>
@@ -357,6 +371,11 @@ const TemplateList = () => {
             <Descriptions.Item label="成功">
               <Tag color="success">{importResult.success}</Tag>
             </Descriptions.Item>
+            {(importResult.updated ?? 0) > 0 && (
+              <Descriptions.Item label="更新">
+                <Tag color="processing">{importResult.updated}</Tag>
+              </Descriptions.Item>
+            )}
             <Descriptions.Item label="失败">
               <Tag color="error">{importResult.failed}</Tag>
             </Descriptions.Item>
@@ -365,6 +384,15 @@ const TemplateList = () => {
                 <ul style={{ margin: 0, paddingLeft: 20 }}>
                   {importResult.errors.map((error, index) => (
                     <li key={index} style={{ color: 'red' }}>{error}</li>
+                  ))}
+                </ul>
+              </Descriptions.Item>
+            )}
+            {importResult.updated_items && importResult.updated_items.length > 0 && (
+              <Descriptions.Item label="已更新">
+                <ul style={{ margin: 0, paddingLeft: 20 }}>
+                  {importResult.updated_items.map((name, index) => (
+                    <li key={index}>{name}</li>
                   ))}
                 </ul>
               </Descriptions.Item>

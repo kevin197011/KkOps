@@ -128,8 +128,10 @@ export interface ImportTemplatesConfig {
 export interface ImportResult {
   total: number
   success: number
+  updated?: number
   failed: number
   errors?: string[]
+  updated_items?: string[]
   skipped?: string[]
 }
 

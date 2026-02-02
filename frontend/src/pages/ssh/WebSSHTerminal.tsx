@@ -5,12 +5,12 @@
 
 import React, { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Terminal } from '@xterm/xterm'
+import { Terminal, type ITheme } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import '@xterm/xterm/css/xterm.css'
 import { Layout, Button, message, Space, Tag, Input, Tree, Spin, Typography, theme as antdTheme, Dropdown, Modal, Progress, Tooltip } from 'antd'
 import type { MenuProps } from 'antd'
-import { DisconnectOutlined, ArrowLeftOutlined, CheckCircleOutlined, ReloadOutlined, FolderOutlined, FolderOpenOutlined, DatabaseOutlined, CloseOutlined, HomeOutlined, SunFilled, MoonFilled, CopyOutlined, CloseCircleOutlined, UserOutlined, LogoutOutlined, UploadOutlined, DownloadOutlined, FileTextOutlined, CloudServerOutlined } from '@ant-design/icons'
+import { DisconnectOutlined, ArrowLeftOutlined, ReloadOutlined, FolderOutlined, FolderOpenOutlined, DatabaseOutlined, CloseOutlined, HomeOutlined, SunFilled, MoonFilled, CopyOutlined, CloseCircleOutlined, UserOutlined, LogoutOutlined, UploadOutlined, DownloadOutlined } from '@ant-design/icons'
 import { useAuthStore } from '@/stores/auth'
 import { authApi } from '@/api/auth'
 import { assetApi, Asset } from '@/api/asset'
@@ -47,13 +47,15 @@ interface SSHConnection {
   containerRef: React.RefObject<HTMLDivElement>
   zmodemTransfer?: ZmodemTransfer
   downloadChunks?: Blob[]
+  _zmodemTimeoutId?: ReturnType<typeof setTimeout>
 }
 
 const MAX_CONNECTIONS = 10
 
 const WebSSHTerminal = () => {
   const navigate = useNavigate()
-  const terminalContainerRef = useRef<HTMLDivElement>(null)
+  const _terminalContainerRef = useRef<HTMLDivElement>(null)
+  void _terminalContainerRef
   const [connections, setConnections] = useState<Map<string, SSHConnection>>(new Map())
   const [connectionOrder, setConnectionOrder] = useState<string[]>([]) // Track tab order for drag & drop
   const [activeConnectionId, setActiveConnectionId] = useState<string | null>(null)
@@ -220,7 +222,7 @@ const WebSSHTerminal = () => {
               foreground: '#E6EDF3',       // Light gray text for readability
               cursor: '#58A6FF',           // Blue cursor
               cursorAccent: '#0D1117',     // Cursor text color
-              selection: '#264F78',        // Selection background
+              selection: '#264F78',        // Selection background (xterm theme extension)
               selectionBackground: 'rgba(56, 139, 253, 0.4)',
               // Standard ANSI colors (0-7)
               black: '#484F58',            // Dim black (visible on dark bg)
@@ -240,7 +242,7 @@ const WebSSHTerminal = () => {
               brightMagenta: '#E2C5FF',    // Light purple
               brightCyan: '#7EEAEA',       // Light cyan
               brightWhite: '#FFFFFF',      // Pure white
-            },
+            } as ITheme & { selection?: string; selectionBackground?: string },
             allowTransparency: true,
             disableStdin: false,
           })
@@ -778,7 +780,7 @@ const WebSSHTerminal = () => {
               }
               
               // Write to this specific terminal instance directly
-              if (dataStr) {
+              if (dataStr && updatedConn.terminal) {
                 updatedConn.terminal.write(dataStr)
                 // Let xterm.js handle scrolling naturally
                 // It will auto-scroll to bottom only if viewport was already at bottom
@@ -786,8 +788,8 @@ const WebSSHTerminal = () => {
                 if (shouldUpdateStatus) {
                   setTimeout(() => {
                     setActiveConnectionId((currentActiveId) => {
-                      if (currentActiveId === capturedConnId && updatedConn.terminal) {
-                        updatedConn.terminal.focus()
+                      if (currentActiveId === capturedConnId) {
+                        updatedConn.terminal?.focus()
                       }
                       return currentActiveId
                     })
@@ -984,7 +986,6 @@ const WebSSHTerminal = () => {
                           const conn = prev2.get(connId)
                           if (conn) {
                             const newMap2 = new Map(prev2)
-                            // @ts-ignore
                             newMap2.set(connId, {
                               ...conn,
                               _zmodemTimeoutId: timeoutId,
@@ -1166,7 +1167,6 @@ const WebSSHTerminal = () => {
               if (!conn) return prev
               
               // Clear timeout if exists
-              // @ts-ignore
               if (conn._zmodemTimeoutId) {
                 clearTimeout(conn._zmodemTimeoutId)
               }
@@ -1361,9 +1361,10 @@ const WebSSHTerminal = () => {
   }
 
   // Check if asset has active connections
-  const hasActiveConnection = (assetId: number): boolean => {
+  const _hasActiveConnection = (assetId: number): boolean => {
     return getConnectionCount(assetId) > 0
   }
+  void _hasActiveConnection
 
   // Handle ZMODEM transfer cancellation
   const handleZmodemCancel = (connId: string) => {
@@ -1441,7 +1442,7 @@ const WebSSHTerminal = () => {
   }
 
   const handleCloseAllConnections = () => {
-    connections.forEach((conn, connId) => {
+    connections.forEach((_conn, connId) => {
       handleDisconnect(connId)
     })
   }
@@ -1470,7 +1471,7 @@ const WebSSHTerminal = () => {
 
   // Close all connections except the specified one
   const handleCloseOthers = (connIdToKeep: string) => {
-    connections.forEach((conn, connId) => {
+    connections.forEach((_conn, connId) => {
       if (connId !== connIdToKeep) {
         handleDisconnect(connId)
       }
@@ -1946,7 +1947,7 @@ const WebSSHTerminal = () => {
     setAutoExpandParent(false)
   }
 
-  const onSelect = (selectedKeys: React.Key[], info: any) => {
+  const onSelect = (_selectedKeys: React.Key[], info: any) => {
     if (info.node?.asset) {
       handleAssetClick(info.node.asset)
     }
@@ -2232,7 +2233,6 @@ const WebSSHTerminal = () => {
                 selectedKeys={[]} // Keep empty to allow clicking same asset multiple times
                 treeData={buildTreeData()}
                 blockNode
-                indent={16}
                 style={{
                   background: 'transparent',
                   color: mode === 'dark' ? '#F1F5F9' : '#1E293B',
@@ -2329,7 +2329,6 @@ const WebSSHTerminal = () => {
                     )
                   } else if (node.key === 'root') {
                     // Root node - Special styling for collapse/expand all
-                    const isExpanded = expandedKeys.includes('root')
                     return (
                       <div
                         style={{
@@ -2846,7 +2845,7 @@ const WebSSHTerminal = () => {
             key={conn.id}
             ws={conn.ws}
             connectionId={conn.id}
-            assetName={conn.asset.hostname || conn.asset.name}
+            assetName={conn.asset.hostName}
             visible={sftpVisibleConnections.has(conn.id)}
             onClose={() => {
               setSftpVisibleConnections((prev) => {

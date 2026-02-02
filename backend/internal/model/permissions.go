@@ -110,30 +110,37 @@ var AllMenuPermissions = []MenuPermission{
 		Name:        "审计日志查看",
 		Description: "查看审计日志",
 	},
+	{
+		Resource:    "connection-audit",
+		Action:      "read",
+		Name:        "审计连线查看",
+		Description: "查看 WebSSH 连线录像记录与回放",
+	},
 }
 
 // RoutePermissionMap 路由与权限映射（用于后端权限检查）
 var RoutePermissionMap = map[string]string{
 	// 仪表板
-	"/api/v1/dashboard": "dashboard:read",
+	"/api/v1/dashboard":       "dashboard:read",
 	"/api/v1/operation-tools": "operation-tools:read",
 	// 基础设施
-	"/api/v1/projects":         "projects:*",
-	"/api/v1/environments":     "environments:*",
-	"/api/v1/cloud-platforms":  "cloud-platforms:*",
-	"/api/v1/assets":           "assets:*",
+	"/api/v1/projects":        "projects:*",
+	"/api/v1/environments":    "environments:*",
+	"/api/v1/cloud-platforms": "cloud-platforms:*",
+	"/api/v1/assets":          "assets:*",
 	// 任务管理
-	"/api/v1/executions":           "executions:*",
-	"/api/v1/execution-records":    "executions:*",
-	"/api/v1/templates":            "templates:*",
-	"/api/v1/tasks":                "tasks:*",
-	"/api/v1/deployment-modules":   "deployments:*",
-	"/api/v1/deployments":          "deployments:*",
+	"/api/v1/executions":         "executions:*",
+	"/api/v1/execution-records":  "executions:*",
+	"/api/v1/templates":          "templates:*",
+	"/api/v1/tasks":              "tasks:*",
+	"/api/v1/deployment-modules": "deployments:*",
+	"/api/v1/deployments":        "deployments:*",
 	// 安全管理
 	"/api/v1/ssh/keys": "ssh-keys:*",
 	// 系统管理（仅管理员）
-	"/api/v1/users":      "users:*",
-	"/api/v1/roles":      "roles:*",
-	"/api/v1/permissions": "roles:*", // 权限管理属于角色管理的一部分
-	"/api/v1/audit-logs": "audit-logs:read",
+	"/api/v1/users":            "users:*",
+	"/api/v1/roles":            "roles:*",
+	"/api/v1/permissions":      "roles:*", // 权限管理属于角色管理的一部分
+	"/api/v1/audit-logs":       "audit-logs:read",
+	"/api/v1/connection-audit": "connection-audit:read",
 }

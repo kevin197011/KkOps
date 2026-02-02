@@ -27,7 +27,7 @@ export const useHasRole = (role: string): boolean => {
   return user?.roles?.includes(role) ?? false
 }
 
-export const useHasPermission = (permission: string): boolean => {
+export const useHasPermission = (_permission: string): boolean => {
   // TODO: Implement permission checking based on user roles
   // This will be implemented when permission system is fully integrated
   return true

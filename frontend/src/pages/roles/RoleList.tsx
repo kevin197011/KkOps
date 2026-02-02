@@ -4,7 +4,7 @@
 // https://opensource.org/licenses/MIT
 
 import { useState, useEffect, useCallback } from 'react'
-import { Table, Button, Space, message, Modal, Form, Input, Tag, Checkbox, Transfer, Select, Divider, Tooltip, theme } from 'antd'
+import { Table, Button, Space, message, Modal, Form, Input, Tag, Checkbox, Transfer, Select, Divider, Tooltip, theme, Card, Typography } from 'antd'
 import { PlusOutlined, EditOutlined, DeleteOutlined, CrownOutlined, SafetyCertificateOutlined, AppstoreAddOutlined, LockOutlined } from '@ant-design/icons'
 import type { TransferItem } from 'antd/es/transfer'
 import { roleApi, Role, CreateRoleRequest, UpdateRoleRequest, RoleAssetInfo, Permission } from '@/api/role'
@@ -14,6 +14,7 @@ import { environmentApi, Environment } from '@/api/environment'
 import { usePermissionStore } from '@/stores/permission'
 
 const { TextArea } = Input
+const { Title } = Typography
 
 const RoleList = () => {
   const { token } = theme.useToken()
@@ -458,29 +459,39 @@ const RoleList = () => {
   ]
 
   return (
-    <div>
-      <div
-        style={{
-          marginBottom: 16,
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          flexWrap: 'wrap',
-          gap: 8,
-        }}
+    <div style={{ padding: 24, background: token.colorBgContainer, minHeight: '100%' }}>
+      <Card
+        styles={{ body: { padding: 24 } }}
+        style={{ background: token.colorBgElevated, borderColor: token.colorBorderSecondary }}
       >
-        <h2>角色管理</h2>
-        <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate} aria-label="新增角色">
-          新增角色
-        </Button>
-      </div>
-      <Table
-        columns={columns}
-        dataSource={roles}
-        loading={loading}
-        rowKey="id"
-        scroll={{ x: 'max-content' }}
-      />
+        <div
+          style={{
+            marginBottom: 24,
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            gap: 16,
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <SafetyCertificateOutlined style={{ fontSize: 24, color: token.colorPrimary }} />
+            <Title level={3} style={{ margin: 0, color: token.colorTextHeading }}>
+              角色管理
+            </Title>
+          </div>
+          <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate} aria-label="新增角色">
+            新增角色
+          </Button>
+        </div>
+        <Table
+          columns={columns}
+          dataSource={roles}
+          loading={loading}
+          rowKey="id"
+          scroll={{ x: 'max-content' }}
+        />
+      </Card>
 
       {/* 创建/编辑角色弹窗 */}
       <Modal
@@ -493,6 +504,7 @@ const RoleList = () => {
         onOk={() => form.submit()}
         width="90%"
         style={{ maxWidth: 600 }}
+        styles={{ body: { background: token.colorBgElevated } }}
       >
         <Form form={form} layout="vertical" onFinish={handleSubmit}>
           <Form.Item name="name" label="角色名称" rules={[{ required: true, message: '请输入角色名称' }]}>
@@ -504,7 +516,7 @@ const RoleList = () => {
           <Form.Item name="is_admin" valuePropName="checked">
             <Checkbox>
               <Space>
-                <CrownOutlined style={{ color: '#f5222d' }} />
+                <CrownOutlined style={{ color: token.colorError }} />
                 设为管理员角色
               </Space>
             </Checkbox>
@@ -530,6 +542,7 @@ const RoleList = () => {
         width={750}
         okText="保存"
         cancelText="取消"
+        styles={{ body: { background: token.colorBgElevated } }}
       >
         {/* 快速授权区域 */}
         <div style={{ 
@@ -631,6 +644,7 @@ const RoleList = () => {
         }
         open={permissionModalVisible}
         onCancel={() => setPermissionModalVisible(false)}
+        styles={{ body: { background: token.colorBgElevated } }}
         onOk={handleSavePermissions}
         confirmLoading={permissionLoading}
         width={700}
@@ -672,7 +686,7 @@ const RoleList = () => {
                     >
                       <Space>
                         <span style={{ fontWeight: 500 }}>{perm.name}</span>
-                        <Tag size="small" color={perm.action === '*' ? 'blue' : 'default'}>
+                        <Tag color={perm.action === '*' ? 'blue' : 'default'}>
                           {perm.action === '*' ? '所有操作' : perm.action}
                         </Tag>
                         {perm.description && (

@@ -52,7 +52,8 @@ interface SFTPManagerProps {
   onClose: () => void
 }
 
-const SFTPManager: React.FC<SFTPManagerProps> = ({ ws, connectionId, assetName, visible, onClose }) => {
+const SFTPManager: React.FC<SFTPManagerProps> = ({ ws, connectionId: _connectionId, assetName, visible, onClose }) => {
+  void _connectionId
   const { message } = App.useApp()
   const { mode } = useThemeStore()
   const isDark = mode === 'dark'
@@ -61,7 +62,6 @@ const SFTPManager: React.FC<SFTPManagerProps> = ({ ws, connectionId, assetName, 
   const [loading, setLoading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState<Record<string, { progress: number; bytesTransferred: number; totalBytes: number }>>({})
   const [downloadProgress, setDownloadProgress] = useState<Record<string, { progress: number; bytesTransferred: number; totalBytes: number }>>({})
-  const uploadFileRef = useRef<HTMLInputElement>(null)
   const downloadBufferRef = useRef<Map<string, Blob[]>>(new Map())
 
   const listFiles = React.useCallback((path: string) => {

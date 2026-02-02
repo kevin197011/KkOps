@@ -125,7 +125,7 @@ const InlineLogViewer = ({ executionId, isRunning, assetName, assetIp }: InlineL
       const token = localStorage.getItem('token')
       const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
       const wsHost = window.location.hostname
-      const wsPort = import.meta.env.DEV ? '8080' : window.location.port
+      const wsPort = (import.meta as { env?: { DEV?: boolean } }).env?.DEV ? '8080' : window.location.port
       const wsUrl = `${wsProtocol}//${wsHost}:${wsPort}/api/v1/ws/task-logs/${executionId}?token=${token}`
 
       const ws = new WebSocket(wsUrl)
@@ -265,7 +265,7 @@ const InlineLogViewer = ({ executionId, isRunning, assetName, assetIp }: InlineL
   )
 }
 
-const ExecutionHistoryList = ({ executions, onRefresh, autoExpandLatest = true }: ExecutionHistoryListProps) => {
+const ExecutionHistoryList = ({ executions, autoExpandLatest = true }: ExecutionHistoryListProps) => {
   const { mode } = useThemeStore()
   const isDark = mode === 'dark'
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set())

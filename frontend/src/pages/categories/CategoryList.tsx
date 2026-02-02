@@ -4,12 +4,15 @@
 // https://opensource.org/licenses/MIT
 
 import { useState, useEffect } from 'react'
-import { Table, Button, Space, message, Modal, Form, Input, Select } from 'antd'
-import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons'
+import { Table, Button, Space, message, Modal, Form, Input, Select, Card, Typography, theme } from 'antd'
+import { PlusOutlined, EditOutlined, DeleteOutlined, AppstoreOutlined } from '@ant-design/icons'
 import { categoryApi, Category, CreateCategoryRequest, UpdateCategoryRequest } from '@/api/category'
 import { usePermissionStore } from '@/stores/permission'
 
+const { Title } = Typography
+
 const CategoryList = () => {
+  const { token } = theme.useToken()
   const { hasPermission } = usePermissionStore()
   const [categories, setCategories] = useState<Category[]>([])
   const [loading, setLoading] = useState(false)
@@ -67,7 +70,7 @@ const CategoryList = () => {
         await categoryApi.update(editingCategory.id, values)
         message.success('更新成功')
       } else {
-        await categoryApi.create(values)
+        await categoryApi.create({ name: values.name!, description: values.description })
         message.success('创建成功')
       }
       setModalVisible(false)
@@ -137,27 +140,30 @@ const CategoryList = () => {
   ]
 
   return (
-    <div>
-      <div style={{ 
-        marginBottom: 16, 
-        display: 'flex', 
-        justifyContent: 'space-between', 
-        alignItems: 'center',
-        flexWrap: 'wrap',
-        gap: 8
-      }}>
-        <h2>资产分类管理</h2>
-        <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate} aria-label="新增分类">
-          新增分类
-        </Button>
-      </div>
-      <Table
-        columns={columns}
-        dataSource={categories}
-        loading={loading}
-        rowKey="id"
-        scroll={{ x: 'max-content' }}
-      />
+    <div style={{ padding: 24, background: token.colorBgContainer, minHeight: '100%' }}>
+      <Card
+        styles={{ body: { padding: 24 } }}
+        style={{ background: token.colorBgElevated, borderColor: token.colorBorderSecondary }}
+      >
+        <div style={{ marginBottom: 24, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <AppstoreOutlined style={{ fontSize: 24, color: token.colorPrimary }} />
+            <Title level={3} style={{ margin: 0, color: token.colorTextHeading }}>
+              资产分类管理
+            </Title>
+          </div>
+          <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate} aria-label="新增分类">
+            新增分类
+          </Button>
+        </div>
+        <Table
+          columns={columns}
+          dataSource={categories}
+          loading={loading}
+          rowKey="id"
+          scroll={{ x: 'max-content' }}
+        />
+      </Card>
       <Modal
         title={editingCategory ? '编辑分类' : '新增分类'}
         open={modalVisible}
@@ -168,6 +174,7 @@ const CategoryList = () => {
         onOk={() => form.submit()}
         width="90%"
         style={{ maxWidth: 600 }}
+        styles={{ body: { background: token.colorBgElevated } }}
       >
         <Form form={form} layout="vertical" onFinish={handleSubmit}>
           <Form.Item

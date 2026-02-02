@@ -4,14 +4,16 @@
 // https://opensource.org/licenses/MIT
 
 import { useState, useEffect } from 'react'
-import { Table, Button, Space, message, Modal, Form, Input, Tag, Descriptions } from 'antd'
-import { PlusOutlined, EditOutlined, DeleteOutlined, EyeOutlined } from '@ant-design/icons'
+import { Table, Button, Space, message, Modal, Form, Input, Tag, Descriptions, Card, Typography, theme } from 'antd'
+import { PlusOutlined, EditOutlined, DeleteOutlined, EyeOutlined, KeyOutlined } from '@ant-design/icons'
 import { sshkeyApi, SSHKey, CreateSSHKeyRequest, UpdateSSHKeyRequest } from '@/api/sshkey'
 import { usePermissionStore } from '@/stores/permission'
 
 const { TextArea } = Input
+const { Title } = Typography
 
 const SSHKeyList = () => {
+  const { token } = theme.useToken()
   const { hasPermission } = usePermissionStore()
   const [keys, setKeys] = useState<SSHKey[]>([])
   const [loading, setLoading] = useState(false)
@@ -161,27 +163,30 @@ const SSHKeyList = () => {
   ]
 
   return (
-    <div>
-      <div style={{ 
-        marginBottom: 16, 
-        display: 'flex', 
-        justifyContent: 'space-between', 
-        alignItems: 'center',
-        flexWrap: 'wrap',
-        gap: 8
-      }}>
-        <h2>SSH 密钥管理</h2>
-        <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate} aria-label="新增SSH密钥">
-          新增密钥
-        </Button>
-      </div>
-      <Table
-        columns={columns}
-        dataSource={keys}
-        loading={loading}
-        rowKey="id"
-        scroll={{ x: 'max-content' }}
-      />
+    <div style={{ padding: 24, background: token.colorBgContainer, minHeight: '100%' }}>
+      <Card
+        styles={{ body: { padding: 24 } }}
+        style={{ background: token.colorBgElevated, borderColor: token.colorBorderSecondary }}
+      >
+        <div style={{ marginBottom: 24, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <KeyOutlined style={{ fontSize: 24, color: token.colorPrimary }} />
+            <Title level={3} style={{ margin: 0, color: token.colorTextHeading }}>
+              SSH 密钥管理
+            </Title>
+          </div>
+          <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate} aria-label="新增SSH密钥">
+            新增密钥
+          </Button>
+        </div>
+        <Table
+          columns={columns}
+          dataSource={keys}
+          loading={loading}
+          rowKey="id"
+          scroll={{ x: 'max-content' }}
+        />
+      </Card>
       <Modal
         title={editingKey ? '编辑 SSH 密钥' : '新增 SSH 密钥'}
         open={modalVisible}
@@ -192,6 +197,7 @@ const SSHKeyList = () => {
         onOk={() => form.submit()}
         width="90%"
         style={{ maxWidth: 800 }}
+        styles={{ body: { background: token.colorBgElevated } }}
       >
         <Form form={form} layout="vertical" onFinish={handleSubmit}>
           <Form.Item
@@ -241,6 +247,7 @@ const SSHKeyList = () => {
         ]}
         width="90%"
         style={{ maxWidth: 800 }}
+        styles={{ body: { background: token.colorBgElevated } }}
       >
         {detailKey ? (
           <Descriptions column={2} bordered>

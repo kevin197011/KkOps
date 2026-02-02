@@ -4,7 +4,7 @@
 // https://opensource.org/licenses/MIT
 
 import { useState, useEffect } from 'react'
-import { Card, Table, Button, Space, message, Modal, Form, Input, DatePicker, Tag, Popconfirm, Typography } from 'antd'
+import { Card, Table, Button, Space, message, Modal, Form, Input, DatePicker, Tag, Popconfirm, Typography, theme } from 'antd'
 import { PlusOutlined, DeleteOutlined, CopyOutlined, KeyOutlined, UserOutlined, MailOutlined, SafetyOutlined, EyeOutlined } from '@ant-design/icons'
 import { userApi, APITokenResponse, CreateAPITokenRequest } from '@/api/user'
 import { useAuthStore } from '@/stores/auth'
@@ -13,6 +13,7 @@ import moment from 'moment'
 const { Title, Text } = Typography
 
 const UserProfile = () => {
+  const { token } = theme.useToken()
   const { user } = useAuthStore()
   const [tokens, setTokens] = useState<APITokenResponse[]>([])
   const [loading, setLoading] = useState(false)
@@ -185,13 +186,14 @@ const UserProfile = () => {
   ]
 
   return (
-    <div style={{ maxWidth: 1200, margin: '0 auto' }}>
+    <div style={{ padding: 24, background: token.colorBgContainer, minHeight: '100%', maxWidth: 1200, margin: '0 auto' }}>
       {/* 用户信息卡片 */}
       <Card
         style={{
           marginBottom: 24,
           borderRadius: 8,
-          boxShadow: '0 2px 8px rgba(0, 0, 0, 0.06)',
+          background: token.colorBgElevated,
+          borderColor: token.colorBorderSecondary,
         }}
       >
         <Space direction="vertical" size="large" style={{ width: '100%' }}>
@@ -247,7 +249,8 @@ const UserProfile = () => {
         }
         style={{
           borderRadius: 8,
-          boxShadow: '0 2px 8px rgba(0, 0, 0, 0.06)',
+          background: token.colorBgElevated,
+          borderColor: token.colorBorderSecondary,
         }}
       >
         <Table
@@ -269,6 +272,7 @@ const UserProfile = () => {
         }}
         footer={null}
         destroyOnClose
+        styles={{ body: { background: token.colorBgElevated } }}
       >
         <Form
           form={form}
@@ -322,7 +326,7 @@ const UserProfile = () => {
       <Modal
         title={
           <Space>
-            <SafetyOutlined style={{ color: '#52c41a' }} />
+            <SafetyOutlined style={{ color: token.colorSuccess }} />
             <span>{viewingTokenName}</span>
           </Space>
         }
@@ -353,11 +357,12 @@ const UserProfile = () => {
           </Button>,
         ]}
         destroyOnClose
+        styles={{ body: { background: token.colorBgElevated } }}
       >
         <div
           style={{
             padding: 16,
-            background: '#f5f5f5',
+            background: token.colorFillTertiary,
             borderRadius: 4,
             marginBottom: 16,
             wordBreak: 'break-all',

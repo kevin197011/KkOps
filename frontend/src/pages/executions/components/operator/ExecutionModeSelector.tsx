@@ -26,7 +26,7 @@ const ExecutionModeSelector: React.FC<ExecutionModeSelectorProps> = ({
   selectedTemplateId,
   onTemplateSelect,
 }) => {
-  const { mode: themeMode } = useThemeStore()
+  useThemeStore()
   const [templates, setTemplates] = useState<ExecutionTemplate[]>([])
   const [loading, setLoading] = useState(false)
 
@@ -40,7 +40,8 @@ const ExecutionModeSelector: React.FC<ExecutionModeSelectorProps> = ({
     setLoading(true)
     try {
       const response = await executionTemplateApi.list()
-      const templatesData = response.data?.data || response.data || []
+      const raw = response.data as { data?: ExecutionTemplate[] } | ExecutionTemplate[] | undefined
+      const templatesData = (raw && typeof raw === 'object' && 'data' in raw ? raw.data : raw) ?? []
       setTemplates(Array.isArray(templatesData) ? templatesData : [])
     } catch (error) {
       console.error('获取模板列表失败:', error)

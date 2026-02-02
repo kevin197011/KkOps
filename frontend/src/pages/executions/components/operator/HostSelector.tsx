@@ -8,7 +8,6 @@ import { Card, Select, Input, Checkbox, Space, Typography, Button, Row, Col, Tag
 import {
   DatabaseOutlined,
   CheckSquareOutlined,
-  BorderOutlined,
   ClearOutlined,
   FolderOutlined,
   GlobalOutlined,
@@ -127,15 +126,6 @@ const HostSelector: React.FC<HostSelectorProps> = ({
     onSelectionChange([])
   }
 
-  // 单选处理
-  const handleAssetToggle = (assetId: number, checked: boolean) => {
-    if (checked) {
-      onSelectionChange([...selectedAssetIds, assetId])
-    } else {
-      onSelectionChange(selectedAssetIds.filter((id) => id !== assetId))
-    }
-  }
-
   return (
     <Card
       style={{
@@ -226,10 +216,10 @@ const HostSelector: React.FC<HostSelectorProps> = ({
           </Button>
         </Space>
 
-        {/* 主机列表 */}
+        {/* 主机列表：高度约束，内部滚动，一屏内同显结果区 */}
         <div
           style={{
-            maxHeight: 400,
+            maxHeight: 220,
             overflowY: 'auto',
             border: `1px solid ${mode === 'dark' ? '#334155' : '#E2E8F0'}`,
             borderRadius: 8,

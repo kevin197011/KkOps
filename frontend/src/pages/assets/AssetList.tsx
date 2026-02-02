@@ -4,8 +4,8 @@
 // https://opensource.org/licenses/MIT
 
 import { useState, useEffect } from 'react'
-import { Table, Button, Space, message, Tag, Input, Select, Modal, Form, Descriptions, Spin, Divider, ColorPicker } from 'antd'
-import { PlusOutlined, SearchOutlined, DownloadOutlined, UploadOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons'
+import { Table, Button, Space, message, Tag, Input, Select, Modal, Form, Descriptions, Spin, Divider, ColorPicker, Card, Typography, theme } from 'antd'
+import { PlusOutlined, DownloadOutlined, UploadOutlined, EditOutlined, DeleteOutlined, DatabaseOutlined } from '@ant-design/icons'
 import { assetApi, Asset, CreateAssetRequest, UpdateAssetRequest } from '@/api/asset'
 import { projectApi, Project } from '@/api/project'
 import { environmentApi, Environment } from '@/api/environment'
@@ -15,8 +15,10 @@ import { tagApi, Tag as TagType, CreateTagRequest } from '@/api/tag'
 import { usePermissionStore } from '@/stores/permission'
 
 const { Search } = Input
+const { Title } = Typography
 
 const AssetList = () => {
+  const { token } = theme.useToken()
   const { hasPermission } = usePermissionStore()
   const [assets, setAssets] = useState<Asset[]>([])
   const [loading, setLoading] = useState(false)
@@ -146,7 +148,7 @@ const AssetList = () => {
       
       // 获取当前选中的标签并添加新标签
       const currentTags = form.getFieldValue('tag_ids') || []
-      const newTagId = response.data?.data?.id || response.data?.id
+      const newTagId = (response.data as { data?: { id: number } })?.data?.id
       if (newTagId) {
         form.setFieldsValue({ tag_ids: [...currentTags, newTagId] })
       }
@@ -226,23 +228,24 @@ const AssetList = () => {
       const processedValues: any = {
         ...values,
         // Convert ssh_port to number (required int in backend)
-        ssh_port: values.ssh_port !== undefined && values.ssh_port !== null && values.ssh_port !== ''
+        ssh_port: values.ssh_port != null && String(values.ssh_port).trim() !== ''
           ? Number(values.ssh_port)
           : undefined,
         // Optional numeric fields - convert empty strings to undefined
-        project_id: values.project_id && values.project_id !== '' ? Number(values.project_id) : undefined,
-        cloud_platform_id: values.cloud_platform_id && values.cloud_platform_id !== '' ? Number(values.cloud_platform_id) : undefined,
-        environment_id: values.environment_id && values.environment_id !== '' ? Number(values.environment_id) : undefined,
-        ssh_key_id: values.ssh_key_id && values.ssh_key_id !== '' ? Number(values.ssh_key_id) : undefined,
+        project_id: values.project_id != null && String(values.project_id).trim() !== '' ? Number(values.project_id) : undefined,
+        cloud_platform_id: values.cloud_platform_id != null && String(values.cloud_platform_id).trim() !== '' ? Number(values.cloud_platform_id) : undefined,
+        environment_id: values.environment_id != null && String(values.environment_id).trim() !== '' ? Number(values.environment_id) : undefined,
+        ssh_key_id: values.ssh_key_id != null && String(values.ssh_key_id).trim() !== '' ? Number(values.ssh_key_id) : undefined,
         // Ensure tag_ids is an array of numbers if present
-        tag_ids: values.tag_ids && Array.isArray(values.tag_ids) 
-          ? values.tag_ids.map(id => Number(id))
+        tag_ids: values.tag_ids && Array.isArray(values.tag_ids)
+          ? (values.tag_ids as (number | string)[]).map((id) => Number(id))
           : undefined,
       }
 
       // Remove undefined values to avoid sending them
       Object.keys(processedValues).forEach(key => {
-        if (processedValues[key] === undefined || processedValues[key] === '') {
+        const v = processedValues[key]
+        if (v === undefined || v === '' || (typeof v === 'string' && v.trim() === '')) {
           delete processedValues[key]
         }
       })
@@ -399,37 +402,46 @@ const AssetList = () => {
   ]
 
   return (
-    <div>
-      <div
-        style={{
-          marginBottom: 16,
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          flexWrap: 'wrap',
-          gap: 8,
-        }}
+    <div style={{ padding: 24, background: token.colorBgContainer, minHeight: '100%' }}>
+      <Card
+        styles={{ body: { padding: 24 } }}
+        style={{ background: token.colorBgElevated, borderColor: token.colorBorderSecondary }}
       >
-        <h2>资产管理</h2>
-        <Space wrap>
-          {hasPermission('assets', 'import') && (
-            <Button icon={<UploadOutlined />} onClick={handleImport} aria-label="导入资产">
-              导入
-            </Button>
-          )}
-          {hasPermission('assets', 'export') && (
-            <Button icon={<DownloadOutlined />} onClick={handleExport} aria-label="导出资产">
-              导出
-            </Button>
-          )}
-          {hasPermission('assets', 'create') && (
-            <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate} aria-label="新增资产">
-              新增资产
-            </Button>
-          )}
-        </Space>
-      </div>
-      <div style={{ marginBottom: 16, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <div
+          style={{
+            marginBottom: 24,
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            gap: 16,
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <DatabaseOutlined style={{ fontSize: 24, color: token.colorPrimary }} />
+            <Title level={3} style={{ margin: 0, color: token.colorTextHeading }}>
+              资产管理
+            </Title>
+          </div>
+          <Space wrap>
+            {hasPermission('assets', 'import') && (
+              <Button icon={<UploadOutlined />} onClick={handleImport} aria-label="导入资产">
+                导入
+              </Button>
+            )}
+            {hasPermission('assets', 'export') && (
+              <Button icon={<DownloadOutlined />} onClick={handleExport} aria-label="导出资产">
+                导出
+              </Button>
+            )}
+            {hasPermission('assets', 'create') && (
+              <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate} aria-label="新增资产">
+                新增资产
+              </Button>
+            )}
+          </Space>
+        </div>
+        <div style={{ marginBottom: 16, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         <Search
           placeholder="搜索资产主机名、代码、IP"
           allowClear
@@ -477,8 +489,8 @@ const AssetList = () => {
           <Select.Option value="active">激活</Select.Option>
           <Select.Option value="disabled">禁用</Select.Option>
         </Select>
-      </div>
-      <Table
+        </div>
+        <Table
         columns={columns}
         dataSource={assets}
         loading={loading}
@@ -498,6 +510,7 @@ const AssetList = () => {
           },
         }}
       />
+      </Card>
       <Modal
         title={editingAsset ? '编辑资产' : '新增资产'}
         open={modalVisible}
@@ -508,6 +521,7 @@ const AssetList = () => {
         onOk={() => form.submit()}
         width="90%"
         style={{ maxWidth: 800 }}
+        styles={{ body: { background: token.colorBgElevated } }}
       >
         <Form form={form} layout="vertical" onFinish={handleSubmit}>
           {/* Section 1: Basic Information */}

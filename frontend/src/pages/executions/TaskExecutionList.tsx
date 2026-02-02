@@ -273,7 +273,7 @@ const TaskExecutionList = () => {
             setPage(newPage)
             setPageSize(newPageSize || 20)
           },
-          onShowSizeChange: (current, size) => {
+          onShowSizeChange: (_current, size) => {
             setPage(1)
             setPageSize(size)
           },

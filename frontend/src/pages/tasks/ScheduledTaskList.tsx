@@ -25,6 +25,8 @@ import {
   Checkbox,
   Upload,
   theme,
+  Card,
+  Typography,
 } from 'antd'
 import { usePermissionStore } from '@/stores/permission'
 import type { DataNode } from 'antd/es/tree'
@@ -52,7 +54,6 @@ import {
   UpdateScheduledTaskRequest,
   ScheduledTaskExecution,
   ValidateCronResponse,
-  ExportScheduledTasksConfig,
   ImportScheduledTasksConfig,
   ImportScheduledTasksResult,
 } from '@/api/task'
@@ -63,6 +64,7 @@ import { environmentApi, Environment } from '@/api/environment'
 import moment from 'moment'
 
 const { TextArea } = Input
+const { Title } = Typography
 
 // Cron 表达式预设（6字段格式：秒 分 时 日 月 周）
 const CRON_PRESETS = [
@@ -99,7 +101,7 @@ const ScheduledTaskList = () => {
   const [editingTask, setEditingTask] = useState<ScheduledTask | null>(null)
   const [selectedTask, setSelectedTask] = useState<ScheduledTask | null>(null)
   const [executions, setExecutions] = useState<ScheduledTaskExecution[]>([])
-  const [executionsTotal, setExecutionsTotal] = useState(0)
+  const [, setExecutionsTotal] = useState(0)
   const [executionsPage, setExecutionsPage] = useState(1)
   const [executionsPageSize, setExecutionsPageSize] = useState(20)
   const [executionsLoading, setExecutionsLoading] = useState(false)
@@ -431,11 +433,6 @@ const ScheduledTaskList = () => {
     }
   }, [executionsPage, executionsPageSize])
 
-  // 执行历史分页变更
-  const handleExecutionsTableChange = (newPage: number, newPageSize: number) => {
-    setExecutionsPage(newPage)
-    setExecutionsPageSize(newPageSize)
-  }
 
   useEffect(() => {
     if (selectedTask && historyModalVisible) {
@@ -611,30 +608,32 @@ const ScheduledTaskList = () => {
   ]
 
   return (
-    <div>
-      <div
-        style={{
-          marginBottom: 16,
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-        }}
+    <div style={{ padding: 24, background: token.colorBgContainer, minHeight: '100%' }}>
+      <Card
+        styles={{ body: { padding: 24 } }}
+        style={{ background: token.colorBgElevated, borderColor: token.colorBorderSecondary }}
       >
-        <h2 style={{ margin: 0 }}>任务管理</h2>
-        <Space>
-          <Button icon={<DownloadOutlined />} onClick={handleExport}>
-            导出配置
-          </Button>
-          <Upload {...uploadProps}>
-            <Button icon={<UploadOutlined />}>导入配置</Button>
-          </Upload>
-          <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate}>
-            新建任务
-          </Button>
-        </Space>
-      </div>
+        <div style={{ marginBottom: 24, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <ClockCircleOutlined style={{ fontSize: 24, color: token.colorPrimary }} />
+            <Title level={3} style={{ margin: 0, color: token.colorTextHeading }}>
+              任务管理
+            </Title>
+          </div>
+          <Space wrap>
+            <Button icon={<DownloadOutlined />} onClick={handleExport}>
+              导出配置
+            </Button>
+            <Upload {...uploadProps}>
+              <Button icon={<UploadOutlined />}>导入配置</Button>
+            </Upload>
+            <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate}>
+              新建任务
+            </Button>
+          </Space>
+        </div>
 
-      <Table
+        <Table
         columns={columns}
         dataSource={tasks}
         rowKey="id"
@@ -652,12 +651,13 @@ const ScheduledTaskList = () => {
             setPage(newPage)
             setPageSize(newPageSize || 20)
           },
-          onShowSizeChange: (current, size) => {
+          onShowSizeChange: (_current, size) => {
             setPage(1)
             setPageSize(size)
           },
         }}
-      />
+        />
+      </Card>
 
       {/* 创建/编辑弹窗 */}
       <Modal
@@ -667,6 +667,7 @@ const ScheduledTaskList = () => {
         footer={null}
         width={800}
         destroyOnHidden
+        styles={{ body: { background: token.colorBgElevated } }}
       >
         <Form form={form} layout="vertical" onFinish={handleSubmit}>
           <Tabs
