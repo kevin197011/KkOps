@@ -4,1013 +4,145 @@
 // https://opensource.org/licenses/MIT
 
 import { useEffect, useState, useCallback } from 'react'
-import {
-  Card,
-  Row,
-  Col,
-  Tag,
-  Skeleton,
-  Empty,
-  Tooltip,
-  theme,
-  Badge,
-  Typography,
-  Divider,
-} from 'antd'
+import { Link } from 'react-router-dom'
+import { Button, Card, Col, Row, Skeleton, Statistic, theme, Typography } from 'antd'
 import {
   UserOutlined,
-  PlayCircleOutlined,
+  ThunderboltOutlined,
+  CloudServerOutlined,
   FolderOutlined,
   CheckCircleOutlined,
   CloseCircleOutlined,
   SyncOutlined,
-  ClockCircleOutlined,
-  StopOutlined,
-  ThunderboltOutlined,
-  CloudServerOutlined,
-  SafetyCertificateOutlined,
   EnvironmentOutlined,
-  RocketOutlined,
+  SafetyCertificateOutlined,
+  ClockCircleOutlined,
 } from '@ant-design/icons'
-import { dashboardApi, DashboardStats } from '@/api/dashboard'
+import { dashboardApi, DashboardStats, DashboardSummary, RecentActivity } from '@/api/dashboard'
+import { PageContainer, PageHeader } from '@/components/shell'
+import { usePermissionStore } from '@/stores/permission'
 
-const { Text, Title } = Typography
+const { Text } = Typography
 
-// 状态配置
-const STATUS_CONFIG: Record<
-  string,
-  { color: string; bg: string; icon: React.ReactNode; label: string }
-> = {
-  success: {
-    color: '#10B981',
-    bg: 'rgba(16, 185, 129, 0.1)',
-    icon: <CheckCircleOutlined />,
-    label: '成功',
-  },
-  failed: {
-    color: '#EF4444',
-    bg: 'rgba(239, 68, 68, 0.1)',
-    icon: <CloseCircleOutlined />,
-    label: '失败',
-  },
-  running: {
-    color: '#3B82F6',
-    bg: 'rgba(59, 130, 246, 0.1)',
-    icon: <SyncOutlined spin />,
-    label: '运行中',
-  },
-  pending: {
-    color: '#F59E0B',
-    bg: 'rgba(245, 158, 11, 0.1)',
-    icon: <ClockCircleOutlined />,
-    label: '待执行',
-  },
-  cancelled: {
-    color: '#6B7280',
-    bg: 'rgba(107, 114, 128, 0.1)',
-    icon: <StopOutlined />,
-    label: '已取消',
-  },
-  online: {
-    color: '#10B981',
-    bg: 'rgba(16, 185, 129, 0.1)',
-    icon: <CheckCircleOutlined />,
-    label: '在线',
-  },
-  offline: {
-    color: '#EF4444',
-    bg: 'rgba(239, 68, 68, 0.1)',
-    icon: <CloseCircleOutlined />,
-    label: '离线',
-  },
-}
-
-// 统计卡片配置
-const STAT_CARDS = [
+const STAT_ITEMS = [
   {
     key: 'total_assets',
-    title: '资产总数',
-    icon: <CloudServerOutlined />,
-    gradient: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-    iconBg: 'rgba(255,255,255,0.2)',
+    title: '资产',
+    icon: CloudServerOutlined,
+    bg: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
   },
   {
     key: 'total_users',
-    title: '用户总数',
-    icon: <UserOutlined />,
-    gradient: 'linear-gradient(135deg, #11998e 0%, #38ef7d 100%)',
-    iconBg: 'rgba(255,255,255,0.2)',
+    title: '用户',
+    icon: UserOutlined,
+    bg: 'linear-gradient(135deg, #10b981 0%, #34d399 100%)',
   },
   {
     key: 'total_tasks',
-    title: '任务总数',
-    icon: <ThunderboltOutlined />,
-    gradient: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
-    iconBg: 'rgba(255,255,255,0.2)',
+    title: '任务',
+    icon: ThunderboltOutlined,
+    bg: 'linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%)',
   },
   {
     key: 'total_projects',
-    title: '项目总数',
-    icon: <FolderOutlined />,
-    gradient: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)',
-    iconBg: 'rgba(255,255,255,0.2)',
+    title: '项目',
+    icon: FolderOutlined,
+    bg: 'linear-gradient(135deg, #0ea5e9 0%, #38bdf8 100%)',
   },
-]
+] as const
 
-// 格式化相对时间
-function formatRelativeTime(dateString: string): string {
-  const date = new Date(dateString)
-  const now = new Date()
-  const diffMs = now.getTime() - date.getTime()
-  const diffSec = Math.floor(diffMs / 1000)
-  const diffMin = Math.floor(diffSec / 60)
-  const diffHour = Math.floor(diffMin / 60)
-  const diffDay = Math.floor(diffHour / 24)
-
-  if (diffSec < 60) return '刚刚'
-  if (diffMin < 60) return `${diffMin}分钟前`
-  if (diffHour < 24) return `${diffHour}小时前`
-  if (diffDay < 7) return `${diffDay}天前`
-
-  return date.toLocaleDateString('zh-CN', {
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
+const STATUS_LABELS: Record<string, string> = {
+  active: '在线',
+  disabled: '停用',
+  unknown: '未知',
 }
 
-// 渐变统计卡片组件
-interface GradientStatCardProps {
-  title: string
-  value: number
-  icon: React.ReactNode
-  gradient: string
-  iconBg: string
-  loading?: boolean
+const ACTIVITY_STATUS_MAP: Record<string, { color: string; text: string }> = {
+  success: { color: '#10b981', text: '成功' },
+  failed: { color: '#ef4444', text: '失败' },
+  running: { color: '#3b82f6', text: '运行中' },
+  pending: { color: '#94a3b8', text: '待执行' },
+  cancelled: { color: '#64748b', text: '已取消' },
 }
 
-const GradientStatCard: React.FC<GradientStatCardProps> = ({
-  title,
-  value,
-  icon,
-  gradient,
-  iconBg,
-  loading = false,
-}) => {
+function RecentActivityList({
+  items,
+  loading,
+  token,
+}: {
+  items: RecentActivity[]
+  loading: boolean
+  token: ReturnType<typeof theme.useToken>['token']
+}) {
+  const list = (items ?? []).slice(0, 5)
+  if (loading) return <Skeleton active paragraph={{ rows: 2 }} />
+  if (list.length === 0) {
+    return (
+      <Text type="secondary" style={{ fontSize: 12 }}>
+        暂无最近执行
+      </Text>
+    )
+  }
   return (
-    <Card
-      style={{
-        background: gradient,
-        borderRadius: 16,
-        border: 'none',
-        overflow: 'hidden',
-        height: 140,
-        position: 'relative',
-      }}
-      styles={{ body: { padding: '20px 24px', height: '100%' } }}
-    >
-      {/* 装饰性背景圆 */}
-      <div
-        style={{
-          position: 'absolute',
-          right: -20,
-          top: -20,
-          width: 120,
-          height: 120,
-          borderRadius: '50%',
-          background: 'rgba(255,255,255,0.1)',
-        }}
-      />
-      <div
-        style={{
-          position: 'absolute',
-          right: 30,
-          bottom: -30,
-          width: 80,
-          height: 80,
-          borderRadius: '50%',
-          background: 'rgba(255,255,255,0.08)',
-        }}
-      />
-
-      {loading ? (
-        <Skeleton active paragraph={{ rows: 1 }} />
-      ) : (
-        <div
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            justifyContent: 'space-between',
-            height: '100%',
-            position: 'relative',
-            zIndex: 1,
-          }}
-        >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-            <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 14, fontWeight: 500 }}>
-              {title}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      {list.map((a) => {
+        const statusInfo = ACTIVITY_STATUS_MAP[a.status] ?? {
+          color: token.colorTextSecondary,
+          text: a.status,
+        }
+        return (
+          <div
+            key={a.id}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              fontSize: 12,
+              padding: '6px 0',
+              borderBottom: `1px solid ${token.colorBorderSecondary}`,
+            }}
+          >
+            <Text ellipsis style={{ flex: 1, marginRight: 8, fontSize: 12 }}>
+              {a.title}
             </Text>
-            <div
-              style={{
-                width: 40,
-                height: 40,
-                borderRadius: 12,
-                background: iconBg,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: 20,
-                color: '#fff',
-              }}
-            >
-              {icon}
-            </div>
-          </div>
-          <div>
             <span
               style={{
-                fontSize: 36,
-                fontWeight: 700,
-                color: '#fff',
-                fontFamily: '"JetBrains Mono", "SF Mono", monospace',
-                letterSpacing: '-0.02em',
+                color: statusInfo.color,
+                fontWeight: 500,
+                flexShrink: 0,
+                marginRight: 8,
               }}
             >
-              {value.toLocaleString()}
+              {statusInfo.text}
             </span>
+            <Text type="secondary" style={{ fontSize: 11, flexShrink: 0 }}>
+              {a.created_at}
+            </Text>
           </div>
-        </div>
-      )}
-    </Card>
-  )
-}
-
-// 系统状态面板组件
-interface SystemStatusPanelProps {
-  stats: DashboardStats | null
-  loading: boolean
-}
-
-const SystemStatusPanel: React.FC<SystemStatusPanelProps> = ({ stats, loading }) => {
-  const { token } = theme.useToken()
-
-  const systemHealth =
-    stats && stats.task_execution_stats
-      ? Math.round(
-          ((stats.task_execution_stats.success + stats.task_execution_stats.cancelled) /
-            Math.max(stats.task_execution_stats.total, 1)) *
-            100
         )
-      : 0
-
-  const getHealthColor = (health: number) => {
-    if (health >= 90) return '#10B981'
-    if (health >= 70) return '#F59E0B'
-    return '#EF4444'
-  }
-
-  const getHealthStatus = (health: number) => {
-    if (health >= 90) return '健康'
-    if (health >= 70) return '警告'
-    return '异常'
-  }
-
-  if (loading) {
-    return (
-      <Card
-        style={{
-          borderRadius: 16,
-          height: '100%',
-          background: token.colorBgContainer,
-        }}
-      >
-        <Skeleton active paragraph={{ rows: 4 }} />
-      </Card>
-    )
-  }
-
-  return (
-    <Card
-      style={{
-        borderRadius: 16,
-        height: '100%',
-        background: token.colorBgContainer,
-      }}
-      styles={{ body: { padding: '24px' } }}
-    >
-      {/* 标题区域 */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
-        <div
-          style={{
-            width: 40,
-            height: 40,
-            borderRadius: 10,
-            background: `${getHealthColor(systemHealth)}15`,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: getHealthColor(systemHealth),
-            fontSize: 20,
-          }}
-        >
-          <SafetyCertificateOutlined />
-        </div>
-        <div>
-          <Title level={5} style={{ margin: 0 }}>
-            系统状态
-          </Title>
-          <Text type="secondary" style={{ fontSize: 12 }}>
-            实时监控概览
-          </Text>
-        </div>
-      </div>
-
-      {/* 健康度指示器 */}
-      <div
-        style={{
-          background: token.colorBgLayout,
-          borderRadius: 12,
-          padding: 20,
-          marginBottom: 20,
-          textAlign: 'center',
-        }}
-      >
-        <div style={{ position: 'relative', display: 'inline-block' }}>
-          {/* 圆环进度 */}
-          <svg width="120" height="120" viewBox="0 0 120 120">
-            <circle
-              cx="60"
-              cy="60"
-              r="52"
-              fill="none"
-              stroke={token.colorBorderSecondary}
-              strokeWidth="8"
-            />
-            <circle
-              cx="60"
-              cy="60"
-              r="52"
-              fill="none"
-              stroke={getHealthColor(systemHealth)}
-              strokeWidth="8"
-              strokeLinecap="round"
-              strokeDasharray={`${(systemHealth / 100) * 327} 327`}
-              transform="rotate(-90 60 60)"
-              style={{ transition: 'stroke-dasharray 0.5s ease' }}
-            />
-          </svg>
-          <div
-            style={{
-              position: 'absolute',
-              top: '50%',
-              left: '50%',
-              transform: 'translate(-50%, -50%)',
-              textAlign: 'center',
-            }}
-          >
-            <div
-              style={{
-                fontSize: 28,
-                fontWeight: 700,
-                fontFamily: '"JetBrains Mono", monospace',
-                color: getHealthColor(systemHealth),
-              }}
-            >
-              {systemHealth}%
-            </div>
-            <div style={{ fontSize: 12, color: token.colorTextSecondary }}>
-              {getHealthStatus(systemHealth)}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* 快速统计 */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-        <div
-          style={{
-            padding: 16,
-            background: STATUS_CONFIG.success.bg,
-            borderRadius: 10,
-            textAlign: 'center',
-          }}
-        >
-          <div
-            style={{
-              fontSize: 24,
-              fontWeight: 700,
-              color: STATUS_CONFIG.success.color,
-              fontFamily: '"JetBrains Mono", monospace',
-            }}
-          >
-            {stats?.task_execution_stats?.success ?? 0}
-          </div>
-          <div style={{ fontSize: 12, color: token.colorTextSecondary, marginTop: 4 }}>执行成功</div>
-        </div>
-        <div
-          style={{
-            padding: 16,
-            background: STATUS_CONFIG.failed.bg,
-            borderRadius: 10,
-            textAlign: 'center',
-          }}
-        >
-          <div
-            style={{
-              fontSize: 24,
-              fontWeight: 700,
-              color: STATUS_CONFIG.failed.color,
-              fontFamily: '"JetBrains Mono", monospace',
-            }}
-          >
-            {stats?.task_execution_stats?.failed ?? 0}
-          </div>
-          <div style={{ fontSize: 12, color: token.colorTextSecondary, marginTop: 4 }}>执行失败</div>
-        </div>
-      </div>
-    </Card>
+      })}
+    </div>
   )
 }
 
-// 任务执行概览组件
-interface ExecutionOverviewProps {
-  stats: DashboardStats['task_execution_stats'] | null
-  loading: boolean
-}
-
-const ExecutionOverview: React.FC<ExecutionOverviewProps> = ({ stats, loading }) => {
+const Dashboard = () => {
   const { token } = theme.useToken()
-
-  const items = [
-    { key: 'success', ...STATUS_CONFIG.success },
-    { key: 'failed', ...STATUS_CONFIG.failed },
-    { key: 'running', ...STATUS_CONFIG.running },
-    { key: 'pending', ...STATUS_CONFIG.pending },
-    { key: 'cancelled', ...STATUS_CONFIG.cancelled },
-  ]
-
-  if (loading) {
-    return (
-      <Card style={{ borderRadius: 16, height: '100%' }}>
-        <Skeleton active paragraph={{ rows: 5 }} />
-      </Card>
-    )
-  }
-
-  if (!stats || stats.total === 0) {
-    return (
-      <Card style={{ borderRadius: 16, height: '100%' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
-          <div
-            style={{
-              width: 40,
-              height: 40,
-              borderRadius: 10,
-              background: '#3B82F615',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: '#3B82F6',
-              fontSize: 20,
-            }}
-          >
-            <PlayCircleOutlined />
-          </div>
-          <div>
-            <Title level={5} style={{ margin: 0 }}>
-              任务执行
-            </Title>
-            <Text type="secondary" style={{ fontSize: 12 }}>
-              执行状态分布
-            </Text>
-          </div>
-        </div>
-        <Empty description="暂无执行记录" />
-      </Card>
-    )
-  }
-
-  return (
-    <Card style={{ borderRadius: 16, height: '100%' }} styles={{ body: { padding: 24 } }}>
-      {/* 标题区域 */}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          marginBottom: 20,
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div
-            style={{
-              width: 40,
-              height: 40,
-              borderRadius: 10,
-              background: '#3B82F615',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: '#3B82F6',
-              fontSize: 20,
-            }}
-          >
-            <PlayCircleOutlined />
-          </div>
-          <div>
-            <Title level={5} style={{ margin: 0 }}>
-              任务执行
-            </Title>
-            <Text type="secondary" style={{ fontSize: 12 }}>
-              执行状态分布
-            </Text>
-          </div>
-        </div>
-        <Tag
-          style={{
-            background: token.colorBgLayout,
-            border: 'none',
-            borderRadius: 8,
-            padding: '4px 12px',
-            fontFamily: '"JetBrains Mono", monospace',
-          }}
-        >
-          共 {stats.total} 次
-        </Tag>
-      </div>
-
-      {/* 进度条堆叠 */}
-      <div
-        style={{
-          display: 'flex',
-          height: 12,
-          borderRadius: 6,
-          overflow: 'hidden',
-          marginBottom: 24,
-          background: token.colorBorderSecondary,
-        }}
-      >
-        {items.map((item) => {
-          const value = stats[item.key as keyof typeof stats] as number
-          const percent = stats.total > 0 ? (value / stats.total) * 100 : 0
-          if (percent === 0) return null
-          return (
-            <Tooltip key={item.key} title={`${item.label}: ${value} (${percent.toFixed(1)}%)`}>
-              <div
-                style={{
-                  width: `${percent}%`,
-                  height: '100%',
-                  background: item.color,
-                  transition: 'width 0.3s ease',
-                }}
-              />
-            </Tooltip>
-          )
-        })}
-      </div>
-
-      {/* 详细列表 */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        {items.map((item) => {
-          const value = stats[item.key as keyof typeof stats] as number
-          const percent = stats.total > 0 ? (value / stats.total) * 100 : 0
-          return (
-            <div
-              key={item.key}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                padding: '12px 16px',
-                background: item.bg,
-                borderRadius: 10,
-                transition: 'transform 0.2s ease',
-                cursor: 'default',
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <span style={{ color: item.color, fontSize: 16 }}>{item.icon}</span>
-                <span style={{ fontWeight: 500 }}>{item.label}</span>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <span
-                  style={{
-                    fontSize: 18,
-                    fontWeight: 600,
-                    fontFamily: '"JetBrains Mono", monospace',
-                    color: item.color,
-                  }}
-                >
-                  {value}
-                </span>
-                <span
-                  style={{
-                    fontSize: 12,
-                    color: token.colorTextSecondary,
-                    minWidth: 48,
-                    textAlign: 'right',
-                  }}
-                >
-                  {percent.toFixed(1)}%
-                </span>
-              </div>
-            </div>
-          )
-        })}
-      </div>
-    </Card>
-  )
-}
-
-// 资产分布组件
-interface AssetDistributionProps {
-  title: string
-  subtitle: string
-  icon: React.ReactNode
-  iconColor: string
-  data: Array<{ name: string; count: number }> | null
-  loading: boolean
-}
-
-const AssetDistribution: React.FC<AssetDistributionProps> = ({
-  title,
-  subtitle,
-  icon,
-  iconColor,
-  data,
-  loading,
-}) => {
-  const { token } = theme.useToken()
-
-  const colors = [
-    '#6366F1',
-    '#8B5CF6',
-    '#EC4899',
-    '#F43F5E',
-    '#F97316',
-    '#EAB308',
-    '#22C55E',
-    '#14B8A6',
-    '#06B6D4',
-    '#3B82F6',
-  ]
-
-  if (loading) {
-    return (
-      <Card style={{ borderRadius: 16, height: '100%' }}>
-        <Skeleton active paragraph={{ rows: 5 }} />
-      </Card>
-    )
-  }
-
-  if (!data || data.length === 0) {
-    return (
-      <Card style={{ borderRadius: 16, height: '100%' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
-          <div
-            style={{
-              width: 40,
-              height: 40,
-              borderRadius: 10,
-              background: `${iconColor}15`,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: iconColor,
-              fontSize: 20,
-            }}
-          >
-            {icon}
-          </div>
-          <div>
-            <Title level={5} style={{ margin: 0 }}>
-              {title}
-            </Title>
-            <Text type="secondary" style={{ fontSize: 12 }}>
-              {subtitle}
-            </Text>
-          </div>
-        </div>
-        <Empty description="暂无数据" />
-      </Card>
-    )
-  }
-
-  const total = data.reduce((sum, item) => sum + item.count, 0)
-  const maxCount = Math.max(...data.map((item) => item.count))
-
-  return (
-    <Card style={{ borderRadius: 16, height: '100%' }} styles={{ body: { padding: 24 } }}>
-      {/* 标题区域 */}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          marginBottom: 20,
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div
-            style={{
-              width: 40,
-              height: 40,
-              borderRadius: 10,
-              background: `${iconColor}15`,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: iconColor,
-              fontSize: 20,
-            }}
-          >
-            {icon}
-          </div>
-          <div>
-            <Title level={5} style={{ margin: 0 }}>
-              {title}
-            </Title>
-            <Text type="secondary" style={{ fontSize: 12 }}>
-              {subtitle}
-            </Text>
-          </div>
-        </div>
-        <Tag
-          style={{
-            background: token.colorBgLayout,
-            border: 'none',
-            borderRadius: 8,
-            padding: '4px 12px',
-            fontFamily: '"JetBrains Mono", monospace',
-          }}
-        >
-          共 {total} 台
-        </Tag>
-      </div>
-
-      {/* 分布列表 */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-        {data.map((item, index) => {
-          const color = colors[index % colors.length]
-          const percent = maxCount > 0 ? (item.count / maxCount) * 100 : 0
-          return (
-            <div key={item.name || 'unassigned'}>
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  marginBottom: 8,
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <div
-                    style={{
-                      width: 10,
-                      height: 10,
-                      borderRadius: 3,
-                      background: color,
-                    }}
-                  />
-                  <span style={{ fontWeight: 500 }}>{item.name || '未分配'}</span>
-                </div>
-                <span
-                  style={{
-                    fontFamily: '"JetBrains Mono", monospace',
-                    fontWeight: 600,
-                    color: color,
-                  }}
-                >
-                  {item.count}
-                </span>
-              </div>
-              <div
-                style={{
-                  height: 8,
-                  background: token.colorBorderSecondary,
-                  borderRadius: 4,
-                  overflow: 'hidden',
-                }}
-              >
-                <div
-                  style={{
-                    width: `${percent}%`,
-                    height: '100%',
-                    background: `linear-gradient(90deg, ${color}, ${color}cc)`,
-                    borderRadius: 4,
-                    transition: 'width 0.4s ease',
-                  }}
-                />
-              </div>
-            </div>
-          )
-        })}
-      </div>
-    </Card>
-  )
-}
-
-// 最近活动组件
-interface RecentActivitiesProps {
-  activities: DashboardStats['recent_activities'] | null
-  loading: boolean
-}
-
-const RecentActivities: React.FC<RecentActivitiesProps> = ({ activities, loading }) => {
-  const { token } = theme.useToken()
-
-  if (loading) {
-    return (
-      <Card style={{ borderRadius: 16 }}>
-        <Skeleton active paragraph={{ rows: 8 }} />
-      </Card>
-    )
-  }
-
-  if (!activities || activities.length === 0) {
-    return (
-      <Card style={{ borderRadius: 16 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
-          <div
-            style={{
-              width: 40,
-              height: 40,
-              borderRadius: 10,
-              background: '#8B5CF615',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: '#8B5CF6',
-              fontSize: 20,
-            }}
-          >
-            <RocketOutlined />
-          </div>
-          <div>
-            <Title level={5} style={{ margin: 0 }}>
-              最近活动
-            </Title>
-            <Text type="secondary" style={{ fontSize: 12 }}>
-              系统操作记录
-            </Text>
-          </div>
-        </div>
-        <Empty description="暂无活动记录" />
-      </Card>
-    )
-  }
-
-  return (
-    <Card style={{ borderRadius: 16 }} styles={{ body: { padding: 24 } }}>
-      {/* 标题区域 */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
-        <div
-          style={{
-            width: 40,
-            height: 40,
-            borderRadius: 10,
-            background: '#8B5CF615',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: '#8B5CF6',
-            fontSize: 20,
-          }}
-        >
-          <RocketOutlined />
-        </div>
-        <div>
-          <Title level={5} style={{ margin: 0 }}>
-            最近活动
-          </Title>
-          <Text type="secondary" style={{ fontSize: 12 }}>
-            系统操作记录
-          </Text>
-        </div>
-      </div>
-
-      {/* 活动列表 */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-        {activities.map((activity, index) => {
-          const config = STATUS_CONFIG[activity.status] || STATUS_CONFIG.pending
-          return (
-            <div key={activity.id}>
-              <div
-                style={{
-                  display: 'flex',
-                  gap: 16,
-                  padding: '16px 0',
-                }}
-              >
-                {/* 时间线指示器 */}
-                <div
-                  style={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                  }}
-                >
-                  <div
-                    style={{
-                      width: 36,
-                      height: 36,
-                      borderRadius: '50%',
-                      background: config.bg,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      color: config.color,
-                      fontSize: 16,
-                      flexShrink: 0,
-                    }}
-                  >
-                    {config.icon}
-                  </div>
-                  {index < activities.length - 1 && (
-                    <div
-                      style={{
-                        width: 2,
-                        flex: 1,
-                        minHeight: 20,
-                        background: token.colorBorderSecondary,
-                        marginTop: 8,
-                      }}
-                    />
-                  )}
-                </div>
-
-                {/* 内容区域 */}
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      gap: 12,
-                      flexWrap: 'wrap',
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span style={{ fontWeight: 500 }}>{activity.title}</span>
-                      <Tag
-                        style={{
-                          background: config.bg,
-                          color: config.color,
-                          border: 'none',
-                          borderRadius: 4,
-                          fontSize: 11,
-                          padding: '0 6px',
-                          lineHeight: '18px',
-                        }}
-                      >
-                        {config.label}
-                      </Tag>
-                    </div>
-                    <Text
-                      type="secondary"
-                      style={{
-                        fontSize: 12,
-                        whiteSpace: 'nowrap',
-                        fontFamily: '"JetBrains Mono", monospace',
-                      }}
-                    >
-                      {formatRelativeTime(activity.created_at)}
-                    </Text>
-                  </div>
-                  <Text
-                    type="secondary"
-                    style={{
-                      fontSize: 13,
-                      marginTop: 4,
-                      display: 'block',
-                    }}
-                  >
-                    {activity.description}
-                  </Text>
-                </div>
-              </div>
-              {index < activities.length - 1 && <Divider style={{ margin: 0 }} />}
-            </div>
-          )
-        })}
-      </div>
-    </Card>
-  )
-}
-
-// 主仪表板组件
-const Dashboard: React.FC = () => {
+  const { hasPermission } = usePermissionStore()
   const [stats, setStats] = useState<DashboardStats | null>(null)
+  const [summary, setSummary] = useState<DashboardSummary | null>(null)
   const [loading, setLoading] = useState(true)
 
   const fetchStats = useCallback(async () => {
     try {
       setLoading(true)
-      const response = await dashboardApi.getStats()
-      setStats(response.data.data)
-    } catch (error) {
-      console.error('获取仪表板数据失败:', error)
+      const [statsRes, sumRes] = await Promise.all([
+        dashboardApi.getStats(),
+        dashboardApi.getSummary(),
+      ])
+      setStats(statsRes.data.data)
+      setSummary(sumRes.data.data)
+    } catch {
+      // ignore
     } finally {
       setLoading(false)
     }
@@ -1018,105 +150,501 @@ const Dashboard: React.FC = () => {
 
   useEffect(() => {
     fetchStats()
-    const interval = setInterval(fetchStats, 30000)
-    return () => clearInterval(interval)
+    const t = setInterval(fetchStats, 60000)
+    return () => clearInterval(t)
   }, [fetchStats])
 
-  const assetsByProject = stats?.assets_by_project?.map((item) => ({
-    name: item.project_name,
-    count: item.count,
-  }))
+  const exec = stats?.task_execution_stats
+  const totalExec = exec ? exec.total : 0
+  const healthPercent =
+    totalExec > 0 && exec
+      ? Math.round(((exec.success + exec.cancelled) / totalExec) * 100)
+      : 100
 
-  const assetsByEnvironment = stats?.assets_by_environment?.map((item) => ({
-    name: item.environment_name,
-    count: item.count,
-  }))
+  const assetsByStatus = stats?.assets_by_status ?? {}
 
   return (
-    <div style={{ minHeight: '100%' }}>
-      {/* 页面头部 */}
-      <div style={{ marginBottom: 28 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 8 }}>
-          <Title
-            level={3}
-            style={{
-              margin: 0,
-              fontFamily: '"Inter", sans-serif',
-              fontWeight: 700,
-              letterSpacing: '-0.02em',
-            }}
-          >
-            仪表板
-          </Title>
-          <Badge
-            status="processing"
-            text={
-              <Text type="secondary" style={{ fontSize: 12 }}>
-                实时更新
-              </Text>
-            }
-          />
-        </div>
-        <Text type="secondary">系统运行概览和实时状态监控</Text>
-      </div>
+    <PageContainer>
+      <div
+        style={{
+          height: 'calc(100vh - 64px)',
+          display: 'flex',
+          flexDirection: 'column',
+          padding: 24,
+          boxSizing: 'border-box',
+          background: `linear-gradient(180deg, ${token.colorBgLayout} 0%, ${token.colorBgContainer} 100%)`,
+        }}
+      >
+      <PageHeader
+        title="仪表盘"
+        description="资源规模、资产分布与任务执行概览"
+      />
 
-      {/* 统计卡片 */}
-      <Row gutter={[20, 20]} style={{ marginBottom: 24 }}>
-        {STAT_CARDS.map((card) => (
-          <Col xs={24} sm={12} lg={6} key={card.key}>
-            <GradientStatCard
-              title={card.title}
-              value={(stats?.[card.key as keyof DashboardStats] as number) ?? 0}
-              icon={card.icon}
-              gradient={card.gradient}
-              iconBg={card.iconBg}
-              loading={loading}
-            />
+      {/* Operations hub summary */}
+      <Row gutter={[16, 16]} style={{ flexShrink: 0, marginBottom: 16 }}>
+        <Col xs={24}>
+          <Card
+            size="small"
+            title="运营概览"
+            style={{ borderRadius: 12, boxShadow: token.boxShadowSecondary }}
+          >
+            {loading ? (
+              <Skeleton active paragraph={{ rows: 1 }} />
+            ) : summary ? (
+              <>
+                <Row gutter={[16, 16]}>
+                  <Col xs={12} sm={8} md={6}>
+                    <Statistic title="未恢复告警" value={summary.alerts_open} />
+                  </Col>
+                  <Col xs={12} sm={8} md={6}>
+                    <Statistic title="处理中事件" value={summary.incidents_open} />
+                  </Col>
+                  <Col xs={12} sm={8} md={6}>
+                    <Statistic
+                      title="集成（启用 / 总数）"
+                      value={summary.integrations_ok}
+                      suffix={`/ ${summary.integrations_total}`}
+                    />
+                  </Col>
+                  <Col xs={12} sm={8} md={6}>
+                    <Statistic title="账号同步运行（24h）" value={summary.provisioning_runs_24h} />
+                  </Col>
+                  <Col xs={12} sm={8} md={6}>
+                    <Statistic title="AI 异常命中（24h）" value={summary.ai_anomaly_findings_24h} />
+                  </Col>
+                  <Col xs={12} sm={8} md={6}>
+                    <Statistic title="CMDB 配置项" value={summary.cmdb_assets_total} />
+                  </Col>
+                </Row>
+                <div style={{ marginTop: 16, display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                  {hasPermission('alerts', '*') && (
+                    <Link to="/alerts">
+                      <Button size="small">告警中心</Button>
+                    </Link>
+                  )}
+                  {hasPermission('incidents', '*') && (
+                    <Link to="/incidents">
+                      <Button size="small">事件管理</Button>
+                    </Link>
+                  )}
+                  {hasPermission('integrations', '*') && (
+                    <Link to="/integrations">
+                      <Button size="small">集成中心</Button>
+                    </Link>
+                  )}
+                  {hasPermission('ai', '*') && (
+                    <Link to="/ai/chat">
+                      <Button size="small" type="primary">
+                        AI 助手
+                      </Button>
+                    </Link>
+                  )}
+                  {hasPermission('cmdb', '*') && (
+                    <Link to="/topology">
+                      <Button size="small">拓扑</Button>
+                    </Link>
+                  )}
+                </div>
+              </>
+            ) : (
+              <Text type="secondary">暂无摘要</Text>
+            )}
+          </Card>
+        </Col>
+      </Row>
+
+      {/* 1. 资源规模 */}
+      <Row gutter={[16, 16]} style={{ flexShrink: 0, marginBottom: 20 }}>
+        {STAT_ITEMS.map(({ key, title, icon: Icon, bg }) => (
+          <Col xs={12} sm={12} md={6} key={key}>
+            <Card
+              bordered={false}
+              style={{
+                borderRadius: 12,
+                overflow: 'hidden',
+                boxShadow: token.boxShadowSecondary,
+              }}
+              styles={{ body: { padding: 20 } }}
+            >
+              {loading ? (
+                <Skeleton active paragraph={{ rows: 0 }} />
+              ) : (
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                  }}
+                >
+                  <div>
+                    <Text
+                      style={{
+                        color: token.colorTextSecondary,
+                        fontSize: 13,
+                      }}
+                    >
+                      {title}
+                    </Text>
+                    <div
+                      style={{
+                        fontSize: 28,
+                        fontWeight: 700,
+                        fontVariantNumeric: 'tabular-nums',
+                        color: token.colorText,
+                        marginTop: 4,
+                        letterSpacing: '-0.02em',
+                      }}
+                    >
+                      {(stats?.[key] as number) ?? 0}
+                    </div>
+                  </div>
+                  <div
+                    style={{
+                      width: 48,
+                      height: 48,
+                      borderRadius: 12,
+                      background: bg,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: 22,
+                      color: '#fff',
+                      boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
+                    }}
+                  >
+                    <Icon />
+                  </div>
+                </div>
+              )}
+            </Card>
           </Col>
         ))}
       </Row>
 
-      {/* 第二行：系统状态 + 任务执行 */}
-      <Row gutter={[20, 20]} style={{ marginBottom: 24 }}>
-        <Col xs={24} lg={8}>
-          <SystemStatusPanel stats={stats} loading={loading} />
-        </Col>
-        <Col xs={24} lg={16}>
-          <ExecutionOverview stats={stats?.task_execution_stats ?? null} loading={loading} />
-        </Col>
-      </Row>
-
-      {/* 第三行：资产分布 */}
-      <Row gutter={[20, 20]} style={{ marginBottom: 24 }}>
-        <Col xs={24} lg={12}>
-          <AssetDistribution
-            title="按项目分布"
-            subtitle="资产项目归属统计"
-            icon={<FolderOutlined />}
-            iconColor="#6366F1"
-            data={assetsByProject ?? null}
-            loading={loading}
-          />
-        </Col>
-        <Col xs={24} lg={12}>
-          <AssetDistribution
-            title="按环境分布"
-            subtitle="资产环境归属统计"
-            icon={<EnvironmentOutlined />}
-            iconColor="#22C55E"
-            data={assetsByEnvironment ?? null}
-            loading={loading}
-          />
-        </Col>
-      </Row>
-
-      {/* 第四行：最近活动 */}
-      <Row gutter={[20, 20]}>
-        <Col xs={24}>
-          <RecentActivities activities={stats?.recent_activities ?? null} loading={loading} />
-        </Col>
-      </Row>
+      {/* 2. 任务执行 + 最近活动 | 资产概览（状态 + 项目 + 环境） */}
+      <div
+        style={{
+          flex: 1,
+          minHeight: 0,
+          display: 'flex',
+          gap: 16,
+          flexDirection: 'column',
+        }}
+      >
+        <Row gutter={[16, 16]} style={{ flex: 1, minHeight: 0 }}>
+          <Col xs={24} lg={14}>
+            <Card
+              title="任务执行"
+              size="small"
+              style={{
+                borderRadius: 12,
+                height: '100%',
+                boxShadow: token.boxShadowSecondary,
+              }}
+              styles={{
+                body: {
+                  padding: 20,
+                  height: 'calc(100% - 57px)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 16,
+                  overflow: 'auto',
+                },
+              }}
+            >
+              {loading ? (
+                <Skeleton active paragraph={{ rows: 2 }} />
+              ) : exec ? (
+                <>
+                  <div
+                    style={{
+                      display: 'flex',
+                      flexWrap: 'wrap',
+                      gap: 12,
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: 'flex',
+                        flexWrap: 'wrap',
+                        gap: 12,
+                        alignItems: 'center',
+                      }}
+                    >
+                      <span
+                        style={{
+                          padding: '8px 14px',
+                          borderRadius: 8,
+                          background: 'rgba(16, 185, 129, 0.12)',
+                          color: '#10b981',
+                          fontSize: 13,
+                          fontVariantNumeric: 'tabular-nums',
+                          fontWeight: 500,
+                        }}
+                      >
+                        <CheckCircleOutlined style={{ marginRight: 6 }} />
+                        成功 {exec.success}
+                      </span>
+                      <span
+                        style={{
+                          padding: '8px 14px',
+                          borderRadius: 8,
+                          background: 'rgba(239, 68, 68, 0.12)',
+                          color: '#ef4444',
+                          fontSize: 13,
+                          fontVariantNumeric: 'tabular-nums',
+                          fontWeight: 500,
+                        }}
+                      >
+                        <CloseCircleOutlined style={{ marginRight: 6 }} />
+                        失败 {exec.failed}
+                      </span>
+                      <span
+                        style={{
+                          padding: '8px 14px',
+                          borderRadius: 8,
+                          background: 'rgba(59, 130, 246, 0.12)',
+                          color: '#3b82f6',
+                          fontSize: 13,
+                          fontVariantNumeric: 'tabular-nums',
+                          fontWeight: 500,
+                        }}
+                      >
+                        <SyncOutlined spin style={{ marginRight: 6 }} />
+                        运行中 {exec.running}
+                      </span>
+                      <span
+                        style={{
+                          color: token.colorTextSecondary,
+                          fontSize: 13,
+                        }}
+                      >
+                        共 {totalExec} 次
+                      </span>
+                    </div>
+                    <span
+                      style={{
+                        padding: '6px 12px',
+                        borderRadius: 8,
+                        background:
+                          healthPercent >= 90
+                            ? 'rgba(16, 185, 129, 0.15)'
+                            : healthPercent >= 70
+                              ? 'rgba(245, 158, 11, 0.15)'
+                              : 'rgba(239, 68, 68, 0.15)',
+                        color:
+                          healthPercent >= 90
+                            ? '#10b981'
+                            : healthPercent >= 70
+                              ? '#f59e0b'
+                              : '#ef4444',
+                        fontSize: 13,
+                        fontWeight: 600,
+                      }}
+                    >
+                      健康度 {healthPercent}%
+                    </span>
+                  </div>
+                  <div>
+                    <div
+                      style={{
+                        marginBottom: 8,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 6,
+                      }}
+                    >
+                      <ClockCircleOutlined style={{ color: token.colorTextSecondary }} />
+                      <Text type="secondary" style={{ fontSize: 12 }}>
+                        最近执行
+                      </Text>
+                    </div>
+                    <RecentActivityList
+                      items={stats?.recent_activities ?? []}
+                      loading={false}
+                      token={token}
+                    />
+                  </div>
+                </>
+              ) : (
+                <Text type="secondary" style={{ fontSize: 13 }}>
+                  暂无执行记录
+                </Text>
+              )}
+            </Card>
+          </Col>
+          <Col xs={24} lg={10}>
+            <Card
+              title="资产概览"
+              size="small"
+              style={{
+                borderRadius: 12,
+                height: '100%',
+                boxShadow: token.boxShadowSecondary,
+              }}
+              styles={{
+                body: {
+                  padding: 20,
+                  height: 'calc(100% - 57px)',
+                  overflow: 'auto',
+                },
+              }}
+            >
+              {loading ? (
+                <Skeleton active paragraph={{ rows: 4 }} />
+              ) : (
+                <>
+                  {/* 资产状态 */}
+                  {Object.keys(assetsByStatus).length > 0 && (
+                    <div
+                      style={{
+                        marginBottom: 16,
+                        paddingBottom: 12,
+                        borderBottom: `1px solid ${token.colorBorderSecondary}`,
+                      }}
+                    >
+                      <Text
+                        type="secondary"
+                        style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 6 }}
+                      >
+                        <SafetyCertificateOutlined /> 按状态
+                      </Text>
+                      <div
+                        style={{
+                          display: 'flex',
+                          flexWrap: 'wrap',
+                          gap: 8,
+                          marginTop: 8,
+                        }}
+                      >
+                        {Object.entries(assetsByStatus).map(([status, count]) => (
+                          <span
+                            key={status}
+                            style={{
+                              padding: '6px 12px',
+                              borderRadius: 8,
+                              background: token.colorFillSecondary,
+                              fontSize: 12,
+                              fontVariantNumeric: 'tabular-nums',
+                              fontWeight: 500,
+                            }}
+                          >
+                            {STATUS_LABELS[status] ?? status} {count}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  <Row gutter={[20, 16]}>
+                    <Col span={12}>
+                      <div
+                        style={{
+                          marginBottom: 12,
+                          paddingBottom: 8,
+                          borderBottom: `1px solid ${token.colorBorderSecondary}`,
+                        }}
+                      >
+                        <Text
+                          type="secondary"
+                          style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 6 }}
+                        >
+                          <FolderOutlined /> 按项目
+                        </Text>
+                      </div>
+                      {(stats?.assets_by_project?.slice(0, 5) ?? []).map((p) => (
+                        <div
+                          key={p.project_id}
+                          style={{
+                            fontSize: 13,
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            marginBottom: 10,
+                            padding: '6px 0',
+                          }}
+                        >
+                          <Text ellipsis style={{ maxWidth: '72%' }}>
+                            {p.project_name || '未分配'}
+                          </Text>
+                          <span
+                            style={{
+                              fontWeight: 600,
+                              fontVariantNumeric: 'tabular-nums',
+                              color: token.colorPrimary,
+                              fontSize: 13,
+                            }}
+                          >
+                            {p.count}
+                          </span>
+                        </div>
+                      ))}
+                      {(!stats?.assets_by_project?.length ||
+                        stats.assets_by_project.length === 0) && (
+                        <Text type="secondary" style={{ fontSize: 12 }}>
+                          暂无数据
+                        </Text>
+                      )}
+                    </Col>
+                    <Col span={12}>
+                      <div
+                        style={{
+                          marginBottom: 12,
+                          paddingBottom: 8,
+                          borderBottom: `1px solid ${token.colorBorderSecondary}`,
+                        }}
+                      >
+                        <Text
+                          type="secondary"
+                          style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 6 }}
+                        >
+                          <EnvironmentOutlined /> 按环境
+                        </Text>
+                      </div>
+                      {(stats?.assets_by_environment?.slice(0, 5) ?? []).map((e) => (
+                        <div
+                          key={e.environment_id}
+                          style={{
+                            fontSize: 13,
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            marginBottom: 10,
+                            padding: '6px 0',
+                          }}
+                        >
+                          <Text ellipsis style={{ maxWidth: '72%' }}>
+                            {e.environment_name || '未分配'}
+                          </Text>
+                          <span
+                            style={{
+                              fontWeight: 600,
+                              fontVariantNumeric: 'tabular-nums',
+                              color: token.colorPrimary,
+                              fontSize: 13,
+                            }}
+                          >
+                            {e.count}
+                          </span>
+                        </div>
+                      ))}
+                      {(!stats?.assets_by_environment?.length ||
+                        stats.assets_by_environment.length === 0) && (
+                        <Text type="secondary" style={{ fontSize: 12 }}>
+                          暂无数据
+                        </Text>
+                      )}
+                    </Col>
+                  </Row>
+                </>
+              )}
+            </Card>
+          </Col>
+        </Row>
+      </div>
     </div>
+    </PageContainer>
   )
 }
 

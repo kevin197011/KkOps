@@ -20,6 +20,7 @@ export const usePermissionStore = create<PermissionState>((set, get) => ({
   setPermissions: (permissions: string[]) => {
     // Check if user is admin (has all menu permissions or is_admin role)
     // For now, we'll check if user has all permissions (admin users get all permissions from backend)
+    // Keep in sync with distinct Resource values in backend model.AllMenuPermissions.
     const allMenuResources = [
       'dashboard',
       'projects',
@@ -34,6 +35,22 @@ export const usePermissionStore = create<PermissionState>((set, get) => ({
       'users',
       'roles',
       'audit-logs',
+      'connection-audit',
+      'operation-tools',
+      'external-systems',
+      'oauth2-clients',
+      'provisioning',
+      'integrations',
+      'monitoring',
+      'logging',
+      'cicd',
+      'registry',
+      'gitops',
+      'kubernetes',
+      'alerts',
+      'incidents',
+      'ai',
+      'cmdb',
     ]
     
     // If user has all permissions, consider them admin

@@ -1835,7 +1835,7 @@ const WebSSHTerminal = () => {
       // Wrap all tree data under a root node
       const totalCount = filteredAssets.length
       return [{
-        title: '根目录',
+        title: '全部主机',
         key: 'root',
         icon: <HomeOutlined style={{ 
           color: mode === 'dark' ? '#94A3B8' : '#64748B',

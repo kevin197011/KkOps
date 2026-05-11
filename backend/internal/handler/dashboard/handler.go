@@ -41,3 +41,13 @@ func (h *Handler) GetStats(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{"data": stats})
 }
+
+// GetSummary returns cross-cutting operational counters for the dashboard home.
+func (h *Handler) GetSummary(c *gin.Context) {
+	summary, err := h.service.GetSummary()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load summary"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": summary})
+}

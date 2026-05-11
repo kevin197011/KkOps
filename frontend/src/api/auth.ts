@@ -30,9 +30,17 @@ export interface ChangePasswordRequest {
   new_password: string
 }
 
+export interface SSOConfigResponse {
+  enabled: boolean
+  label?: string
+}
+
 export const authApi = {
   login: (data: LoginRequest) => apiClient.post<LoginResponse>('/auth/login', data),
+  refresh: (refresh_token: string) =>
+    apiClient.post<LoginResponse>('/auth/refresh', { refresh_token }),
   getMe: () => apiClient.get<UserInfo>('/auth/me'),
+  getSSOConfig: () => apiClient.get<SSOConfigResponse>('/auth/sso/config'),
   logout: () => apiClient.post<{ message: string }>('/auth/logout'),
   changePassword: (data: ChangePasswordRequest) =>
     apiClient.post<{ message: string }>('/auth/change-password', data),

@@ -27,16 +27,16 @@ type CreateAssetRequest struct {
 	ProjectID       *uint  `json:"project_id"`
 	CloudPlatformID *uint  `json:"cloud_platform_id"`
 	EnvironmentID   *uint  `json:"environment_id"`
-	IP            string `json:"ip"`
-	SSHPort       int    `json:"ssh_port"`
-	SSHKeyID      *uint  `json:"ssh_key_id"`
-	SSHUser       string `json:"ssh_user"`
-	CPU           string `json:"cpu"`
-	Memory        string `json:"memory"`
-	Disk          string `json:"disk"`
-	Status        string `json:"status"`
-	Description   string `json:"description"`
-	TagIDs        []uint `json:"tag_ids"`
+	IP              string `json:"ip"`
+	SSHPort         int    `json:"ssh_port"`
+	SSHKeyID        *uint  `json:"ssh_key_id"`
+	SSHUser         string `json:"ssh_user"`
+	CPU             string `json:"cpu"`
+	Memory          string `json:"memory"`
+	Disk            string `json:"disk"`
+	Status          string `json:"status"`
+	Description     string `json:"description"`
+	TagIDs          []uint `json:"tag_ids"`
 }
 
 // UpdateAssetRequest represents a request to update an asset
@@ -45,16 +45,16 @@ type UpdateAssetRequest struct {
 	ProjectID       *uint  `json:"project_id"`
 	CloudPlatformID *uint  `json:"cloud_platform_id"`
 	EnvironmentID   *uint  `json:"environment_id"`
-	IP            string `json:"ip"`
-	SSHPort       int    `json:"ssh_port"`
-	SSHKeyID      *uint  `json:"ssh_key_id"`
-	SSHUser       string `json:"ssh_user"`
-	CPU           string `json:"cpu"`
-	Memory        string `json:"memory"`
-	Disk          string `json:"disk"`
-	Status        string `json:"status"`
-	Description   string `json:"description"`
-	TagIDs        []uint `json:"tag_ids"`
+	IP              string `json:"ip"`
+	SSHPort         int    `json:"ssh_port"`
+	SSHKeyID        *uint  `json:"ssh_key_id"`
+	SSHUser         string `json:"ssh_user"`
+	CPU             string `json:"cpu"`
+	Memory          string `json:"memory"`
+	Disk            string `json:"disk"`
+	Status          string `json:"status"`
+	Description     string `json:"description"`
+	TagIDs          []uint `json:"tag_ids"`
 }
 
 // AssetResponse represents an asset response
@@ -65,18 +65,18 @@ type AssetResponse struct {
 	CloudPlatformID *uint              `json:"cloud_platform_id"`
 	CloudPlatform   *CloudPlatformInfo `json:"cloud_platform,omitempty"`
 	EnvironmentID   *uint              `json:"environment_id"`
-	IP            string    `json:"ip"`
-	SSHPort       int       `json:"ssh_port"`
-	SSHKeyID      *uint     `json:"ssh_key_id"`
-	SSHUser       string    `json:"ssh_user"`
-	CPU           string    `json:"cpu"`
-	Memory        string    `json:"memory"`
-	Disk          string    `json:"disk"`
-	Status        string    `json:"status"`
-	Description   string    `json:"description"`
-	Tags          []TagInfo `json:"tags"`
-	CreatedAt     string    `json:"created_at"`
-	UpdatedAt     string    `json:"updated_at"`
+	IP              string             `json:"ip"`
+	SSHPort         int                `json:"ssh_port"`
+	SSHKeyID        *uint              `json:"ssh_key_id"`
+	SSHUser         string             `json:"ssh_user"`
+	CPU             string             `json:"cpu"`
+	Memory          string             `json:"memory"`
+	Disk            string             `json:"disk"`
+	Status          string             `json:"status"`
+	Description     string             `json:"description"`
+	Tags            []TagInfo          `json:"tags"`
+	CreatedAt       string             `json:"created_at"`
+	UpdatedAt       string             `json:"updated_at"`
 }
 
 // TagInfo represents tag information in asset response
@@ -100,15 +100,15 @@ func (s *Service) CreateAsset(req *CreateAssetRequest) (*AssetResponse, error) {
 		ProjectID:       req.ProjectID,
 		CloudPlatformID: req.CloudPlatformID,
 		EnvironmentID:   req.EnvironmentID,
-		IP:            req.IP,
-		SSHPort:       req.SSHPort,
-		SSHKeyID:      req.SSHKeyID,
-		SSHUser:       req.SSHUser,
-		CPU:           req.CPU,
-		Memory:        req.Memory,
-		Disk:          req.Disk,
-		Status:        req.Status,
-		Description:   req.Description,
+		IP:              req.IP,
+		SSHPort:         req.SSHPort,
+		SSHKeyID:        req.SSHKeyID,
+		SSHUser:         req.SSHUser,
+		CPU:             req.CPU,
+		Memory:          req.Memory,
+		Disk:            req.Disk,
+		Status:          req.Status,
+		Description:     req.Description,
 	}
 
 	if asset.Status == "" {
@@ -338,17 +338,17 @@ func (s *Service) assetToResponse(asset model.Asset) AssetResponse {
 		CloudPlatformID: asset.CloudPlatformID,
 		CloudPlatform:   cloudPlatformInfo,
 		EnvironmentID:   asset.EnvironmentID,
-		IP:            asset.IP,
-		SSHPort:       asset.SSHPort,
-		SSHKeyID:      asset.SSHKeyID,
-		SSHUser:       asset.SSHUser,
-		CPU:           asset.CPU,
-		Memory:        asset.Memory,
-		Disk:          asset.Disk,
-		Status:        asset.Status,
-		Description:   asset.Description,
-		Tags:          tags,
-		CreatedAt:     asset.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
-		UpdatedAt:     asset.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
+		IP:              asset.IP,
+		SSHPort:         asset.SSHPort,
+		SSHKeyID:        asset.SSHKeyID,
+		SSHUser:         asset.SSHUser,
+		CPU:             asset.CPU,
+		Memory:          asset.Memory,
+		Disk:            asset.Disk,
+		Status:          asset.Status,
+		Description:     asset.Description,
+		Tags:            tags,
+		CreatedAt:       asset.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+		UpdatedAt:       asset.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
 	}
 }

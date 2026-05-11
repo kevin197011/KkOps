@@ -15,7 +15,7 @@ import (
 type User struct {
 	ID           uint           `gorm:"primaryKey" json:"id"`
 	Username     string         `gorm:"uniqueIndex;not null;size:100" json:"username"`
-	PasswordHash string         `gorm:"not null;size:255" json:"-"`
+	PasswordHash string         `gorm:"not null;size:255" json:"-"` // SSO users get a non-checkable placeholder hash
 	Email        string         `gorm:"uniqueIndex;not null;size:255" json:"email"`
 	Phone        string         `gorm:"size:20" json:"phone"`
 	RealName     string         `gorm:"size:100" json:"real_name"`
@@ -28,6 +28,10 @@ type User struct {
 	UpdatedAt    time.Time      `json:"updated_at"`
 	DeletedAt    gorm.DeletedAt `gorm:"index" json:"-"`
 
+	// SSO: source=local|sso; external_id=IdP subject; sso_provider=e.g. oidc
+	Source      string `gorm:"default:local;size:20" json:"source"` // local, sso
+	ExternalID  string `gorm:"index;size:255" json:"external_id"`   // IdP subject (nullable)
+	SSOProvider string `gorm:"size:64" json:"sso_provider"`         // e.g. oidc (nullable)
 	// Relationships
 	Roles     []Role     `gorm:"many2many:user_roles;" json:"roles,omitempty"`
 	APITokens []APIToken `gorm:"foreignKey:UserID" json:"api_tokens,omitempty"`
@@ -52,17 +56,17 @@ type Department struct {
 
 // APIToken represents an API token for programmatic access
 type APIToken struct {
-	ID            uint           `gorm:"primaryKey" json:"id"`
-	UserID        uint           `gorm:"not null;index" json:"user_id"`
-	User          User           `gorm:"foreignKey:UserID" json:"user,omitempty"`
-	Name          string         `gorm:"not null;size:100" json:"name"`
-	TokenHash     string         `gorm:"uniqueIndex;not null;size:255" json:"-"`
-	TokenEncrypted string        `gorm:"type:text" json:"-"` // Encrypted token for retrieval
-	ExpiresAt     *time.Time     `json:"expires_at"`
-	LastUsedAt    *time.Time     `json:"last_used_at"`
-	Status        string         `gorm:"default:active;size:20" json:"status"` // active, disabled
-	Description   string         `gorm:"type:text" json:"description"`
-	CreatedAt     time.Time      `json:"created_at"`
-	UpdatedAt     time.Time      `json:"updated_at"`
-	DeletedAt     gorm.DeletedAt `gorm:"index" json:"-"`
+	ID             uint           `gorm:"primaryKey" json:"id"`
+	UserID         uint           `gorm:"not null;index" json:"user_id"`
+	User           User           `gorm:"foreignKey:UserID" json:"user,omitempty"`
+	Name           string         `gorm:"not null;size:100" json:"name"`
+	TokenHash      string         `gorm:"uniqueIndex;not null;size:255" json:"-"`
+	TokenEncrypted string         `gorm:"type:text" json:"-"` // Encrypted token for retrieval
+	ExpiresAt      *time.Time     `json:"expires_at"`
+	LastUsedAt     *time.Time     `json:"last_used_at"`
+	Status         string         `gorm:"default:active;size:20" json:"status"` // active, disabled
+	Description    string         `gorm:"type:text" json:"description"`
+	CreatedAt      time.Time      `json:"created_at"`
+	UpdatedAt      time.Time      `json:"updated_at"`
+	DeletedAt      gorm.DeletedAt `gorm:"index" json:"-"`
 }

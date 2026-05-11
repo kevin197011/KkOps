@@ -94,9 +94,9 @@ func (h *Handler) ListAuditLogs(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{
 		"data": gin.H{
-			"total": result.Total,
-			"items": result.Items,
-			"page":  page,
+			"total":     result.Total,
+			"items":     result.Items,
+			"page":      page,
 			"page_size": pageSize,
 		},
 	})

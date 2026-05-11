@@ -52,6 +52,7 @@ type UserResponse struct {
 	RealName     string `json:"real_name"`
 	DepartmentID *uint  `json:"department_id"`
 	Status       string `json:"status"`
+	Source       string `json:"source"` // local, sso
 	CreatedAt    string `json:"created_at"`
 	UpdatedAt    string `json:"updated_at"`
 }
@@ -90,17 +91,7 @@ func (s *Service) CreateUser(req *CreateUserRequest) (*UserResponse, error) {
 		return nil, err
 	}
 
-	return &UserResponse{
-		ID:           user.ID,
-		Username:     user.Username,
-		Email:        user.Email,
-		Phone:        user.Phone,
-		RealName:     user.RealName,
-		DepartmentID: user.DepartmentID,
-		Status:       user.Status,
-		CreatedAt:    user.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
-		UpdatedAt:    user.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
-	}, nil
+	return s.userToResponse(&user), nil
 }
 
 // GetUser retrieves a user by ID
@@ -110,6 +101,14 @@ func (s *Service) GetUser(id uint) (*UserResponse, error) {
 		return nil, err
 	}
 
+	return s.userToResponse(&user), nil
+}
+
+func (s *Service) userToResponse(user *model.User) *UserResponse {
+	source := user.Source
+	if source == "" {
+		source = "local"
+	}
 	return &UserResponse{
 		ID:           user.ID,
 		Username:     user.Username,
@@ -118,9 +117,10 @@ func (s *Service) GetUser(id uint) (*UserResponse, error) {
 		RealName:     user.RealName,
 		DepartmentID: user.DepartmentID,
 		Status:       user.Status,
+		Source:       source,
 		CreatedAt:    user.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
 		UpdatedAt:    user.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
-	}, nil
+	}
 }
 
 // ListUsers retrieves a paginated list of users
@@ -139,18 +139,8 @@ func (s *Service) ListUsers(page, pageSize int) ([]UserResponse, int64, error) {
 	}
 
 	result := make([]UserResponse, len(users))
-	for i, user := range users {
-		result[i] = UserResponse{
-			ID:           user.ID,
-			Username:     user.Username,
-			Email:        user.Email,
-			Phone:        user.Phone,
-			RealName:     user.RealName,
-			DepartmentID: user.DepartmentID,
-			Status:       user.Status,
-			CreatedAt:    user.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
-			UpdatedAt:    user.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
-		}
+	for i := range users {
+		result[i] = *s.userToResponse(&users[i])
 	}
 
 	return result, total, nil
@@ -192,17 +182,7 @@ func (s *Service) UpdateUser(id uint, req *UpdateUserRequest) (*UserResponse, er
 		return nil, err
 	}
 
-	return &UserResponse{
-		ID:           user.ID,
-		Username:     user.Username,
-		Email:        user.Email,
-		Phone:        user.Phone,
-		RealName:     user.RealName,
-		DepartmentID: user.DepartmentID,
-		Status:       user.Status,
-		CreatedAt:    user.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
-		UpdatedAt:    user.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
-	}, nil
+	return s.userToResponse(&user), nil
 }
 
 // DeleteUser deletes a user

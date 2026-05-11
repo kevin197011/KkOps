@@ -37,8 +37,8 @@ func NewService(db *gorm.DB, cfg *config.Config) *Service {
 // CreateSSHKeyRequest represents a request to create an SSH key
 type CreateSSHKeyRequest struct {
 	Name        string `json:"name" binding:"required"`
-	Type        string `json:"type"` // rsa, ed25519, ecdsa, etc.
-	PublicKey   string `json:"public_key"`  // Optional - auto-extracted from private key if empty
+	Type        string `json:"type"`       // rsa, ed25519, ecdsa, etc.
+	PublicKey   string `json:"public_key"` // Optional - auto-extracted from private key if empty
 	PrivateKey  string `json:"private_key" binding:"required"`
 	SSHUser     string `json:"ssh_user"`   // Default SSH username
 	Passphrase  string `json:"passphrase"` // Passphrase for encrypted private key (if provided)

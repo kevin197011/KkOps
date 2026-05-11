@@ -35,12 +35,26 @@ import {
   BookOutlined,
   TagsOutlined,
   LinkOutlined,
+  SafetyCertificateOutlined,
+  SearchOutlined,
+  CloudSyncOutlined,
+  ApiOutlined,
+  LineChartOutlined,
+  ContainerOutlined,
+  BellOutlined,
+  AlertOutlined,
+  ClusterOutlined,
+  RobotOutlined,
+  DeploymentUnitOutlined,
+  ShareAltOutlined,
 } from '@ant-design/icons'
 import { useThemeStore } from '@/stores/theme'
 import { useAuthStore } from '@/stores/auth'
 import { usePermissionStore } from '@/stores/permission'
 import { authApi } from '@/api/auth'
 import { userApi } from '@/api/user'
+import { CommandPalette } from '@/components/shell'
+import { flattenMenuToCommands } from '@/navigation/flattenMenu'
 
 const { Header, Sider, Content, Footer } = Layout
 
@@ -52,9 +66,17 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
   const [collapsed, setCollapsed] = useState(false)
   const [isMobile, setIsMobile] = useState(false)
   const [passwordModalVisible, setPasswordModalVisible] = useState(false)
+  const [paletteOpen, setPaletteOpen] = useState(false)
   const [passwordLoading, setPasswordLoading] = useState(false)
   const [passwordForm] = Form.useForm()
-  const [openKeys, setOpenKeys] = useState<string[]>(['infrastructure', 'operations', 'security', 'system'])
+  const [openKeys, setOpenKeys] = useState<string[]>([
+    'ai-ops',
+    'integration-suite',
+    'infrastructure',
+    'operations',
+    'security',
+    'system',
+  ])
   const navigate = useNavigate()
   const location = useLocation()
   const { mode, toggleMode } = useThemeStore()
@@ -108,6 +130,25 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
     '/roles': 'roles:*',
     '/audit-logs': 'audit-logs:read',
     '/connection-audit': 'connection-audit:read',
+    '/external-systems': 'external-systems:*',
+    '/oauth2-clients': 'oauth2-clients:*',
+    '/provisioning': 'provisioning:*',
+    '/integrations': 'integrations:*',
+    '/monitoring': 'monitoring:*',
+    '/logging': 'logging:*',
+    '/cicd': 'cicd:*',
+    '/registry': 'registry:*',
+    '/gitops': 'gitops:*',
+    '/gitops/pipeline': 'gitops:*',
+    '/k8s/clusters': 'kubernetes:*',
+    '/alerts': 'alerts:*',
+    '/incidents': 'incidents:*',
+    '/ai/chat': 'ai:*',
+    '/ai/anomaly/rules': 'ai:*',
+    '/ai/anomaly/findings': 'ai:*',
+    '/ai/rca/reports': 'ai:*',
+    '/cmdb': 'cmdb:*',
+    '/topology': 'cmdb:*',
   }
 
   // 根据权限过滤菜单项
@@ -141,7 +182,8 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
           const requiredPermission = menuPermissionMap[item.key]
           if (requiredPermission) {
             const [resource, action] = requiredPermission.split(':')
-            if (!isAdmin && !hasPermission(resource, action)) {
+            const hasRequired = hasPermission(resource, action)
+            if (!isAdmin && !hasRequired) {
               return null // 无权限，不显示
             }
           }
@@ -167,6 +209,100 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
       label: '运维导航',
     },
     {
+      key: 'ai-ops',
+      icon: <RobotOutlined />,
+      label: 'AI 运维',
+      children: [
+        {
+          key: '/ai/chat',
+          icon: <RobotOutlined />,
+          label: '助手',
+        },
+        {
+          key: '/ai/anomaly/rules',
+          icon: <AlertOutlined />,
+          label: '异常规则',
+        },
+        {
+          key: '/ai/anomaly/findings',
+          icon: <BellOutlined />,
+          label: '异常结果',
+        },
+        {
+          key: '/ai/rca/reports',
+          icon: <FileTextOutlined />,
+          label: '根因报告',
+        },
+      ],
+    },
+    {
+      key: '/external-systems',
+      icon: <LinkOutlined />,
+      label: 'SSO 应用门户',
+    },
+    {
+      key: '/oauth2-clients',
+      icon: <SafetyCertificateOutlined />,
+      label: 'IdP 应用',
+    },
+    {
+      key: 'integration-suite',
+      icon: <ApiOutlined />,
+      label: '集成中心',
+      children: [
+        {
+          key: '/integrations',
+          icon: <ApiOutlined />,
+          label: '连接器',
+        },
+        {
+          key: '/monitoring',
+          icon: <LineChartOutlined />,
+          label: '监控',
+        },
+        {
+          key: '/logging',
+          icon: <FileTextOutlined />,
+          label: '日志',
+        },
+        {
+          key: '/cicd',
+          icon: <RocketOutlined />,
+          label: 'CI/CD',
+        },
+        {
+          key: '/registry',
+          icon: <ContainerOutlined />,
+          label: '镜像仓库',
+        },
+        {
+          key: '/gitops',
+          icon: <CloudSyncOutlined />,
+          label: 'GitOps',
+        },
+        {
+          key: '/gitops/pipeline',
+          icon: <ScheduleOutlined />,
+          label: '流水线',
+        },
+        {
+          key: '/k8s/clusters',
+          icon: <ClusterOutlined />,
+          label: 'Kubernetes',
+        },
+        {
+          key: '/alerts',
+          icon: <BellOutlined />,
+          label: '告警',
+        },
+        {
+          key: '/incidents',
+          icon: <AlertOutlined />,
+          label: '事件',
+        },
+      ],
+    },
+    {
       key: 'infrastructure',
       icon: <ApartmentOutlined />,
       label: '基础设施',
@@ -190,6 +326,16 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
           key: '/assets',
           icon: <DatabaseOutlined />,
           label: '资产管理',
+        },
+        {
+          key: '/cmdb',
+          icon: <DeploymentUnitOutlined />,
+          label: 'CMDB',
+        },
+        {
+          key: '/topology',
+          icon: <ShareAltOutlined />,
+          label: '拓扑',
         },
         {
           key: '/tags',
@@ -262,6 +408,11 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
           icon: <LinkOutlined />,
           label: '审计连线',
         },
+        {
+          key: '/provisioning',
+          icon: <CloudSyncOutlined />,
+          label: '账号同步',
+        },
       ],
     },
   ]
@@ -270,6 +421,23 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
   const menuItems = isAdmin || permissions.length === 0 
     ? allMenuItems 
     : filterMenuItems(allMenuItems)
+
+  const paletteCommands = flattenMenuToCommands(menuItems)
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault()
+        setPaletteOpen((open) => !open)
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'l') {
+        e.preventDefault()
+        navigate('/ai/chat')
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [navigate])
 
   const handleMenuClick = ({ key }: { key: string }) => {
     // 只导航到具体的路由，忽略分类键（如 'infrastructure', 'operations' 等）
@@ -453,6 +621,17 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
           <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
             <Button
               type="text"
+              icon={<SearchOutlined />}
+              onClick={() => setPaletteOpen(true)}
+              title="Jump to page (⌘K / Ctrl+K)"
+              style={{
+                color: mode === 'dark' ? '#F1F5F9' : '#1E293B',
+              }}
+            >
+              Jump
+            </Button>
+            <Button
+              type="text"
               icon={<ConsoleSqlOutlined />}
               onClick={() => window.open('/ssh/terminal', '_blank')}
               title="WebSSH 终端（在新标签页打开）"
@@ -626,6 +805,13 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
           </Form.Item>
         </Form>
       </Modal>
+
+      <CommandPalette
+        open={paletteOpen}
+        onClose={() => setPaletteOpen(false)}
+        commands={paletteCommands}
+        onNavigate={(path) => navigate(path)}
+      />
     </Layout>
   )
 }

@@ -70,6 +70,18 @@ type ProjectAssetCount struct {
 	Count       int64  `json:"count"`
 }
 
+// SummaryResponse aggregates cross-cutting operational counters for the unified dashboard.
+type SummaryResponse struct {
+	AlertsOpen           int64 `json:"alerts_open"`
+	IncidentsOpen        int64 `json:"incidents_open"`
+	IntegrationsTotal    int64 `json:"integrations_total"`
+	IntegrationsOK       int64 `json:"integrations_ok"`
+	IntegrationsDisabled int64 `json:"integrations_disabled"`
+	ProvisioningRuns24h  int64 `json:"provisioning_runs_24h"`
+	AIAnomalyFindings24h int64 `json:"ai_anomaly_findings_24h"`
+	CMDBAssetsTotal      int64 `json:"cmdb_assets_total"`
+}
+
 // RecentActivity 最近活动
 type RecentActivity struct {
 	ID          uint      `json:"id"`
@@ -204,4 +216,28 @@ func (s *Service) GetStats() (*StatsResponse, error) {
 	}
 
 	return stats, nil
+}
+
+// GetSummary returns operational rollup counts for the dashboard home (last 24h where noted).
+func (s *Service) GetSummary() (*SummaryResponse, error) {
+	out := &SummaryResponse{}
+	since := time.Now().Add(-24 * time.Hour)
+
+	s.db.Model(&model.AlertRecord{}).
+		Where("status = ?", model.AlertStatusFiring).
+		Count(&out.AlertsOpen)
+
+	s.db.Model(&model.Incident{}).
+		Where("status IN ?", []string{model.IncidentStatusOpen, model.IncidentStatusAcknowledged}).
+		Count(&out.IncidentsOpen)
+
+	s.db.Model(&model.Integration{}).Count(&out.IntegrationsTotal)
+	s.db.Model(&model.Integration{}).Where("enabled = ?", true).Count(&out.IntegrationsOK)
+	s.db.Model(&model.Integration{}).Where("enabled = ?", false).Count(&out.IntegrationsDisabled)
+
+	s.db.Model(&model.ProvisioningRun{}).Where("started_at >= ?", since).Count(&out.ProvisioningRuns24h)
+	s.db.Model(&model.AIAnomalyFinding{}).Where("created_at >= ?", since).Count(&out.AIAnomalyFindings24h)
+	s.db.Model(&model.CMDBAsset{}).Count(&out.CMDBAssetsTotal)
+
+	return out, nil
 }

@@ -240,6 +240,13 @@ func handleSSHConnect(conn *websocket.Conn, msg map[string]interface{}, db *gorm
 	}
 	assetID := uint(assetIDFloat)
 
+	// 获取操作用户（KkOps 登录名）用于审计
+	var loginUser model.User
+	if err := db.First(&loginUser, userID).Error; err != nil {
+		log.Printf("Connection audit: failed to load login user %d: %v", userID, err)
+	}
+	loginUsername := loginUser.Username
+
 	// 检查用户对资产的访问权限
 	hasAccess, err := authzSvc.HasAssetAccess(userID, assetID)
 	if err != nil {
@@ -463,6 +470,27 @@ func handleSSHConnect(conn *websocket.Conn, msg map[string]interface{}, db *gorm
 		transcriptRecorder.Append(time.Now().UnixMilli(), dataStr)
 	}
 
+	// Create audit record on connect so it appears in the list immediately; update on disconnect
+	var auditRecordID uint
+	if connectionauditSvc != nil {
+		id, err := connectionauditSvc.Create(&connectionaudit.CreateRequest{
+			UserID:              userID,
+			LoginUsername:       loginUsername,
+			Username:            username,
+			AssetID:             assetID,
+			AssetHostname:       asset.HostName,
+			StartedAt:           startedAt,
+			EndedAt:             startedAt, // same as start until disconnect
+			Transcript:          "",
+			TranscriptTruncated: false,
+		})
+		if err != nil {
+			log.Printf("Connection audit: failed to create record on connect: %v", err)
+		} else {
+			auditRecordID = id
+		}
+	}
+
 	// persistRecord 在会话结束时将录像写入 DB（在 wg.Wait() 之后调用）
 	persistRecord := func() {
 		if connectionauditSvc == nil {
@@ -470,16 +498,48 @@ func handleSSHConnect(conn *websocket.Conn, msg map[string]interface{}, db *gorm
 		}
 		endedAt := time.Now()
 		transcript, truncated := transcriptRecorder.SerializeAndTruncate(connectionaudit.MaxTranscriptSize)
-		_ = connectionauditSvc.Create(&connectionaudit.CreateRequest{
-			UserID:              userID,
-			Username:            username,
-			AssetID:             assetID,
-			AssetHostname:       asset.HostName,
-			StartedAt:           startedAt,
-			EndedAt:             endedAt,
-			Transcript:          transcript,
-			TranscriptTruncated: truncated,
-		})
+		if auditRecordID != 0 {
+			if err := connectionauditSvc.UpdateOnDisconnect(auditRecordID, startedAt, endedAt, transcript, truncated); err != nil {
+				log.Printf("Connection audit: failed to update record %d on disconnect: %v", auditRecordID, err)
+			}
+		} else {
+			_, err := connectionauditSvc.Create(&connectionaudit.CreateRequest{
+				UserID:              userID,
+				LoginUsername:       loginUsername,
+				Username:            username,
+				AssetID:             assetID,
+				AssetHostname:       asset.HostName,
+				StartedAt:           startedAt,
+				EndedAt:             endedAt,
+				Transcript:          transcript,
+				TranscriptTruncated: truncated,
+			})
+			if err != nil {
+				log.Printf("Connection audit: failed to create record on disconnect: %v", err)
+			}
+		}
+	}
+
+	// 实时写入录像到 DB，便于进行中连线点击「查看」时能看到当前已录内容
+	var flushStopOnce sync.Once
+	flushStop := make(chan struct{})
+	stopFlush := func() { flushStopOnce.Do(func() { close(flushStop) }) }
+	if connectionauditSvc != nil && auditRecordID != 0 {
+		go func() {
+			ticker := time.NewTicker(3 * time.Second)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-flushStop:
+					return
+				case <-ticker.C:
+					transcript, truncated := transcriptRecorder.SerializeAndTruncate(connectionaudit.MaxTranscriptSize)
+					if err := connectionauditSvc.UpdateTranscript(auditRecordID, transcript, truncated); err != nil {
+						log.Printf("Connection audit: failed to flush transcript for record %d: %v", auditRecordID, err)
+					}
+				}
+			}
+		}()
 	}
 
 	// Initialize ZMODEM state
@@ -1256,6 +1316,7 @@ func handleSSHConnect(conn *websocket.Conn, msg map[string]interface{}, db *gorm
 			done <- true
 			session.Close()
 			wg.Wait()
+			stopFlush()
 			persistRecord()
 			conn.WriteJSON(map[string]interface{}{
 				"type": "disconnected",
@@ -1276,6 +1337,7 @@ func handleSSHConnect(conn *websocket.Conn, msg map[string]interface{}, db *gorm
 	// Wait for streams to finish
 	wg.Wait()
 
+	stopFlush()
 	persistRecord()
 
 	conn.WriteJSON(map[string]interface{}{

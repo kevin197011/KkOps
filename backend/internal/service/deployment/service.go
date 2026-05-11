@@ -103,20 +103,20 @@ type ModuleResponse struct {
 
 // DeploymentResponse represents a deployment record response
 type DeploymentResponse struct {
-	ID           uint       `json:"id"`
-	ModuleID     uint       `json:"module_id"`
-	ModuleName   string     `json:"module_name"`
-	ProjectName  string     `json:"project_name"`
-	Version      string     `json:"version"`
-	Status       string     `json:"status"`
-	AssetIDs     []uint     `json:"asset_ids"`
-	Output       string     `json:"output"`
-	Error        string     `json:"error"`
-	CreatedBy    uint       `json:"created_by"`
-	CreatorName  string     `json:"creator_name"`
-	StartedAt    *time.Time `json:"started_at"`
-	FinishedAt   *time.Time `json:"finished_at"`
-	CreatedAt    time.Time  `json:"created_at"`
+	ID          uint       `json:"id"`
+	ModuleID    uint       `json:"module_id"`
+	ModuleName  string     `json:"module_name"`
+	ProjectName string     `json:"project_name"`
+	Version     string     `json:"version"`
+	Status      string     `json:"status"`
+	AssetIDs    []uint     `json:"asset_ids"`
+	Output      string     `json:"output"`
+	Error       string     `json:"error"`
+	CreatedBy   uint       `json:"created_by"`
+	CreatorName string     `json:"creator_name"`
+	StartedAt   *time.Time `json:"started_at"`
+	FinishedAt  *time.Time `json:"finished_at"`
+	CreatedAt   time.Time  `json:"created_at"`
 }
 
 // CreateModule creates a new deployment module

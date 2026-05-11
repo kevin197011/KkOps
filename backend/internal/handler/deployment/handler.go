@@ -331,9 +331,9 @@ type ExportModuleConfig struct {
 
 // ExportConfig 导出配置
 type ExportConfig struct {
-	Version   string               `json:"version"`
-	ExportAt  string               `json:"export_at"`
-	Modules   []ExportModuleConfig `json:"modules"`
+	Version  string               `json:"version"`
+	ExportAt string               `json:"export_at"`
+	Modules  []ExportModuleConfig `json:"modules"`
 }
 
 // ExportModules handles deployment modules export
@@ -404,11 +404,11 @@ type ImportConfig struct {
 
 // ImportResult 导入结果
 type ImportResult struct {
-	Total     int      `json:"total"`
-	Success   int      `json:"success"`
-	Failed    int      `json:"failed"`
-	Errors    []string `json:"errors,omitempty"`
-	Skipped   []string `json:"skipped,omitempty"`
+	Total   int      `json:"total"`
+	Success int      `json:"success"`
+	Failed  int      `json:"failed"`
+	Errors  []string `json:"errors,omitempty"`
+	Skipped []string `json:"skipped,omitempty"`
 }
 
 // ImportModules handles deployment modules import
@@ -481,7 +481,7 @@ func (h *Handler) ImportModules(c *gin.Context) {
 
 		// 检查是否已存在同名模块
 		exists, existingID := h.service.ModuleExistsByName(m.Name, projectID)
-		
+
 		scriptType := m.ScriptType
 		if scriptType == "" {
 			scriptType = "shell"
@@ -551,7 +551,7 @@ func (h *Handler) ImportModules(c *gin.Context) {
 // @Router /api/v1/deployment-modules/import/preview [post]
 func (h *Handler) PreviewImport(c *gin.Context) {
 	var importConfig ImportConfig
-	
+
 	// 尝试解析 JSON
 	body, err := c.GetRawData()
 	if err != nil {

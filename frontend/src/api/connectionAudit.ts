@@ -9,7 +9,8 @@ import apiClient from './client'
 export interface SSHConnectionRecord {
   id: number
   user_id: number
-  username: string
+  login_username: string // 操作用户：KkOps 登录用户
+  username: string // 连线用户：SSH 登录名（如 root）
   asset_id: number
   asset_hostname: string
   started_at: string

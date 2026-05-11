@@ -78,7 +78,7 @@ func RequireMenuPermission(rbacService *rbac.Service) gin.HandlerFunc {
 			var longestMatch string
 			var longestMatchPerm string
 			longestLen := 0
-			
+
 			for route, perm := range model.RoutePermissionMap {
 				// Check if path starts with the route pattern
 				// For example: /api/v1/users/123 should match /api/v1/users
@@ -91,7 +91,7 @@ func RequireMenuPermission(rbacService *rbac.Service) gin.HandlerFunc {
 					}
 				}
 			}
-			
+
 			if longestMatch != "" {
 				requiredPermission = longestMatchPerm
 				found = true

@@ -447,7 +447,7 @@ type ExportScheduledTaskConfig struct {
 	Description    string   `json:"description"`
 	CronExpression string   `json:"cron_expression"`
 	TemplateName   string   `json:"template_name,omitempty"` // 模板名称（如果有）
-	Content        string   `json:"content"`                  // 脚本内容（如果没有模板或自定义）
+	Content        string   `json:"content"`                 // 脚本内容（如果没有模板或自定义）
 	Type           string   `json:"type"`
 	Timeout        int      `json:"timeout"`
 	Enabled        bool     `json:"enabled"`
@@ -457,8 +457,8 @@ type ExportScheduledTaskConfig struct {
 
 // ExportScheduledTasksConfig 导出定时任务配置根结构
 type ExportScheduledTasksConfig struct {
-	Version  string                    `json:"version"`
-	ExportAt string                    `json:"export_at"`
+	Version  string                      `json:"version"`
+	ExportAt string                      `json:"export_at"`
 	Tasks    []ExportScheduledTaskConfig `json:"tasks"`
 }
 
@@ -467,8 +467,8 @@ type ImportScheduledTaskConfig struct {
 	Name           string   `json:"name" binding:"required"`
 	Description    string   `json:"description"`
 	CronExpression string   `json:"cron_expression" binding:"required"`
-	TemplateName   string   `json:"template_name"`   // 模板名称（可选）
-	Content        string   `json:"content"`         // 脚本内容（如果没有模板）
+	TemplateName   string   `json:"template_name"` // 模板名称（可选）
+	Content        string   `json:"content"`       // 脚本内容（如果没有模板）
 	Type           string   `json:"type"`
 	Timeout        int      `json:"timeout"`
 	Enabled        bool     `json:"enabled"`
@@ -478,17 +478,17 @@ type ImportScheduledTaskConfig struct {
 
 // ImportScheduledTasksConfig 导入定时任务配置根结构
 type ImportScheduledTasksConfig struct {
-	Version string                    `json:"version"`
+	Version string                      `json:"version"`
 	Tasks   []ImportScheduledTaskConfig `json:"tasks" binding:"required"`
 }
 
 // ImportScheduledTasksResult 导入定时任务结果
 type ImportScheduledTasksResult struct {
-	Total     int      `json:"total"`
-	Success   int      `json:"success"`
-	Failed    int      `json:"failed"`
-	Errors    []string `json:"errors,omitempty"`
-	Skipped   []string `json:"skipped,omitempty"`
+	Total   int      `json:"total"`
+	Success int      `json:"success"`
+	Failed  int      `json:"failed"`
+	Errors  []string `json:"errors,omitempty"`
+	Skipped []string `json:"skipped,omitempty"`
 }
 
 // ExportScheduledTasks 导出所有定时任务

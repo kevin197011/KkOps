@@ -13,6 +13,7 @@ export interface User {
   real_name: string
   department_id?: number
   status: string
+  source?: string // local | sso
   created_at: string
   updated_at: string
 }

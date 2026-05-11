@@ -5,7 +5,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { Form, Input, Button, Card, ConfigProvider, App } from 'antd'
-import { UserOutlined, LockOutlined } from '@ant-design/icons'
+import { UserOutlined, LockOutlined, SafetyCertificateOutlined } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
 import { authApi, LoginRequest } from '@/api/auth'
 import { useAuthStore } from '@/stores/auth'
@@ -16,11 +16,20 @@ import { lightTheme } from '@/themes'
 const Login = () => {
   const { message } = App.useApp()
   const [loading, setLoading] = useState(false)
+  const [ssoEnabled, setSsoEnabled] = useState(false)
+  const [ssoLabel, setSsoLabel] = useState('SSO 登录')
   const navigate = useNavigate()
   const setAuth = useAuthStore((state) => state.setAuth)
   const setPermissions = usePermissionStore((state) => state.setPermissions)
   const containerRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
+
+  useEffect(() => {
+    authApi.getSSOConfig().then((res) => {
+      setSsoEnabled(res.data.enabled)
+      if (res.data.label) setSsoLabel(res.data.label)
+    }).catch(() => {})
+  }, [])
 
   // Matrix 代码雨效果
   useEffect(() => {
@@ -353,6 +362,22 @@ const Login = () => {
               登录
             </Button>
           </Form.Item>
+          {ssoEnabled && (
+            <Form.Item style={{ marginBottom: 0 }}>
+              <Button
+                type="link"
+                block
+                size="large"
+                icon={<SafetyCertificateOutlined />}
+                style={{ color: '#64748B' }}
+                onClick={() => {
+                  window.location.href = '/api/v1/auth/sso/login'
+                }}
+              >
+                {ssoLabel}
+              </Button>
+            </Form.Item>
+          )}
         </Form>
       </Card>
       

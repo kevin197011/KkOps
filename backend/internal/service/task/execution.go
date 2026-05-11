@@ -168,7 +168,7 @@ func (s *ExecutionService) executeTaskOnAsset(ctx context.Context, task model.Ta
 
 	// Execute the task content with timeout
 	command := s.buildCommand(task.Content, task.Type)
-	
+
 	// Use task timeout or default to 600 seconds (10 minutes)
 	timeout := time.Duration(task.Timeout) * time.Second
 	if timeout <= 0 {
@@ -176,7 +176,7 @@ func (s *ExecutionService) executeTaskOnAsset(ctx context.Context, task model.Ta
 	}
 	execCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	
+
 	output, exitCode, err := sshClient.ExecuteCommandWithTimeout(execCtx, command)
 
 	// Update execution result

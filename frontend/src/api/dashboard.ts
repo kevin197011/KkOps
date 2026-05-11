@@ -52,6 +52,18 @@ export interface DashboardStats {
   recent_activities: RecentActivity[]
 }
 
+export interface DashboardSummary {
+  alerts_open: number
+  incidents_open: number
+  integrations_total: number
+  integrations_ok: number
+  integrations_disabled: number
+  provisioning_runs_24h: number
+  ai_anomaly_findings_24h: number
+  cmdb_assets_total: number
+}
+
 export const dashboardApi = {
   getStats: () => apiClient.get<{ data: DashboardStats }>('/dashboard/stats'),
+  getSummary: () => apiClient.get<{ data: DashboardSummary }>('/dashboard/summary'),
 }

@@ -42,8 +42,8 @@ type RoleResponse struct {
 	ID          uint   `json:"id"`
 	Name        string `json:"name"`
 	Description string `json:"description"`
-	IsAdmin     bool   `json:"is_admin"`     // 是否为管理员角色
-	AssetCount  int64  `json:"asset_count"`  // 授权资产数量（管理员角色返回-1表示全部）
+	IsAdmin     bool   `json:"is_admin"`    // 是否为管理员角色
+	AssetCount  int64  `json:"asset_count"` // 授权资产数量（管理员角色返回-1表示全部）
 	CreatedAt   string `json:"created_at"`
 	UpdatedAt   string `json:"updated_at"`
 }

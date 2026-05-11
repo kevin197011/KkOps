@@ -58,7 +58,7 @@ type ListRequest struct {
 
 // ListResponse 查询审计日志响应
 type ListResponse struct {
-	Total int64             `json:"total"`
+	Total int64            `json:"total"`
 	Items []model.AuditLog `json:"items"`
 }
 

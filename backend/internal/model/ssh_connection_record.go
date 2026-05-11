@@ -13,7 +13,8 @@ import (
 type SSHConnectionRecord struct {
 	ID                  uint      `gorm:"primaryKey" json:"id"`
 	UserID              uint      `gorm:"index" json:"user_id"`
-	Username            string    `gorm:"size:100;index" json:"username"`
+	LoginUsername       string    `gorm:"size:100;index" json:"login_username"` // 操作用户：KkOps 登录用户
+	Username            string    `gorm:"size:100;index" json:"username"`       // 连线用户：SSH 登录名（如 root）
 	AssetID             uint      `gorm:"index" json:"asset_id"`
 	AssetHostname       string    `gorm:"size:100" json:"asset_hostname"`
 	StartedAt           time.Time `gorm:"index" json:"started_at"`

@@ -18,8 +18,54 @@ type Config struct {
 	Database   DatabaseConfig   `mapstructure:"database"`
 	Redis      RedisConfig      `mapstructure:"redis"`
 	JWT        JWTConfig        `mapstructure:"jwt"`
+	SSO        SSOConfig        `mapstructure:"sso"`
+	IdP        IdPConfig        `mapstructure:"idp"`
 	Encryption EncryptionConfig `mapstructure:"encryption"`
 	Log        LogConfig        `mapstructure:"log"`
+	Alerts     AlertsConfig     `mapstructure:"alerts"`
+}
+
+// AlertsConfig configures alert ingestion (webhook).
+type AlertsConfig struct {
+	WebhookSecret string `mapstructure:"webhook_secret"` // header X-KkOps-Alert-Secret
+}
+
+// IdPConfig holds KkOps-as-IdP (OIDC provider) settings
+type IdPConfig struct {
+	Enabled       bool          `mapstructure:"enabled"`
+	Issuer        string        `mapstructure:"issuer"`         // e.g. http://localhost:3000/oidc (public URL of this IdP)
+	SessionSecret string        `mapstructure:"session_secret"` // for cookie session (recommend 32+ bytes)
+	SAML          SAMLIdPConfig `mapstructure:"saml"`
+	LDAP          LDAPIdPConfig `mapstructure:"ldap"`
+}
+
+// SAMLIdPConfig gates SAML 2.0 scaffold endpoints.
+type SAMLIdPConfig struct {
+	Enabled bool `mapstructure:"enabled"`
+}
+
+// LDAPIdPConfig gates an experimental LDAP read/bind listener scaffold.
+type LDAPIdPConfig struct {
+	Enabled    bool   `mapstructure:"enabled"`
+	ListenAddr string `mapstructure:"listen_addr"`   // e.g. :389 or :1389
+	TLSCert    string `mapstructure:"tls_cert_file"` // optional PEM
+	TLSKey     string `mapstructure:"tls_key_file"`  // optional PEM
+}
+
+// SSOConfig holds SSO (OIDC) configuration for unified auth with ops IdPs
+type SSOConfig struct {
+	Enabled bool       `mapstructure:"enabled"`
+	OIDC    OIDCConfig `mapstructure:"oidc"`
+}
+
+// OIDCConfig holds OpenID Connect provider settings
+type OIDCConfig struct {
+	IssuerURL       string   `mapstructure:"issuer_url"`
+	ClientID        string   `mapstructure:"client_id"`
+	ClientSecret    string   `mapstructure:"client_secret"`
+	RedirectURL     string   `mapstructure:"redirect_url"`      // e.g. https://kkops.example.com/api/v1/auth/sso/callback
+	FrontendBaseURL string   `mapstructure:"frontend_base_url"` // e.g. https://app.kkops.com for redirect after login; if empty, use relative /auth/callback
+	Scopes          []string `mapstructure:"scopes"`            // default: openid, profile, email
 }
 
 // ServerConfig holds server configuration
@@ -94,6 +140,13 @@ func Load(configPath string) (*Config, error) {
 	viper.SetDefault("redis.db", 0)
 	viper.SetDefault("jwt.expires_in", 7200)
 	viper.SetDefault("jwt.refresh_expires_in", 604800)
+	viper.SetDefault("sso.enabled", false)
+	viper.SetDefault("sso.oidc.scopes", []string{"openid", "profile", "email"})
+	viper.SetDefault("idp.enabled", true)
+	viper.SetDefault("idp.session_secret", "change-idp-session-secret-in-production")
+	viper.SetDefault("idp.saml.enabled", false)
+	viper.SetDefault("idp.ldap.enabled", false)
+	viper.SetDefault("idp.ldap.listen_addr", ":1389")
 	viper.SetDefault("encryption.key", "change-this-encryption-key-in-production")
 	viper.SetDefault("log.level", "info")
 	viper.SetDefault("log.format", "text") // text for dev, json for production
@@ -129,6 +182,9 @@ func Load(configPath string) (*Config, error) {
 	}
 	if dbname := os.Getenv("DB_NAME"); dbname != "" {
 		config.Database.DBName = dbname
+	}
+	if v := os.Getenv("ALERTS_WEBHOOK_SECRET"); v != "" {
+		config.Alerts.WebhookSecret = v
 	}
 
 	return &config, nil

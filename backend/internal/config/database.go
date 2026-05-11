@@ -6,6 +6,7 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -402,6 +403,7 @@ func runSQLMigrations(db *gorm.DB) error {
 		"add_scheduled_task.sql",
 		"add_audit_log.sql",
 		"add_operations_navigation.sql",
+		"add_ssh_connection_login_username.sql",
 	}
 
 	// Execute migrations in order
@@ -491,7 +493,22 @@ func migrate(db *gorm.DB) error {
 		&model.Deployment{},
 		&model.AuditLog{},
 		&model.OperationTool{},
+		&model.ExternalSystem{},
+		&model.OAuth2Client{},
 		&model.SSHConnectionRecord{},
+		&model.Integration{},
+		&model.ProvisioningTarget{},
+		&model.ProvisioningRun{},
+		&model.ProvisioningUserLink{},
+		&model.AlertRecord{},
+		&model.Incident{},
+		&model.AIChatSession{},
+		&model.AIChatMessage{},
+		&model.AIAnomalyRule{},
+		&model.AIAnomalyFinding{},
+		&model.AIRcaReport{},
+		&model.CMDBAsset{},
+		&model.AssetRelation{},
 	); err != nil {
 		return err
 	}
@@ -516,7 +533,11 @@ func migrate(db *gorm.DB) error {
 		return err
 	}
 	// Initialize menu permissions
-	return seedMenuPermissions(db)
+	if err := seedMenuPermissions(db); err != nil {
+		return err
+	}
+	// Ensure admin role has all menu permissions (including newly added e.g. sso:read)
+	return syncAdminRolePermissions(db)
 }
 
 // seedDefaultOperationTools creates default operation tools
@@ -631,6 +652,39 @@ func seedMenuPermissions(db *gorm.DB) error {
 		// If permission exists, skip (idempotent)
 	}
 
+	return nil
+}
+
+// syncAdminRolePermissions assigns every AllMenuPermissions row to the admin role so new menu
+// permissions added to AllMenuPermissions are granted automatically after seedMenuPermissions runs.
+func syncAdminRolePermissions(db *gorm.DB) error {
+	var adminRole model.Role
+	if err := db.Where("name = ?", "admin").First(&adminRole).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil // no admin role yet, skip
+		}
+		return err
+	}
+
+	var menuPerms []model.Permission
+	for _, def := range model.AllMenuPermissions {
+		var p model.Permission
+		err := db.Where("resource = ? AND action = ?", def.Resource, def.Action).First(&p).Error
+		if err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				continue
+			}
+			return err
+		}
+		menuPerms = append(menuPerms, p)
+	}
+	if len(menuPerms) == 0 {
+		return nil
+	}
+
+	if err := db.Model(&adminRole).Association("Permissions").Replace(menuPerms); err != nil {
+		return fmt.Errorf("sync admin role permissions: %w", err)
+	}
 	return nil
 }
 

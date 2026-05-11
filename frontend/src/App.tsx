@@ -7,6 +7,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { lazy, Suspense } from 'react'
 import { Spin } from 'antd'
 import Login from './pages/auth/Login'
+import AuthCallback from './pages/auth/AuthCallback'
 import ProtectedRoute from './components/ProtectedRoute'
 import MainLayout from './layouts/MainLayout'
 
@@ -32,6 +33,26 @@ const WebSSHTerminal = lazy(() => import('./pages/ssh/WebSSHTerminal'))
 const AuditLogList = lazy(() => import('./pages/audit/AuditLogList'))
 const ConnectionAuditList = lazy(() => import('./pages/connectionAudit/ConnectionAuditList'))
 const OperationToolList = lazy(() => import('./pages/operationTools/OperationToolList'))
+const ExternalSystemList = lazy(() => import('./pages/externalSystems/ExternalSystemList'))
+const OAuth2ClientList = lazy(() => import('./pages/oauth2Clients/OAuth2ClientList'))
+const ProvisioningTargets = lazy(() => import('./pages/provisioning/ProvisioningTargets'))
+const IntegrationsHub = lazy(() => import('./pages/integrations/IntegrationsHub'))
+const MonitoringQuery = lazy(() => import('./pages/monitoring/MonitoringQuery'))
+const LogSearch = lazy(() => import('./pages/logging/LogSearch'))
+const Pipelines = lazy(() => import('./pages/cicd/Pipelines'))
+const Repositories = lazy(() => import('./pages/registry/Repositories'))
+const Applications = lazy(() => import('./pages/gitops/Applications'))
+const PipelineView = lazy(() => import('./pages/gitops/PipelineView'))
+const K8sClusters = lazy(() => import('./pages/k8s/Clusters'))
+const K8sClusterDetail = lazy(() => import('./pages/k8s/ClusterDetail'))
+const AlertCenter = lazy(() => import('./pages/alerts/AlertCenter'))
+const IncidentList = lazy(() => import('./pages/incidents/IncidentList'))
+const AiChat = lazy(() => import('./pages/ai/Chat'))
+const AiAnomalyRules = lazy(() => import('./pages/ai/AnomalyRules'))
+const AiAnomalyFindings = lazy(() => import('./pages/ai/AnomalyFindings'))
+const AiRcaReports = lazy(() => import('./pages/ai/RcaReports'))
+const CmdbAssets = lazy(() => import('./pages/cmdb/CmdbAssets'))
+const TopologyView = lazy(() => import('./pages/topology/TopologyView'))
 const UserProfile = lazy(() => import('./pages/profile/UserProfile'))
 
 // Loading component
@@ -51,6 +72,7 @@ function App() {
     >
       <Routes>
         <Route path="/login" element={<Login />} />
+        <Route path="/auth/callback" element={<AuthCallback />} />
         <Route
           path="/dashboard"
           element={
@@ -70,6 +92,222 @@ function App() {
               <MainLayout>
                 <Suspense fallback={<PageLoading />}>
                   <OperationToolList />
+                </Suspense>
+              </MainLayout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/external-systems"
+          element={
+            <ProtectedRoute requiredPermission="external-systems:*">
+              <MainLayout>
+                <Suspense fallback={<PageLoading />}>
+                  <ExternalSystemList />
+                </Suspense>
+              </MainLayout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/oauth2-clients"
+          element={
+            <ProtectedRoute requiredPermission="oauth2-clients:*">
+              <MainLayout>
+                <Suspense fallback={<PageLoading />}>
+                  <OAuth2ClientList />
+                </Suspense>
+              </MainLayout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/provisioning"
+          element={
+            <ProtectedRoute requiredPermission="provisioning:*">
+              <MainLayout>
+                <Suspense fallback={<PageLoading />}>
+                  <ProvisioningTargets />
+                </Suspense>
+              </MainLayout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/integrations"
+          element={
+            <ProtectedRoute requiredPermission="integrations:*">
+              <MainLayout>
+                <Suspense fallback={<PageLoading />}>
+                  <IntegrationsHub />
+                </Suspense>
+              </MainLayout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/monitoring"
+          element={
+            <ProtectedRoute requiredPermission="monitoring:*">
+              <MainLayout>
+                <Suspense fallback={<PageLoading />}>
+                  <MonitoringQuery />
+                </Suspense>
+              </MainLayout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/logging"
+          element={
+            <ProtectedRoute requiredPermission="logging:*">
+              <MainLayout>
+                <Suspense fallback={<PageLoading />}>
+                  <LogSearch />
+                </Suspense>
+              </MainLayout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/cicd"
+          element={
+            <ProtectedRoute requiredPermission="cicd:*">
+              <MainLayout>
+                <Suspense fallback={<PageLoading />}>
+                  <Pipelines />
+                </Suspense>
+              </MainLayout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/registry"
+          element={
+            <ProtectedRoute requiredPermission="registry:*">
+              <MainLayout>
+                <Suspense fallback={<PageLoading />}>
+                  <Repositories />
+                </Suspense>
+              </MainLayout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/gitops"
+          element={
+            <ProtectedRoute requiredPermission="gitops:*">
+              <MainLayout>
+                <Suspense fallback={<PageLoading />}>
+                  <Applications />
+                </Suspense>
+              </MainLayout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/gitops/pipeline"
+          element={
+            <ProtectedRoute requiredPermission="gitops:*">
+              <MainLayout>
+                <Suspense fallback={<PageLoading />}>
+                  <PipelineView />
+                </Suspense>
+              </MainLayout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/k8s/clusters"
+          element={
+            <ProtectedRoute requiredPermission="kubernetes:*">
+              <MainLayout>
+                <Suspense fallback={<PageLoading />}>
+                  <K8sClusters />
+                </Suspense>
+              </MainLayout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/k8s/clusters/:clusterId"
+          element={
+            <ProtectedRoute requiredPermission="kubernetes:*">
+              <MainLayout>
+                <Suspense fallback={<PageLoading />}>
+                  <K8sClusterDetail />
+                </Suspense>
+              </MainLayout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/alerts"
+          element={
+            <ProtectedRoute requiredPermission="alerts:*">
+              <MainLayout>
+                <Suspense fallback={<PageLoading />}>
+                  <AlertCenter />
+                </Suspense>
+              </MainLayout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/incidents"
+          element={
+            <ProtectedRoute requiredPermission="incidents:*">
+              <MainLayout>
+                <Suspense fallback={<PageLoading />}>
+                  <IncidentList />
+                </Suspense>
+              </MainLayout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/ai/chat"
+          element={
+            <ProtectedRoute requiredPermission="ai:*">
+              <MainLayout>
+                <Suspense fallback={<PageLoading />}>
+                  <AiChat />
+                </Suspense>
+              </MainLayout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/ai/anomaly/rules"
+          element={
+            <ProtectedRoute requiredPermission="ai:*">
+              <MainLayout>
+                <Suspense fallback={<PageLoading />}>
+                  <AiAnomalyRules />
+                </Suspense>
+              </MainLayout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/ai/anomaly/findings"
+          element={
+            <ProtectedRoute requiredPermission="ai:*">
+              <MainLayout>
+                <Suspense fallback={<PageLoading />}>
+                  <AiAnomalyFindings />
+                </Suspense>
+              </MainLayout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/ai/rca/reports"
+          element={
+            <ProtectedRoute requiredPermission="ai:*">
+              <MainLayout>
+                <Suspense fallback={<PageLoading />}>
+                  <AiRcaReports />
                 </Suspense>
               </MainLayout>
             </ProtectedRoute>
@@ -118,6 +356,30 @@ function App() {
               <MainLayout>
                 <Suspense fallback={<PageLoading />}>
                   <AssetDetail />
+                </Suspense>
+              </MainLayout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/cmdb"
+          element={
+            <ProtectedRoute requiredPermission="cmdb:*">
+              <MainLayout>
+                <Suspense fallback={<PageLoading />}>
+                  <CmdbAssets />
+                </Suspense>
+              </MainLayout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/topology"
+          element={
+            <ProtectedRoute requiredPermission="cmdb:*">
+              <MainLayout>
+                <Suspense fallback={<PageLoading />}>
+                  <TopologyView />
                 </Suspense>
               </MainLayout>
             </ProtectedRoute>

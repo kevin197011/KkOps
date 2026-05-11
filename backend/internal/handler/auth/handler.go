@@ -53,6 +53,21 @@ func (h *Handler) Login(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 }
 
+// Refresh exchanges a refresh JWT for a new access + refresh pair.
+func (h *Handler) Refresh(c *gin.Context) {
+	var req auth.RefreshRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	resp, err := h.service.Refresh(req.RefreshToken)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, resp)
+}
+
 // GetMe returns current user information
 // @Summary Get current user
 // @Description Get current authenticated user information
@@ -277,4 +292,64 @@ func (h *Handler) DeleteAPIToken(c *gin.Context) {
 	}
 
 	c.Status(http.StatusNoContent)
+}
+
+// GetSSOConfig returns whether SSO is enabled (no auth required)
+// @Summary Get SSO config
+// @Description Returns if SSO login is enabled for the frontend to show SSO button
+// @Tags auth
+// @Produce json
+// @Success 200 {object} auth.SSOConfigResponse
+// @Router /api/v1/auth/sso/config [get]
+func (h *Handler) GetSSOConfig(c *gin.Context) {
+	c.JSON(http.StatusOK, h.service.GetSSOConfig())
+}
+
+// SSOLogin redirects to IdP authorization URL
+// @Summary SSO login
+// @Description Redirects browser to configured OIDC IdP for authorization
+// @Tags auth
+// @Success 302 "Redirect to IdP"
+// @Failure 500 {object} map[string]string
+// @Router /api/v1/auth/sso/login [get]
+func (h *Handler) SSOLogin(c *gin.Context) {
+	state, err := h.service.GenerateSSOState()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate state"})
+		return
+	}
+	urlStr, err := h.service.GetSSOLoginURL(state)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.Redirect(http.StatusFound, urlStr)
+}
+
+// SSOCallback handles IdP redirect with code, exchanges for token, and redirects to frontend with JWT
+// @Summary SSO callback
+// @Description OIDC callback: exchange code for user, issue JWT, redirect to frontend with token
+// @Tags auth
+// @Param code query string true "Authorization code"
+// @Param state query string true "State from login"
+// @Success 302 "Redirect to frontend with token in query"
+// @Failure 400,500 {object} map[string]string
+// @Router /api/v1/auth/sso/callback [get]
+func (h *Handler) SSOCallback(c *gin.Context) {
+	code := c.Query("code")
+	state := c.Query("state")
+	if code == "" || state == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "missing code or state"})
+		return
+	}
+
+	resp, err := h.service.ExchangeSSOCode(c.Request.Context(), code, state)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Redirect to frontend callback page with token (frontend will store and go to dashboard)
+	redirectURL := h.service.FrontendCallbackURL(resp.Token, resp.ExpiresIn)
+	c.Redirect(http.StatusFound, redirectURL)
 }

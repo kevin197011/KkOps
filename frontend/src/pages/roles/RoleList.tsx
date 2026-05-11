@@ -4,8 +4,8 @@
 // https://opensource.org/licenses/MIT
 
 import { useState, useEffect, useCallback } from 'react'
-import { Table, Button, Space, message, Modal, Form, Input, Tag, Checkbox, Transfer, Select, Divider, Tooltip, theme, Card, Typography } from 'antd'
-import { PlusOutlined, EditOutlined, DeleteOutlined, CrownOutlined, SafetyCertificateOutlined, AppstoreAddOutlined, LockOutlined } from '@ant-design/icons'
+import { Table, Button, Space, message, Modal, Form, Input, Tag, Checkbox, Transfer, Select, Divider, theme, Card, Typography, Tabs } from 'antd'
+import { PlusOutlined, EditOutlined, DeleteOutlined, CrownOutlined, SafetyCertificateOutlined, AppstoreAddOutlined, LockOutlined, UserOutlined } from '@ant-design/icons'
 import type { TransferItem } from 'antd/es/transfer'
 import { roleApi, Role, CreateRoleRequest, UpdateRoleRequest, RoleAssetInfo, Permission } from '@/api/role'
 import { assetApi, Asset } from '@/api/asset'
@@ -25,13 +25,12 @@ const RoleList = () => {
   const [editingRole, setEditingRole] = useState<Role | null>(null)
   const [form] = Form.useForm()
 
-  // 资产授权相关状态
-  const [authzModalVisible, setAuthzModalVisible] = useState(false)
-  const [authzRole, setAuthzRole] = useState<Role | null>(null)
+  // 资产授权相关状态（编辑弹窗内「资产授权」Tab 使用）
+  const [, setAuthzRole] = useState<Role | null>(null)
   const [allAssets, setAllAssets] = useState<Asset[]>([])
   const [roleAssets, setRoleAssets] = useState<RoleAssetInfo[]>([])
   const [targetKeys, setTargetKeys] = useState<string[]>([])
-  const [authzLoading, setAuthzLoading] = useState(false)
+  const [, setAuthzLoading] = useState(false)
 
   // 批量授权相关状态
   const [projects, setProjects] = useState<Project[]>([])
@@ -39,13 +38,12 @@ const RoleList = () => {
   const [selectedProjectId, setSelectedProjectId] = useState<number | undefined>()
   const [selectedEnvId, setSelectedEnvId] = useState<number | undefined>()
 
-  // 权限分配相关状态
-  const [permissionModalVisible, setPermissionModalVisible] = useState(false)
-  const [permissionRole, setPermissionRole] = useState<Role | null>(null)
+  // 权限分配相关状态（编辑弹窗内「权限分配」Tab 使用）
+  const [, setPermissionRole] = useState<Role | null>(null)
   const [allPermissions, setAllPermissions] = useState<Permission[]>([])
   const [rolePermissions, setRolePermissions] = useState<Permission[]>([])
   const [selectedPermissionIds, setSelectedPermissionIds] = useState<number[]>([])
-  const [permissionLoading, setPermissionLoading] = useState(false)
+  const [, setPermissionLoading] = useState(false)
 
   useEffect(() => {
     fetchRoles()
@@ -134,14 +132,32 @@ const RoleList = () => {
     setModalVisible(true)
   }
 
-  const handleEdit = (role: Role) => {
+  const handleEdit = async (role: Role) => {
     setEditingRole(role)
     form.setFieldsValue({
       name: role.name,
       description: role.description,
       is_admin: role.is_admin,
     })
+    setAuthzRole(role)
+    setPermissionRole(role)
+    setSelectedProjectId(undefined)
+    setSelectedEnvId(undefined)
     setModalVisible(true)
+    if (!role.is_admin) {
+      setAuthzLoading(true)
+      setPermissionLoading(true)
+      await Promise.all([
+        fetchAllAssets(),
+        fetchRoleAssets(role.id),
+        fetchProjects(),
+        fetchEnvironments(),
+        fetchAllPermissions(),
+        fetchRolePermissions(role.id),
+      ])
+      setAuthzLoading(false)
+      setPermissionLoading(false)
+    }
   }
 
   const handleDelete = async (id: number) => {
@@ -164,6 +180,23 @@ const RoleList = () => {
     try {
       if (editingRole) {
         await roleApi.update(editingRole.id, values as UpdateRoleRequest)
+        if (!editingRole.is_admin) {
+          const currentAssetIds = new Set(roleAssets.map((a) => String(a.id)))
+          const newTargetIds = new Set(targetKeys)
+          const toGrant = targetKeys.filter((id) => !currentAssetIds.has(id)).map(Number)
+          const toRevoke = roleAssets.filter((a) => !newTargetIds.has(String(a.id))).map((a) => a.id)
+          if (toGrant.length > 0) await roleApi.grantRoleAssets(editingRole.id, toGrant)
+          if (toRevoke.length > 0) await roleApi.revokeRoleAssets(editingRole.id, toRevoke)
+
+          const currentPermissionIds = new Set(rolePermissions.map((p) => p.id))
+          const newPermissionIds = new Set(selectedPermissionIds)
+          const toAssign = selectedPermissionIds.filter((id) => !currentPermissionIds.has(id))
+          const toRemove = rolePermissions.filter((p) => !newPermissionIds.has(p.id)).map((p) => p.id)
+          await Promise.all([
+            ...toAssign.map((permissionId) => roleApi.assignPermissionToRole(editingRole.id, permissionId)),
+            ...toRemove.map((permissionId) => roleApi.removePermissionFromRole(editingRole.id, permissionId)),
+          ])
+        }
         message.success('更新成功')
       } else {
         await roleApi.create(values as CreateRoleRequest)
@@ -174,55 +207,6 @@ const RoleList = () => {
       fetchRoles()
     } catch (error: any) {
       message.error(error.response?.data?.error || '操作失败')
-    }
-  }
-
-  // 打开资产授权弹窗
-  const handleOpenAuthzModal = async (role: Role) => {
-    setAuthzRole(role)
-    setAuthzLoading(true)
-    setAuthzModalVisible(true)
-    setSelectedProjectId(undefined)
-    setSelectedEnvId(undefined)
-    await Promise.all([fetchAllAssets(), fetchRoleAssets(role.id), fetchProjects(), fetchEnvironments()])
-    setAuthzLoading(false)
-  }
-
-  // 打开权限分配弹窗
-  const handleOpenPermissionModal = async (role: Role) => {
-    setPermissionRole(role)
-    setPermissionLoading(true)
-    setPermissionModalVisible(true)
-    await Promise.all([fetchAllPermissions(), fetchRolePermissions(role.id)])
-    setPermissionLoading(false)
-  }
-
-  // 保存权限分配
-  const handleSavePermissions = async () => {
-    if (!permissionRole) return
-
-    setPermissionLoading(true)
-    try {
-      // 计算需要新增和移除的权限
-      const currentPermissionIds = new Set(rolePermissions.map((p) => p.id))
-      const newPermissionIds = new Set(selectedPermissionIds)
-
-      const toAssign = selectedPermissionIds.filter((id) => !currentPermissionIds.has(id))
-      const toRemove = rolePermissions.filter((p) => !newPermissionIds.has(p.id)).map((p) => p.id)
-
-      // 执行权限分配和移除
-      await Promise.all([
-        ...toAssign.map((permissionId) => roleApi.assignPermissionToRole(permissionRole.id, permissionId)),
-        ...toRemove.map((permissionId) => roleApi.removePermissionFromRole(permissionRole.id, permissionId)),
-      ])
-
-      message.success('权限分配成功')
-      setPermissionModalVisible(false)
-      fetchRoles()
-    } catch (error: any) {
-      message.error(error.response?.data?.error || '权限分配失败')
-    } finally {
-      setPermissionLoading(false)
     }
   }
 
@@ -281,39 +265,6 @@ const RoleList = () => {
       message.success(`已添加所有 ${allAssets.length} 个资产到授权列表`)
     } else {
       message.info('所有资产已在授权列表中')
-    }
-  }
-
-  // 保存资产授权
-  const handleSaveAuthz = async () => {
-    if (!authzRole) return
-
-    setAuthzLoading(true)
-    try {
-      // 计算需要新增和撤销的资产
-      const currentAssetIds = new Set(roleAssets.map((a) => String(a.id)))
-      const newTargetIds = new Set(targetKeys)
-
-      const toGrant = targetKeys.filter((id) => !currentAssetIds.has(id)).map(Number)
-      const toRevoke = roleAssets
-        .filter((a) => !newTargetIds.has(String(a.id)))
-        .map((a) => a.id)
-
-      // 执行授权和撤销
-      if (toGrant.length > 0) {
-        await roleApi.grantRoleAssets(authzRole.id, toGrant)
-      }
-      if (toRevoke.length > 0) {
-        await roleApi.revokeRoleAssets(authzRole.id, toRevoke)
-      }
-
-      message.success('授权保存成功')
-      setAuthzModalVisible(false)
-      fetchRoles() // 刷新角色列表以更新资产数量
-    } catch (error: any) {
-      message.error(error.response?.data?.error || '授权保存失败')
-    } finally {
-      setAuthzLoading(false)
     }
   }
 
@@ -391,39 +342,9 @@ const RoleList = () => {
     {
       title: '操作',
       key: 'action',
-      width: 200,
+      width: 120,
       render: (_: any, record: Role) => {
         const actions = []
-        if (!record.is_admin && hasPermission('roles', 'update')) {
-          actions.push(
-            <Tooltip key="asset" title="资产授权">
-              <Button
-                type="link"
-                size="small"
-                icon={<SafetyCertificateOutlined />}
-                onClick={() => handleOpenAuthzModal(record)}
-                aria-label={`资产授权 ${record.name}`}
-              >
-                资产
-              </Button>
-            </Tooltip>
-          )
-        }
-        if (!record.is_admin && hasPermission('roles', 'update')) {
-          actions.push(
-            <Tooltip key="permission" title="权限分配">
-              <Button
-                type="link"
-                size="small"
-                icon={<LockOutlined />}
-                onClick={() => handleOpenPermissionModal(record)}
-                aria-label={`权限分配 ${record.name}`}
-              >
-                权限
-              </Button>
-            </Tooltip>
-          )
-        }
         if (hasPermission('roles', 'update')) {
           actions.push(
             <Button
@@ -493,7 +414,7 @@ const RoleList = () => {
         />
       </Card>
 
-      {/* 创建/编辑角色弹窗 */}
+      {/* 创建/编辑角色弹窗：编辑时包含基本信息、资产授权、权限分配 */}
       <Modal
         title={editingRole ? '编辑角色' : '新增角色'}
         open={modalVisible}
@@ -502,206 +423,237 @@ const RoleList = () => {
           form.resetFields()
         }}
         onOk={() => form.submit()}
-        width="90%"
-        style={{ maxWidth: 600 }}
+        width={editingRole ? '90%' : '90%'}
+        style={{ maxWidth: editingRole ? 800 : 600 }}
         styles={{ body: { background: token.colorBgElevated } }}
       >
-        <Form form={form} layout="vertical" onFinish={handleSubmit}>
-          <Form.Item name="name" label="角色名称" rules={[{ required: true, message: '请输入角色名称' }]}>
-            <Input placeholder="角色名称" aria-label="角色名称" />
-          </Form.Item>
-          <Form.Item name="description" label="描述">
-            <TextArea rows={4} placeholder="角色描述" aria-label="角色描述" />
-          </Form.Item>
-          <Form.Item name="is_admin" valuePropName="checked">
-            <Checkbox>
-              <Space>
-                <CrownOutlined style={{ color: token.colorError }} />
-                设为管理员角色
-              </Space>
-            </Checkbox>
-          </Form.Item>
-          <div style={{ color: token.colorTextSecondary, fontSize: 12, marginTop: -16, marginBottom: 16 }}>
-            管理员角色可访问所有资产，无需单独授权
-          </div>
-        </Form>
-      </Modal>
-
-      {/* 资产授权弹窗 */}
-      <Modal
-        title={
-          <Space>
-            <SafetyCertificateOutlined />
-            <span>资产授权 - {authzRole?.name}</span>
-          </Space>
-        }
-        open={authzModalVisible}
-        onCancel={() => setAuthzModalVisible(false)}
-        onOk={handleSaveAuthz}
-        confirmLoading={authzLoading}
-        width={750}
-        okText="保存"
-        cancelText="取消"
-        styles={{ body: { background: token.colorBgElevated } }}
-      >
-        {/* 快速授权区域 */}
-        <div style={{ 
-          marginBottom: 16, 
-          padding: '12px 16px', 
-          background: token.colorFillTertiary, 
-          borderRadius: 6,
-          border: `1px solid ${token.colorBorderSecondary}`
-        }}>
-          <div style={{ marginBottom: 8, fontWeight: 500, color: token.colorText }}>
-            <AppstoreAddOutlined style={{ marginRight: 8 }} />
-            快速授权
-          </div>
-          <Space wrap>
-            <Select
-              placeholder="选择项目"
-              style={{ width: 160 }}
-              allowClear
-              value={selectedProjectId}
-              onChange={(value) => setSelectedProjectId(value)}
-            >
-              {projects.map((p) => (
-                <Select.Option key={p.id} value={p.id}>
-                  {p.name}
-                </Select.Option>
-              ))}
-            </Select>
-            <Select
-              placeholder="选择环境"
-              style={{ width: 160 }}
-              allowClear
-              value={selectedEnvId}
-              onChange={(value) => setSelectedEnvId(value)}
-            >
-              {environments.map((e) => (
-                <Select.Option key={e.id} value={e.id}>
-                  {e.name}
-                </Select.Option>
-              ))}
-            </Select>
-            <Button type="primary" icon={<AppstoreAddOutlined />} onClick={handleBatchAdd}>
-              添加到授权
-            </Button>
-            <Button onClick={handleSelectAll}>
-              选择所有主机
-            </Button>
-          </Space>
-          <div style={{ marginTop: 8, color: token.colorTextSecondary, fontSize: 12 }}>
-            选择项目和/或环境后点击"添加到授权"，或点击"选择所有主机"授权全部资产
-          </div>
-        </div>
-
-        <Divider style={{ margin: '12px 0' }} />
-
-        <div style={{ marginBottom: 12 }}>
-          <Tag color="blue">拥有此角色的用户将可以访问右侧的资产</Tag>
-        </div>
-        <Transfer
-          dataSource={transferDataSource}
-          targetKeys={targetKeys}
-          onChange={(newTargetKeys) => setTargetKeys(newTargetKeys as string[])}
-          render={(item: any) => (
-            <span>
-              <span style={{ fontWeight: 500 }}>{item.title}</span>
-              <Tag color="default" style={{ marginLeft: 4 }}>{item.description}</Tag>
-              {item.projectId && (
-                <Tag color="blue" style={{ marginLeft: 2 }}>{getProjectName(item.projectId)}</Tag>
-              )}
-              {item.environmentId && (
-                <Tag color="green" style={{ marginLeft: 2 }}>{getEnvName(item.environmentId)}</Tag>
-              )}
-            </span>
-          )}
-          titles={['未授权资产', '已授权资产']}
-          listStyle={{ width: 310, height: 350 }}
-          showSearch
-          filterOption={(inputValue, item: any) =>
-            item.title!.toLowerCase().includes(inputValue.toLowerCase()) ||
-            (item.description || '').toLowerCase().includes(inputValue.toLowerCase()) ||
-            getProjectName(item.projectId).toLowerCase().includes(inputValue.toLowerCase()) ||
-            getEnvName(item.environmentId).toLowerCase().includes(inputValue.toLowerCase())
-          }
-          locale={{
-            searchPlaceholder: '搜索主机名、IP、项目或环境',
-            itemUnit: '项',
-            itemsUnit: '项',
-            notFoundContent: '无数据',
-          }}
-        />
-      </Modal>
-
-      {/* 权限分配弹窗 */}
-      <Modal
-        title={
-          <Space>
-            <LockOutlined />
-            <span>权限分配 - {permissionRole?.name}</span>
-          </Space>
-        }
-        open={permissionModalVisible}
-        onCancel={() => setPermissionModalVisible(false)}
-        styles={{ body: { background: token.colorBgElevated } }}
-        onOk={handleSavePermissions}
-        confirmLoading={permissionLoading}
-        width={700}
-        okText="保存"
-        cancelText="取消"
-      >
-        <div style={{ marginBottom: 16 }}>
-          <Tag color="blue">拥有此角色的用户将可以使用以下功能模块</Tag>
-          {permissionRole?.is_admin && (
-            <Tag color="red" style={{ marginLeft: 8 }}>
-              管理员角色自动拥有所有权限
-            </Tag>
-          )}
-        </div>
-
-        {permissionRole?.is_admin ? (
-          <div style={{ padding: '40px 0', textAlign: 'center', color: token.colorTextTertiary }}>
-            管理员角色自动拥有所有权限，无需单独分配
-          </div>
+        {editingRole ? (
+          <Tabs
+            defaultActiveKey="basic"
+            items={[
+              {
+                key: 'basic',
+                label: (
+                  <span>
+                    <UserOutlined style={{ marginRight: 6 }} />
+                    基本信息
+                  </span>
+                ),
+                children: (
+                  <Form form={form} layout="vertical" onFinish={handleSubmit}>
+                    <Form.Item name="name" label="角色名称" rules={[{ required: true, message: '请输入角色名称' }]}>
+                      <Input placeholder="角色名称" aria-label="角色名称" />
+                    </Form.Item>
+                    <Form.Item name="description" label="描述">
+                      <TextArea rows={4} placeholder="角色描述" aria-label="角色描述" />
+                    </Form.Item>
+                    <Form.Item name="is_admin" valuePropName="checked">
+                      <Checkbox disabled>
+                        <Space>
+                          <CrownOutlined style={{ color: token.colorError }} />
+                          管理员角色
+                        </Space>
+                      </Checkbox>
+                    </Form.Item>
+                    <div style={{ color: token.colorTextSecondary, fontSize: 12, marginTop: -16, marginBottom: 0 }}>
+                      管理员角色可访问所有资产，无需单独授权
+                    </div>
+                  </Form>
+                ),
+              },
+              ...(editingRole.is_admin
+                ? []
+                : [
+                    {
+                      key: 'assets',
+                      label: (
+                        <span>
+                          <SafetyCertificateOutlined style={{ marginRight: 6 }} />
+                          资产授权
+                        </span>
+                      ),
+                      children: (
+                        <div>
+                          <div
+                            style={{
+                              marginBottom: 16,
+                              padding: '12px 16px',
+                              background: token.colorFillTertiary,
+                              borderRadius: 6,
+                              border: `1px solid ${token.colorBorderSecondary}`,
+                            }}
+                          >
+                            <div style={{ marginBottom: 8, fontWeight: 500, color: token.colorText }}>
+                              <AppstoreAddOutlined style={{ marginRight: 8 }} />
+                              快速授权
+                            </div>
+                            <Space wrap>
+                              <Select
+                                placeholder="选择项目"
+                                style={{ width: 160 }}
+                                allowClear
+                                value={selectedProjectId}
+                                onChange={(value) => setSelectedProjectId(value)}
+                              >
+                                {projects.map((p) => (
+                                  <Select.Option key={p.id} value={p.id}>
+                                    {p.name}
+                                  </Select.Option>
+                                ))}
+                              </Select>
+                              <Select
+                                placeholder="选择环境"
+                                style={{ width: 160 }}
+                                allowClear
+                                value={selectedEnvId}
+                                onChange={(value) => setSelectedEnvId(value)}
+                              >
+                                {environments.map((e) => (
+                                  <Select.Option key={e.id} value={e.id}>
+                                    {e.name}
+                                  </Select.Option>
+                                ))}
+                              </Select>
+                              <Button type="primary" icon={<AppstoreAddOutlined />} onClick={handleBatchAdd}>
+                                添加到授权
+                              </Button>
+                              <Button onClick={handleSelectAll}>选择所有主机</Button>
+                            </Space>
+                            <div style={{ marginTop: 8, color: token.colorTextSecondary, fontSize: 12 }}>
+                              选择项目和/或环境后点击「添加到授权」，或点击「选择所有主机」授权全部资产
+                            </div>
+                          </div>
+                          <Divider style={{ margin: '12px 0' }} />
+                          <div style={{ marginBottom: 12 }}>
+                            <Tag color="blue">拥有此角色的用户将可以访问右侧的资产</Tag>
+                          </div>
+                          <Transfer
+                            dataSource={transferDataSource}
+                            targetKeys={targetKeys}
+                            onChange={(newTargetKeys) => setTargetKeys(newTargetKeys as string[])}
+                            render={(item: any) => (
+                              <span>
+                                <span style={{ fontWeight: 500 }}>{item.title}</span>
+                                <Tag color="default" style={{ marginLeft: 4 }}>
+                                  {item.description}
+                                </Tag>
+                                {item.projectId && (
+                                  <Tag color="blue" style={{ marginLeft: 2 }}>
+                                    {getProjectName(item.projectId)}
+                                  </Tag>
+                                )}
+                                {item.environmentId && (
+                                  <Tag color="green" style={{ marginLeft: 2 }}>
+                                    {getEnvName(item.environmentId)}
+                                  </Tag>
+                                )}
+                              </span>
+                            )}
+                            titles={['未授权资产', '已授权资产']}
+                            listStyle={{ width: 280, height: 320 }}
+                            showSearch
+                            filterOption={(inputValue, item: any) =>
+                              item.title!.toLowerCase().includes(inputValue.toLowerCase()) ||
+                              (item.description || '').toLowerCase().includes(inputValue.toLowerCase()) ||
+                              getProjectName(item.projectId).toLowerCase().includes(inputValue.toLowerCase()) ||
+                              getEnvName(item.environmentId).toLowerCase().includes(inputValue.toLowerCase())
+                            }
+                            locale={{
+                              searchPlaceholder: '搜索主机名、IP、项目或环境',
+                              itemUnit: '项',
+                              itemsUnit: '项',
+                              notFoundContent: '无数据',
+                            }}
+                          />
+                        </div>
+                      ),
+                    },
+                    {
+                      key: 'permissions',
+                      label: (
+                        <span>
+                          <LockOutlined style={{ marginRight: 6 }} />
+                          权限分配
+                        </span>
+                      ),
+                      children: (
+                        <div>
+                          <div style={{ marginBottom: 16 }}>
+                            <Tag color="blue">拥有此角色的用户将可以使用以下功能模块</Tag>
+                          </div>
+                          <div style={{ maxHeight: 420, overflowY: 'auto' }}>
+                            {Object.entries(groupedPermissions).map(([resource, perms]) => (
+                              <div key={resource} style={{ marginBottom: 24 }}>
+                                <div
+                                  style={{
+                                    marginBottom: 8,
+                                    fontWeight: 500,
+                                    fontSize: 14,
+                                    color: token.colorText,
+                                  }}
+                                >
+                                  {perms[0]?.name?.replace(/管理|查看/g, '').replace(/所有操作/, '') || resource}
+                                </div>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                                  {perms.map((perm) => (
+                                    <Checkbox
+                                      key={perm.id}
+                                      checked={selectedPermissionIds.includes(perm.id)}
+                                      onChange={(e) => {
+                                        if (e.target.checked) {
+                                          setSelectedPermissionIds([...selectedPermissionIds, perm.id])
+                                        } else {
+                                          setSelectedPermissionIds(selectedPermissionIds.filter((id) => id !== perm.id))
+                                        }
+                                      }}
+                                    >
+                                      <Space>
+                                        <span style={{ fontWeight: 500 }}>{perm.name}</span>
+                                        <Tag color={perm.action === '*' ? 'blue' : 'default'}>
+                                          {perm.action === '*' ? '所有操作' : perm.action}
+                                        </Tag>
+                                        {perm.description && (
+                                          <span style={{ fontSize: 12, color: token.colorTextTertiary }}>
+                                            {perm.description}
+                                          </span>
+                                        )}
+                                      </Space>
+                                    </Checkbox>
+                                  ))}
+                                </div>
+                                <Divider style={{ margin: '16px 0' }} />
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ),
+                    },
+                  ]),
+            ]}
+          />
         ) : (
-          <div style={{ maxHeight: 500, overflowY: 'auto' }}>
-            {Object.entries(groupedPermissions).map(([resource, perms]) => (
-              <div key={resource} style={{ marginBottom: 24 }}>
-                <div style={{ marginBottom: 8, fontWeight: 500, fontSize: 14, color: token.colorText }}>
-                  {perms[0]?.name?.replace(/管理|查看/g, '').replace(/所有操作/, '') || resource}
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  {perms.map((perm) => (
-                    <Checkbox
-                      key={perm.id}
-                      checked={selectedPermissionIds.includes(perm.id)}
-                      onChange={(e) => {
-                        if (e.target.checked) {
-                          setSelectedPermissionIds([...selectedPermissionIds, perm.id])
-                        } else {
-                          setSelectedPermissionIds(selectedPermissionIds.filter((id) => id !== perm.id))
-                        }
-                      }}
-                    >
-                      <Space>
-                        <span style={{ fontWeight: 500 }}>{perm.name}</span>
-                        <Tag color={perm.action === '*' ? 'blue' : 'default'}>
-                          {perm.action === '*' ? '所有操作' : perm.action}
-                        </Tag>
-                        {perm.description && (
-                          <span style={{ fontSize: 12, color: token.colorTextTertiary }}>{perm.description}</span>
-                        )}
-                      </Space>
-                    </Checkbox>
-                  ))}
-                </div>
-                <Divider style={{ margin: '16px 0' }} />
-              </div>
-            ))}
-          </div>
+          <Form form={form} layout="vertical" onFinish={handleSubmit}>
+            <Form.Item name="name" label="角色名称" rules={[{ required: true, message: '请输入角色名称' }]}>
+              <Input placeholder="角色名称" aria-label="角色名称" />
+            </Form.Item>
+            <Form.Item name="description" label="描述">
+              <TextArea rows={4} placeholder="角色描述" aria-label="角色描述" />
+            </Form.Item>
+            <Form.Item name="is_admin" valuePropName="checked">
+              <Checkbox>
+                <Space>
+                  <CrownOutlined style={{ color: token.colorError }} />
+                  设为管理员角色
+                </Space>
+              </Checkbox>
+            </Form.Item>
+            <div style={{ color: token.colorTextSecondary, fontSize: 12, marginTop: -16, marginBottom: 16 }}>
+              管理员角色可访问所有资产，无需单独授权
+            </div>
+          </Form>
         )}
       </Modal>
+
     </div>
   )
 }

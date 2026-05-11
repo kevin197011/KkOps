@@ -18,8 +18,8 @@ type DeploymentModule struct {
 	Project          *Project       `gorm:"foreignKey:ProjectID" json:"project,omitempty"`
 	EnvironmentID    *uint          `gorm:"index" json:"environment_id"`
 	Environment      *Environment   `gorm:"foreignKey:EnvironmentID" json:"environment,omitempty"`
-	TemplateID       *uint          `gorm:"index" json:"template_id"`                             // 关联执行模板
-	Template         *TaskTemplate  `gorm:"foreignKey:TemplateID" json:"template,omitempty"`      // 执行模板
+	TemplateID       *uint          `gorm:"index" json:"template_id"`                        // 关联执行模板
+	Template         *TaskTemplate  `gorm:"foreignKey:TemplateID" json:"template,omitempty"` // 执行模板
 	Name             string         `gorm:"not null;size:100" json:"name"`
 	Description      string         `gorm:"type:text" json:"description"`
 	VersionSourceURL string         `gorm:"size:500;column:version_source_url" json:"version_source_url"`

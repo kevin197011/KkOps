@@ -53,7 +53,7 @@ type UserInfo struct {
 	Roles    []string `json:"roles"`
 }
 
-// Login authenticates a user and returns a JWT token
+// Login authenticates a user and returns a JWT token (local users only; SSO users must use SSO login)
 func (s *Service) Login(req *LoginRequest) (*LoginResponse, error) {
 	var user model.User
 	if err := s.db.Where("username = ?", req.Username).Preload("Roles").First(&user).Error; err != nil {
@@ -61,6 +61,10 @@ func (s *Service) Login(req *LoginRequest) (*LoginResponse, error) {
 			return nil, errors.New("invalid credentials")
 		}
 		return nil, err
+	}
+
+	if user.Source == "sso" {
+		return nil, errors.New("please use SSO login")
 	}
 
 	// Check if user is active
@@ -86,6 +90,7 @@ func (s *Service) Login(req *LoginRequest) (*LoginResponse, error) {
 		roleNames,
 		s.config.JWT.Secret,
 		s.config.JWT.ExpiresIn,
+		"",
 	)
 	if err != nil {
 		return nil, err
@@ -98,6 +103,7 @@ func (s *Service) Login(req *LoginRequest) (*LoginResponse, error) {
 		roleNames,
 		s.config.JWT.Secret,
 		s.config.JWT.RefreshExpiresIn,
+		"refresh",
 	)
 	if err != nil {
 		return nil, err
@@ -144,17 +150,91 @@ func (s *Service) GetCurrentUser(userID uint) (*UserInfo, error) {
 	}, nil
 }
 
+// RefreshRequest carries a refresh JWT to obtain a new access (and refresh) pair.
+type RefreshRequest struct {
+	RefreshToken string `json:"refresh_token" binding:"required"`
+}
+
+// Refresh validates a refresh token and returns new access + refresh tokens.
+func (s *Service) Refresh(refreshToken string) (*LoginResponse, error) {
+	claims, err := utils.ValidateJWT(refreshToken, s.config.JWT.Secret)
+	if err != nil {
+		return nil, errors.New("invalid refresh token")
+	}
+	if claims.TokenUse != "refresh" {
+		return nil, errors.New("invalid refresh token")
+	}
+
+	var user model.User
+	if err := s.db.Preload("Roles").First(&user, claims.UserID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, errors.New("invalid refresh token")
+		}
+		return nil, err
+	}
+
+	if user.Status != "active" {
+		return nil, errors.New("user account is disabled")
+	}
+
+	roleNames := make([]string, len(user.Roles))
+	for i, role := range user.Roles {
+		roleNames[i] = role.Name
+	}
+
+	token, err := utils.GenerateJWT(
+		user.ID,
+		user.Username,
+		roleNames,
+		s.config.JWT.Secret,
+		s.config.JWT.ExpiresIn,
+		"",
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	newRefresh, err := utils.GenerateJWT(
+		user.ID,
+		user.Username,
+		roleNames,
+		s.config.JWT.Secret,
+		s.config.JWT.RefreshExpiresIn,
+		"refresh",
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return &LoginResponse{
+		Token:        token,
+		RefreshToken: newRefresh,
+		ExpiresIn:    s.config.JWT.ExpiresIn,
+		User: UserInfo{
+			ID:       user.ID,
+			Username: user.Username,
+			Email:    user.Email,
+			RealName: user.RealName,
+			Roles:    roleNames,
+		},
+	}, nil
+}
+
 // ChangePasswordRequest represents a change password request
 type ChangePasswordRequest struct {
 	OldPassword string `json:"old_password" binding:"required"`
 	NewPassword string `json:"new_password" binding:"required,min=6"`
 }
 
-// ChangePassword changes the password for the current user
+// ChangePassword changes the password for the current user (local users only)
 func (s *Service) ChangePassword(userID uint, req *ChangePasswordRequest) error {
 	var user model.User
 	if err := s.db.First(&user, userID).Error; err != nil {
 		return errors.New("user not found")
+	}
+
+	if user.Source == "sso" {
+		return errors.New("SSO users cannot change password")
 	}
 
 	// Verify old password

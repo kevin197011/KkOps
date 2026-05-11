@@ -11,6 +11,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/kkops/backend/internal/provisioning"
 	"github.com/kkops/backend/internal/service/authorization"
 	"github.com/kkops/backend/internal/service/rbac"
 	"github.com/kkops/backend/internal/service/user"
@@ -21,14 +22,16 @@ type Handler struct {
 	service  *user.Service
 	authzSvc *authorization.Service
 	rbacSvc  *rbac.Service
+	provHook provisioning.UserHook
 }
 
-// NewHandler creates a new user handler
-func NewHandler(service *user.Service, authzSvc *authorization.Service, rbacSvc *rbac.Service) *Handler {
+// NewHandler creates a new user handler. provHook may be nil.
+func NewHandler(service *user.Service, authzSvc *authorization.Service, rbacSvc *rbac.Service, provHook provisioning.UserHook) *Handler {
 	return &Handler{
 		service:  service,
 		authzSvc: authzSvc,
 		rbacSvc:  rbacSvc,
+		provHook: provHook,
 	}
 }
 
@@ -53,6 +56,9 @@ func (h *Handler) CreateUser(c *gin.Context) {
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
+	}
+	if h.provHook != nil {
+		h.provHook.OnUserUpsert(resp.ID)
 	}
 
 	c.JSON(http.StatusCreated, resp)
@@ -146,6 +152,9 @@ func (h *Handler) UpdateUser(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	if h.provHook != nil {
+		h.provHook.OnUserUpsert(resp.ID)
+	}
 
 	c.JSON(http.StatusOK, resp)
 }
@@ -165,7 +174,11 @@ func (h *Handler) DeleteUser(c *gin.Context) {
 		return
 	}
 
-	if err := h.service.DeleteUser(uint(id)); err != nil {
+	uid := uint(id)
+	if h.provHook != nil {
+		h.provHook.OnUserDelete(uid)
+	}
+	if err := h.service.DeleteUser(uid); err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
 		return
 	}
